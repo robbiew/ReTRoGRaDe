@@ -69,6 +69,15 @@ func runConfigEditor() {
 	}
 }
 
+func runConfigEditorFromServer(cfg *config.Config) error {
+	fmt.Println("Starting configuration editor...")
+
+	if err := tui.RunConfigEditorTUI(cfg); err != nil {
+		return fmt.Errorf("error running configuration editor: %w", err)
+	}
+	return nil
+}
+
 func runServer() {
 	cfg, err := config.LoadConfig("")
 	if err != nil {
@@ -77,6 +86,32 @@ func runServer() {
 	}
 
 	defer config.CloseDatabase()
+
+	// Check if required paths exist, if not, launch config editor
+	if !config.CheckRequiredPathsExist(cfg) {
+		fmt.Println("Some required directories do not exist.")
+		fmt.Println("Launching configuration editor to set up paths...")
+		fmt.Println("Press Enter to continue...")
+		fmt.Scanln() // Wait for user to press Enter
+
+		if err := runConfigEditorFromServer(cfg); err != nil {
+			fmt.Printf("Error running configuration editor: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Reload configuration after editing
+		cfg, err = config.LoadConfig("")
+		if err != nil {
+			fmt.Printf("Error reloading configuration: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Try to create missing directories
+		if err := config.EnsureRequiredPaths(cfg); err != nil {
+			fmt.Printf("Warning: Could not create some directories: %v\n", err)
+			fmt.Println("You may need to create directories manually or adjust permissions.")
+		}
+	}
 
 	logging.InitializeNodeManager(cfg.Servers.GeneralSettings.MaxNodes)
 	security.InitializeSecurity(cfg)

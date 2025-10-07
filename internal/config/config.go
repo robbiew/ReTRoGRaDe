@@ -92,6 +92,11 @@ func initializeDatabaseWithConfig(dbPath string, cfg *Config) error {
 		return err
 	}
 
+	// Create required directories
+	if err := EnsureRequiredPaths(cfg); err != nil {
+		return fmt.Errorf("failed to create required directories: %w", err)
+	}
+
 	// Save configuration to database
 	if err := SaveConfigToDB(db, cfg, "system"); err != nil {
 		return err
@@ -104,6 +109,11 @@ func initializeDatabaseWithConfig(dbPath string, cfg *Config) error {
 func SaveConfig(config *Config, filePath string) error {
 	if db == nil {
 		return fmt.Errorf("database not initialized")
+	}
+
+	// Create required directories before saving
+	if err := EnsureRequiredPaths(config); err != nil {
+		return fmt.Errorf("failed to create required directories: %w", err)
 	}
 
 	if err := SaveConfigToDB(db, config, "user"); err != nil {
@@ -595,9 +605,20 @@ func formatListValue(values []string) string {
 	return strings.Join(values, ", ")
 }
 
-// getDBPath returns the database path (always uses default location)
+// getDBPath returns the database path (uses configured database path or default)
 func getDBPath() string {
-	return filepath.Join("C:\\retrograde\\data", "retrograde.db")
+	// For initial database creation, use default location
+	// After config is loaded, this path will be used from the config
+	defaultPath := filepath.Join("data", "retrograde.db")
+
+	// Ensure the data directory exists
+	dir := filepath.Dir(defaultPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		// If we can't create the default directory, fall back to current directory
+		return "retrograde.db"
+	}
+
+	return defaultPath
 }
 
 // GetDatabase returns the active database handle, or nil if uninitialized.
@@ -625,6 +646,49 @@ func CloseDatabase() error {
 func SanitizeFilename(name string) string {
 	re := regexp.MustCompile(`[^a-zA-Z0-9]+`)
 	return re.ReplaceAllString(name, "_")
+}
+
+// CheckRequiredPathsExist checks if the required directories from configuration exist
+// Returns true if all paths exist, false if any are missing
+func CheckRequiredPathsExist(cfg *Config) bool {
+	pathsToCheck := []string{
+		cfg.Configuration.Paths.Logs,
+		cfg.Configuration.Paths.MessageBase,
+		cfg.Configuration.Paths.FileBase,
+		cfg.Configuration.Paths.System,
+		cfg.Configuration.Paths.Themes,
+	}
+
+	for _, path := range pathsToCheck {
+		if path == "" {
+			continue // Skip empty paths
+		}
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			return false
+		}
+	}
+	return true
+}
+
+// EnsureRequiredPaths creates required directories if they don't exist
+func EnsureRequiredPaths(cfg *Config) error {
+	pathsToCreate := []string{
+		cfg.Configuration.Paths.Logs,
+		cfg.Configuration.Paths.MessageBase,
+		cfg.Configuration.Paths.FileBase,
+		cfg.Configuration.Paths.System,
+		cfg.Configuration.Paths.Themes,
+	}
+
+	for _, path := range pathsToCreate {
+		if path == "" {
+			continue // Skip empty paths
+		}
+		if err := os.MkdirAll(path, 0755); err != nil {
+			return fmt.Errorf("failed to create directory %s: %w", path, err)
+		}
+	}
+	return nil
 }
 
 // Note: Application management functions moved to auth package to avoid circular imports

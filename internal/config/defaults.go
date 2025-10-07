@@ -5,13 +5,13 @@ package config
 func GetDefaultConfig() *Config {
 	cfg := &Config{}
 
-	// Configuration.Paths
-	cfg.Configuration.Paths.Database = "C:\\retrograde\\data"
-	cfg.Configuration.Paths.FileBase = "C:\\retrograde\\files"
-	cfg.Configuration.Paths.Logs = "C:\\retrograde\\logs"
-	cfg.Configuration.Paths.MessageBase = "C:\\retrograde\\msgs"
-	cfg.Configuration.Paths.System = "C:\\retrograde"
-	cfg.Configuration.Paths.Themes = "C:\\retrograde\\themes"
+	// Configuration.Paths - Use relative paths that work cross-platform
+	cfg.Configuration.Paths.Database = "data"
+	cfg.Configuration.Paths.FileBase = "files"
+	cfg.Configuration.Paths.Logs = "logs"
+	cfg.Configuration.Paths.MessageBase = "msgs"
+	cfg.Configuration.Paths.System = "."
+	cfg.Configuration.Paths.Themes = "themes"
 
 	// Configuration.General
 	cfg.Configuration.General.BBSLocation = "Your City, State"
