@@ -31,9 +31,8 @@ bin/
 # logs directory (don't commit log files!)
 logs/
 
-# security directory (don't commit security config files!)
-security/
-
 temp/
+
+# release directory (built binaries)
 
 .roo/

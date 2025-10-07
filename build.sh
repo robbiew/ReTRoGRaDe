@@ -26,16 +26,21 @@ echo
 # Build flags for production optimization
 BUILD_FLAGS="-ldflags=-s -ldflags=-w -trimpath"
 
-# 1. Build for current platform/OS in main directory
+# 1. Build for current platform/OS to release/ directory
 echo -e "${YELLOW}[1/2]${NC} Building for current platform (${CURRENT_OS}/${CURRENT_ARCH})..."
 
-if go build ${BUILD_FLAGS} -o retrograde ./cmd/server; then
-    echo -e "${GREEN}✓${NC} Built: ${PWD}/retrograde"
+# Ensure release directory exists
+mkdir -p release
+
+if go build ${BUILD_FLAGS} -o release/retrograde-${CURRENT_OS}-${CURRENT_ARCH} ./cmd/server; then
+    echo -e "${GREEN}✓${NC} Built: ${PWD}/release/retrograde-${CURRENT_OS}-${CURRENT_ARCH}"
     
     # Show file size
-    if [[ "$CURRENT_OS" == "darwin" ]] || [[ "$CURRENT_OS" == "linux" ]]; then
-        SIZE=$(ls -lh retrograde | awk '{print $5}')
-        echo -e "${BLUE}  Size:${NC} ${SIZE}"
+    if [[ -f "release/retrograde-${CURRENT_OS}-${CURRENT_ARCH}" ]]; then
+        if [[ "$CURRENT_OS" == "darwin" ]] || [[ "$CURRENT_OS" == "linux" ]]; then
+            SIZE=$(ls -lh release/retrograde-${CURRENT_OS}-${CURRENT_ARCH} | awk '{print $5}')
+            echo -e "${BLUE}  Size:${NC} ${SIZE}"
+        fi
     fi
 else
     echo -e "${RED}✗${NC} Failed to build for current platform"
@@ -72,13 +77,13 @@ echo -e "Build Complete!${NC}"
 echo -e "${GREEN}======================================${NC}"
 echo
 echo -e "${BLUE}Binaries created:${NC}"
-echo -e "  - ${PWD}/retrograde (${CURRENT_OS}/${CURRENT_ARCH})"
+echo -e "  - ${PWD}/release/retrograde-${CURRENT_OS}-${CURRENT_ARCH} (${CURRENT_OS}/${CURRENT_ARCH})"
 echo -e "  - ${PWD}/release/retrograde-linux (linux/amd64)"
 echo
 echo -e "${BLUE}Usage:${NC}"
-echo -e "  - ./retrograde        - Start BBS server"
-echo -e "  - ./retrograde config - Run configuration editor"
-echo -e "  - ./retrograde edit   - Run configuration editor (alias)"
+echo -e "  - ./release/retrograde-${CURRENT_OS}-${CURRENT_ARCH}        - Start BBS server"
+echo -e "  - ./release/retrograde-${CURRENT_OS}-${CURRENT_ARCH} config - Run configuration editor"
+echo -e "  - ./release/retrograde-${CURRENT_OS}-${CURRENT_ARCH} edit   - Run configuration editor (alias)"
 echo
 echo -e "${YELLOW}Production optimizations applied:${NC}"
 echo "  - Strip debug symbols (-ldflags=-s)"
