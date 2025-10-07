@@ -56,9 +56,7 @@ func (s *sqliteStorage) CreateUser(params CreateUserParams) (*UserRecord, error)
 		digest.UpdatedAt = createdAt
 	}
 
-	// Debug logging for user creation
-	fmt.Printf("DEBUG: Creating user with params - Username: %s, Email: %s, SecurityLevel: %d\n", username, params.Email, params.SecurityLevel)
-	fmt.Printf("DEBUG: Password digest - Hash: %s, Salt: %s, Algorithm: %s, UpdatedAt: %s\n", digest.Hash, digest.Salt, digest.Algorithm, digest.UpdatedAt)
+	// User creation logging removed for production
 
 	dbUser := database.UserRecord{
 		Username:          username,
@@ -74,26 +72,20 @@ func (s *sqliteStorage) CreateUser(params CreateUserParams) (*UserRecord, error)
 		LockedUntil:       sql.NullString{},
 	}
 
-	fmt.Printf("DEBUG: dbUser prepared - Username: %s, PasswordHash: %s, Email: %v, CreatedDate: %s\n", dbUser.Username, dbUser.PasswordHash, dbUser.Email, dbUser.CreatedDate)
-
 	id, err := s.db.CreateUser(&dbUser)
 	if err != nil {
-		fmt.Printf("DEBUG: CreateUser database error: %v\n", err)
 		if isUniqueConstraintError(err) {
 			return nil, ErrUserExists
 		}
 		return nil, fmt.Errorf("auth: create user failed: %w", err)
 	}
-	fmt.Printf("DEBUG: User created successfully with ID: %d\n", id)
 	dbUser.ID = id
 
 	user, err := toDomainUserRecord(&dbUser)
 	if err != nil {
-		fmt.Printf("DEBUG: toDomainUserRecord error: %v\n", err)
 		return nil, err
 	}
 
-	fmt.Printf("DEBUG: User creation completed successfully\n")
 	return user, nil
 }
 

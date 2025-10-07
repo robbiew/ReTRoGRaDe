@@ -61,6 +61,7 @@ type Database interface {
 	CreateUser(user *UserRecord) (int64, error)
 	GetUserByUsername(username string) (*UserRecord, error)
 	GetUserByID(userID int64) (*UserRecord, error)
+	GetAllUsers() ([]UserRecord, error)
 	UpdateUser(user *UserRecord) error
 	WithTransaction(fn func(*sql.Tx) error) error
 	UpsertUserDetail(userID int64, attrib, value string) error

@@ -206,22 +206,6 @@ type DropFileData struct {
 	NodeNum       int
 }
 
-// Application struct to hold form data
-type Application struct {
-	Alias       string    `json:"alias"`
-	Email       string    `json:"email"`
-	Country     string    `json:"country"`
-	CityState   string    `json:"city_state"`
-	AreaCode    string    `json:"area_code"`
-	BBSName     string    `json:"bbs_name"`
-	BBSURL      string    `json:"bbs_url"`
-	BBSPort     int       `json:"bbs_port"`
-	BBSSoftware string    `json:"bbs_software"`
-	BinkPort    int       `json:"bink_port"`
-	LastEdited  string    `json:"last_edited"` // Empty by default
-	parsedDate  time.Time `json:"-"`
-}
-
 // Struct to hold details about the program's initial state
 type ProgramState struct {
 	TerminalHeight int

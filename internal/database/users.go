@@ -296,24 +296,6 @@ func (s *SQLiteDB) UpdateUserTx(tx *sql.Tx, user *UserRecord) error {
 }
 
 func createUserExec(ex execer, user *UserRecord) (int64, error) {
-	// Debug logging for database insert
-	fmt.Printf("DEBUG: Executing INSERT with values:\n")
-	fmt.Printf("  Username: %s\n", user.Username)
-	fmt.Printf("  FirstName: %v\n", user.FirstName)
-	fmt.Printf("  LastName: %v\n", user.LastName)
-	fmt.Printf("  PasswordHash: %s\n", user.PasswordHash)
-	fmt.Printf("  PasswordSalt: %v\n", user.PasswordSalt)
-	fmt.Printf("  PasswordAlgo: %v\n", user.PasswordAlgo)
-	fmt.Printf("  PasswordUpdatedAt: %v\n", user.PasswordUpdatedAt)
-	fmt.Printf("  FailedAttempts: %d\n", user.FailedAttempts)
-	fmt.Printf("  LockedUntil: %v\n", nullOrString(user.LockedUntil))
-	fmt.Printf("  SecurityLevel: %d\n", user.SecurityLevel)
-	fmt.Printf("  CreatedDate: %s\n", user.CreatedDate)
-	fmt.Printf("  LastLogin: %v\n", user.LastLogin)
-	fmt.Printf("  Email: %v\n", user.Email)
-	fmt.Printf("  Country: %v\n", user.Country)
-	fmt.Printf("  Locations: %v\n", user.Locations)
-
 	result, err := ex.Exec(`
 		INSERT INTO users (
 			username, first_name, last_name, password_hash, password_salt, password_algo, password_updated_at,
@@ -337,17 +319,14 @@ func createUserExec(ex execer, user *UserRecord) (int64, error) {
 		user.Locations,
 	)
 	if err != nil {
-		fmt.Printf("DEBUG: INSERT failed with error: %v\n", err)
 		return 0, fmt.Errorf("failed to create user: %w", err)
 	}
 
 	id, err := result.LastInsertId()
 	if err != nil {
-		fmt.Printf("DEBUG: Failed to get LastInsertId: %v\n", err)
 		return 0, fmt.Errorf("failed to retrieve user ID: %w", err)
 	}
 
-	fmt.Printf("DEBUG: INSERT successful, user ID: %d\n", id)
 	return id, nil
 }
 

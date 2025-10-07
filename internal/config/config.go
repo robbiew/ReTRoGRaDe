@@ -18,6 +18,11 @@ import (
 
 var db database.Database
 
+// SetDatabase sets the global database instance
+func SetDatabase(d database.Database) {
+	db = d
+}
+
 // LoadConfig loads configuration from SQLite database
 // If database doesn't exist, creates it with default values
 func LoadConfig(filePath string) (*Config, error) {
@@ -692,12 +697,6 @@ func EnsureRequiredPaths(cfg *Config) error {
 }
 
 // Note: Application management functions moved to auth package to avoid circular imports
-
-// Helper function to parse integers safely
-func parseInt(input string) int {
-	value, _ := strconv.Atoi(input)
-	return value
-}
 
 // GenerateNetworkPassword creates a random 11-character uppercase alphanumeric password
 func GenerateNetworkPassword() string {

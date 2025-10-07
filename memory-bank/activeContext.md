@@ -2,13 +2,16 @@
 
 ## Current Focus
 
-- Code maintenance and bug fixes in authentication module
-- Ensuring clean, efficient codebase
+- Implementing user management interface in TUI configuration editor
+- Adding user listing and database integration
 
 ## Recent Changes
 
-- Removed unused global variable 'db' from internal/auth/auth.go
+- Added database connection to TUI editor for user management
+- Implemented user listing with security level display
+- Added GetAllUsers method to database interface
 
 ## Open Questions/Issues
 
-- None currently identified
+- User editing functionality still needs implementation
+- Need to integrate with authentication system for user creation/modification

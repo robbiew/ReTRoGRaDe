@@ -6,7 +6,7 @@ func GetDefaultConfig() *Config {
 	cfg := &Config{}
 
 	// Configuration.Paths - Use relative paths that work cross-platform
-	cfg.Configuration.Paths.Database = "data"
+	cfg.Configuration.Paths.Database = "data/retrograde.db"
 	cfg.Configuration.Paths.FileBase = "files"
 	cfg.Configuration.Paths.Logs = "logs"
 	cfg.Configuration.Paths.MessageBase = "msgs"

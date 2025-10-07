@@ -19,12 +19,12 @@ type SQLiteDB struct {
 func OpenSQLite(config ConnectionConfig) (*SQLiteDB, error) {
 	db, err := sql.Open("sqlite", config.Path+"?_pragma=journal_mode(WAL)")
 	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
+		return nil, fmt.Errorf("failed to open database at path '%s': %w", config.Path, err)
 	}
 
 	// Test connection
 	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
+		return nil, fmt.Errorf("failed to ping database at path '%s': %w", config.Path, err)
 	}
 
 	sqliteDB := &SQLiteDB{
@@ -234,6 +234,51 @@ func (s *SQLiteDB) SetConfig(section, subsection, key, value, valueType, modifie
 	}
 
 	return nil
+}
+
+// GetAllUsers retrieves all user records
+func (s *SQLiteDB) GetAllUsers() ([]UserRecord, error) {
+	rows, err := s.db.Query(`
+		SELECT id, username, first_name, last_name, password_hash, password_salt, password_algo, password_updated_at, failed_attempts, locked_until, security_level, created_date, last_login, email, country, locations
+		FROM users
+		ORDER BY username`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []UserRecord
+	for rows.Next() {
+		var user UserRecord
+		err := rows.Scan(
+			&user.ID,
+			&user.Username,
+			&user.FirstName,
+			&user.LastName,
+			&user.PasswordHash,
+			&user.PasswordSalt,
+			&user.PasswordAlgo,
+			&user.PasswordUpdatedAt,
+			&user.FailedAttempts,
+			&user.LockedUntil,
+			&user.SecurityLevel,
+			&user.CreatedDate,
+			&user.LastLogin,
+			&user.Email,
+			&user.Country,
+			&user.Locations,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan user: %w", err)
+		}
+		users = append(users, user)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating users: %w", err)
+	}
+
+	return users, nil
 }
 
 // GetAllConfigValues retrieves all configuration values
