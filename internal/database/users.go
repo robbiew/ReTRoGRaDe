@@ -1,0 +1,1058 @@
+package database
+
+import (
+	"database/sql"
+	"fmt"
+	"strings"
+	"time"
+)
+
+// execer allows shared logic between *sql.DB and *sql.Tx.
+type execer interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+}
+
+// NullString returns a sql.NullString helper.
+func NullString(value string) sql.NullString {
+	if strings.TrimSpace(value) == "" {
+		return sql.NullString{Valid: false}
+	}
+	return sql.NullString{String: value, Valid: true}
+}
+
+// NullInt returns a sql.NullInt64 helper.
+func NullInt(value int64) sql.NullInt64 {
+	if value == 0 {
+		return sql.NullInt64{Valid: false}
+	}
+	return sql.NullInt64{Int64: value, Valid: true}
+}
+
+// WithTransaction executes fn inside a transaction.
+func (s *SQLiteDB) WithTransaction(fn func(*sql.Tx) error) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	if err := fn(tx); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// UserRecord represents a row in the users table.
+type UserRecord struct {
+	ID                int64
+	Username          string
+	FirstName         sql.NullString
+	LastName          sql.NullString
+	PasswordHash      string
+	PasswordSalt      sql.NullString
+	PasswordAlgo      sql.NullString
+	PasswordUpdatedAt sql.NullString
+	FailedAttempts    int
+	LockedUntil       sql.NullString
+	SecurityLevel     int
+	CreatedDate       string
+	LastLogin         sql.NullString
+	Email             sql.NullString
+	Country           sql.NullString
+	Locations         sql.NullString
+}
+
+// BBSSessionRecord represents a row in the bbs_sessions table.
+type BBSSessionRecord struct {
+	ID             int64
+	UserID         int64
+	NodeNumber     int
+	SessionStart   string
+	LastActivity   string
+	TimeLeft       int
+	CallsToday     int
+	Status         string
+	IPAddress      sql.NullString
+	ConnectionType sql.NullString
+	CurrentArea    sql.NullString
+	CurrentMenu    sql.NullString
+}
+
+// BBSConfigRecord represents a row in the bbs_config table.
+type BBSConfigRecord struct {
+	ID          int64
+	Section     string
+	Subsection  sql.NullString
+	Key         string
+	Value       string
+	ValueType   string
+	Description sql.NullString
+	ModifiedBy  sql.NullString
+	ModifiedAt  string
+}
+
+// UserPreferenceRecord represents a row in the user_preferences table.
+type UserPreferenceRecord struct {
+	UserID          int64
+	PreferenceKey   string
+	PreferenceValue string
+	Category        sql.NullString
+}
+
+// InitializeUserSchema ensures the user-related tables exist.
+const sqliteTimeFormat = time.RFC3339Nano
+
+func (s *SQLiteDB) InitializeUserSchema() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	createStatements := []string{
+		`CREATE TABLE IF NOT EXISTS users (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+			first_name TEXT,
+			last_name TEXT,
+			password_hash TEXT NOT NULL,
+			password_salt TEXT,
+			password_algo TEXT,
+			password_updated_at TEXT,
+			failed_attempts INTEGER NOT NULL DEFAULT 0,
+			locked_until TEXT,
+			security_level INTEGER NOT NULL DEFAULT 0,
+			created_date TEXT NOT NULL,
+			last_login TEXT,
+			email TEXT UNIQUE,
+			country TEXT,
+			locations TEXT
+		)`,
+		`CREATE TABLE IF NOT EXISTS bbs_sessions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			node_number INTEGER NOT NULL,
+			session_start TEXT NOT NULL,
+			last_activity TEXT NOT NULL,
+			time_left INTEGER NOT NULL DEFAULT 0,
+			calls_today INTEGER NOT NULL DEFAULT 0,
+			status TEXT NOT NULL DEFAULT 'active',
+			ip_address TEXT,
+			connection_type TEXT,
+			current_area TEXT,
+			current_menu TEXT,
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS bbs_config (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			section TEXT NOT NULL,
+			subsection TEXT,
+			key TEXT NOT NULL,
+			value TEXT NOT NULL,
+			value_type TEXT NOT NULL DEFAULT 'string',
+			description TEXT,
+			modified_by TEXT,
+			modified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE (section, subsection, key)
+		)`,
+		`CREATE TABLE IF NOT EXISTS user_preferences (
+			user_id INTEGER NOT NULL,
+			preference_key TEXT NOT NULL,
+			preference_value TEXT NOT NULL,
+			category TEXT,
+			PRIMARY KEY (user_id, preference_key),
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS user_details (
+			user_id INTEGER NOT NULL,
+			attrib TEXT NOT NULL COLLATE NOCASE,
+			value TEXT,
+			PRIMARY KEY (user_id, attrib),
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS user_subscriptions (
+			user_id INTEGER NOT NULL,
+			msgbase TEXT NOT NULL,
+			PRIMARY KEY (user_id, msgbase),
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS user_lastread (
+			user_id INTEGER NOT NULL,
+			msgbase TEXT NOT NULL,
+			last_message_id INTEGER,
+			PRIMARY KEY (user_id, msgbase),
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS auth_audit (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER,
+			username TEXT,
+			event_type TEXT NOT NULL,
+			ip_address TEXT,
+			metadata TEXT,
+			context TEXT,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS user_mfa (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			method TEXT NOT NULL,
+			secret TEXT,
+			config TEXT,
+			is_enabled INTEGER NOT NULL DEFAULT 1,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			last_used_at TEXT,
+			backup_codes TEXT,
+			display_name TEXT,
+			UNIQUE(user_id, method),
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+		)`,
+	}
+
+	columnMigrations := []struct {
+		table      string
+		column     string
+		definition string
+	}{
+		{"users", "first_name", "TEXT"},
+		{"users", "last_name", "TEXT"},
+		{"users", "password_algo", "TEXT"},
+		{"users", "password_updated_at", "TEXT"},
+		{"users", "failed_attempts", "INTEGER NOT NULL DEFAULT 0"},
+		{"users", "locked_until", "TEXT"},
+		{"users", "country", "TEXT"},
+		{"users", "locations", "TEXT"},
+	}
+
+	addColumnIfMissing := func(tx *sql.Tx, table, column, definition string) error {
+		stmt := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, definition)
+		if _, err := tx.Exec(stmt); err != nil {
+			lower := strings.ToLower(err.Error())
+			if strings.Contains(lower, "duplicate column name") || strings.Contains(lower, "no such table") {
+				return nil
+			}
+			return err
+		}
+		return nil
+	}
+
+	for _, col := range columnMigrations {
+		if err := addColumnIfMissing(tx, col.table, col.column, col.definition); err != nil {
+			return fmt.Errorf("failed to add column %s.%s: %w", col.table, col.column, err)
+		}
+	}
+
+	for _, stmt := range createStatements {
+		if _, err := tx.Exec(stmt); err != nil {
+			return fmt.Errorf("failed to execute schema statement: %w", err)
+		}
+	}
+
+	indexStatements := []string{
+		`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`,
+		`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_details_user ON user_details(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_subscriptions_user ON user_subscriptions(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_lastread_user ON user_lastread(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_auth_audit_user ON auth_audit(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_auth_audit_created ON auth_audit(created_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_auth_audit_event ON auth_audit(event_type)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_mfa_user ON user_mfa(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_bbs_sessions_user ON bbs_sessions(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_bbs_sessions_node ON bbs_sessions(node_number)`,
+		`CREATE INDEX IF NOT EXISTS idx_bbs_sessions_status ON bbs_sessions(status)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_preferences_category ON user_preferences(category)`,
+	}
+
+	for _, stmt := range indexStatements {
+		if _, err := tx.Exec(stmt); err != nil {
+			return fmt.Errorf("failed to execute index statement: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit user schema transaction: %w", err)
+	}
+
+	return nil
+}
+
+// CreateUser inserts a new user row and returns the generated ID.
+func (s *SQLiteDB) CreateUser(user *UserRecord) (int64, error) {
+	return createUserExec(s.db, user)
+}
+
+// CreateUserTx inserts a user inside an existing transaction.
+func (s *SQLiteDB) CreateUserTx(tx *sql.Tx, user *UserRecord) (int64, error) {
+	return createUserExec(tx, user)
+}
+
+// UpdateUserTx updates a user inside an existing transaction.
+func (s *SQLiteDB) UpdateUserTx(tx *sql.Tx, user *UserRecord) error {
+	return updateUserExec(tx, user)
+}
+
+func createUserExec(ex execer, user *UserRecord) (int64, error) {
+	// Debug logging for database insert
+	fmt.Printf("DEBUG: Executing INSERT with values:\n")
+	fmt.Printf("  Username: %s\n", user.Username)
+	fmt.Printf("  FirstName: %v\n", user.FirstName)
+	fmt.Printf("  LastName: %v\n", user.LastName)
+	fmt.Printf("  PasswordHash: %s\n", user.PasswordHash)
+	fmt.Printf("  PasswordSalt: %v\n", user.PasswordSalt)
+	fmt.Printf("  PasswordAlgo: %v\n", user.PasswordAlgo)
+	fmt.Printf("  PasswordUpdatedAt: %v\n", user.PasswordUpdatedAt)
+	fmt.Printf("  FailedAttempts: %d\n", user.FailedAttempts)
+	fmt.Printf("  LockedUntil: %v\n", nullOrString(user.LockedUntil))
+	fmt.Printf("  SecurityLevel: %d\n", user.SecurityLevel)
+	fmt.Printf("  CreatedDate: %s\n", user.CreatedDate)
+	fmt.Printf("  LastLogin: %v\n", user.LastLogin)
+	fmt.Printf("  Email: %v\n", user.Email)
+	fmt.Printf("  Country: %v\n", user.Country)
+	fmt.Printf("  Locations: %v\n", user.Locations)
+
+	result, err := ex.Exec(`
+		INSERT INTO users (
+			username, first_name, last_name, password_hash, password_salt, password_algo, password_updated_at,
+			failed_attempts, locked_until, security_level, created_date, last_login, email, country, locations
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		user.Username,
+		user.FirstName,
+		user.LastName,
+		user.PasswordHash,
+		user.PasswordSalt,
+		user.PasswordAlgo,
+		user.PasswordUpdatedAt,
+		user.FailedAttempts,
+		nullOrString(user.LockedUntil),
+		user.SecurityLevel,
+		user.CreatedDate,
+		user.LastLogin,
+		user.Email,
+		user.Country,
+		user.Locations,
+	)
+	if err != nil {
+		fmt.Printf("DEBUG: INSERT failed with error: %v\n", err)
+		return 0, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		fmt.Printf("DEBUG: Failed to get LastInsertId: %v\n", err)
+		return 0, fmt.Errorf("failed to retrieve user ID: %w", err)
+	}
+
+	fmt.Printf("DEBUG: INSERT successful, user ID: %d\n", id)
+	return id, nil
+}
+
+func updateUserExec(ex execer, user *UserRecord) error {
+	_, err := ex.Exec(`
+		UPDATE users
+		SET password_hash = ?, password_salt = ?, password_algo = ?, password_updated_at = ?, failed_attempts = ?, locked_until = ?, security_level = ?, created_date = ?, last_login = ?, email = ?, country = ?, locations = ?
+		WHERE id = ?`,
+		user.PasswordHash,
+		user.PasswordSalt,
+		user.PasswordAlgo,
+		user.PasswordUpdatedAt,
+		user.FailedAttempts,
+		nullOrString(user.LockedUntil),
+		user.SecurityLevel,
+		user.CreatedDate,
+		user.LastLogin,
+		user.Email,
+		user.Country,
+		user.Locations,
+		user.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+	return nil
+}
+
+// DeleteUserTx deletes a user and dependent rows inside a transaction.
+func (s *SQLiteDB) DeleteUserTx(tx *sql.Tx, userID int64) error {
+	return deleteUserExec(tx, userID)
+}
+
+func deleteUserExec(ex execer, userID int64) error {
+	statements := []string{
+		`DELETE FROM user_details WHERE user_id = ?`,
+		`DELETE FROM user_subscriptions WHERE user_id = ?`,
+		`DELETE FROM user_lastread WHERE user_id = ?`,
+		`DELETE FROM bbs_sessions WHERE user_id = ?`,
+		`DELETE FROM user_preferences WHERE user_id = ?`,
+		`DELETE FROM users WHERE id = ?`,
+	}
+
+	for _, stmt := range statements {
+		if _, err := ex.Exec(stmt, userID); err != nil {
+			return fmt.Errorf("failed to delete user data: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// GetUserByUsername retrieves a user row by username (case-insensitive).
+func (s *SQLiteDB) GetUserByUsername(username string) (*UserRecord, error) {
+	fmt.Printf("DEBUG: GetUserByUsername called with username: %s\n", username)
+	row := s.db.QueryRow(`
+		SELECT id, username, first_name, last_name, password_hash, password_salt, password_algo, password_updated_at, failed_attempts, locked_until, security_level, created_date, last_login, email, country, locations
+		FROM users
+		WHERE LOWER(username) = LOWER(?)`,
+		username,
+	)
+
+	var user UserRecord
+	if err := row.Scan(
+		&user.ID,
+		&user.Username,
+		&user.FirstName,
+		&user.LastName,
+		&user.PasswordHash,
+		&user.PasswordSalt,
+		&user.PasswordAlgo,
+		&user.PasswordUpdatedAt,
+		&user.FailedAttempts,
+		&user.LockedUntil,
+		&user.SecurityLevel,
+		&user.CreatedDate,
+		&user.LastLogin,
+		&user.Email,
+		&user.Country,
+		&user.Locations,
+	); err != nil {
+		fmt.Printf("DEBUG: GetUserByUsername scan error: %v\n", err)
+		if err == sql.ErrNoRows {
+			fmt.Printf("DEBUG: User not found\n")
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	fmt.Printf("DEBUG: User found: ID=%d, Username=%s\n", user.ID, user.Username)
+	return &user, nil
+}
+
+// GetUserByID retrieves a user row by ID.
+func (s *SQLiteDB) GetUserByID(userID int64) (*UserRecord, error) {
+	row := s.db.QueryRow(`
+		SELECT id, username, first_name, last_name, password_hash, password_salt, password_algo, password_updated_at, failed_attempts, locked_until, security_level, created_date, last_login, email, country, locations
+		FROM users
+		WHERE id = ?`,
+		userID,
+	)
+
+	var user UserRecord
+	if err := row.Scan(
+		&user.ID,
+		&user.Username,
+		&user.FirstName,
+		&user.LastName,
+		&user.PasswordHash,
+		&user.PasswordSalt,
+		&user.PasswordAlgo,
+		&user.PasswordUpdatedAt,
+		&user.FailedAttempts,
+		&user.LockedUntil,
+		&user.SecurityLevel,
+		&user.CreatedDate,
+		&user.LastLogin,
+		&user.Email,
+		&user.Country,
+		&user.Locations,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	return &user, nil
+}
+
+// UpdateUser updates mutable fields for an existing user.
+func (s *SQLiteDB) UpdateUser(user *UserRecord) error {
+	_, err := s.db.Exec(`
+		UPDATE users
+		SET first_name = ?, last_name = ?, password_hash = ?, password_salt = ?, password_algo = ?, password_updated_at = ?, failed_attempts = ?, locked_until = ?, security_level = ?, created_date = ?, last_login = ?, email = ?, country = ?, locations = ?
+		WHERE id = ?`,
+		user.FirstName,
+		user.LastName,
+		user.PasswordHash,
+		user.PasswordSalt,
+		user.PasswordAlgo,
+		user.PasswordUpdatedAt,
+		user.FailedAttempts,
+		nullOrString(user.LockedUntil),
+		user.SecurityLevel,
+		user.CreatedDate,
+		user.LastLogin,
+		user.Email,
+		user.Country,
+		user.Locations,
+		user.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+
+	return nil
+}
+
+// UpsertUserDetail stores a key/value attribute for a user.
+func (s *SQLiteDB) UpsertUserDetail(userID int64, attrib, value string) error {
+	_, err := s.db.Exec(`
+		INSERT INTO user_details (user_id, attrib, value)
+		VALUES (?, ?, ?)
+		ON CONFLICT(user_id, attrib) DO UPDATE SET value = excluded.value`,
+		userID,
+		attrib,
+		value,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to upsert user detail: %w", err)
+	}
+	return nil
+}
+
+// GetUserDetails returns all key/value attributes for a user.
+func (s *SQLiteDB) GetUserDetails(userID int64) (map[string]string, error) {
+	rows, err := s.db.Query(`
+		SELECT attrib, value
+		FROM user_details
+		WHERE user_id = ?`,
+		userID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query user details: %w", err)
+	}
+	defer rows.Close()
+
+	details := make(map[string]string)
+	for rows.Next() {
+		var attrib string
+		var value sql.NullString
+		if err := rows.Scan(&attrib, &value); err != nil {
+			return nil, fmt.Errorf("failed to scan user detail: %w", err)
+		}
+		details[attrib] = value.String
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating user details: %w", err)
+	}
+
+	return details, nil
+}
+
+// IncrementFailedAttempts increases the failed login count and optionally sets a lockout.
+func (s *SQLiteDB) IncrementFailedAttempts(userID int64, now time.Time, maxAttempts int, lockMinutes int) (int, *time.Time, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, nil, err
+	}
+	defer tx.Rollback()
+
+	var currentCount int
+	var lockedUntil sql.NullString
+	err = tx.QueryRow(`SELECT failed_attempts, locked_until FROM users WHERE id = ?`, userID).Scan(&currentCount, &lockedUntil)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, nil, fmt.Errorf("user %d not found", userID)
+		}
+		return 0, nil, err
+	}
+
+	currentCount++
+	var lockPtr *time.Time
+	var lockValue interface{}
+
+	if maxAttempts > 0 && currentCount >= maxAttempts {
+		lockTime := now.Add(time.Duration(lockMinutes) * time.Minute)
+		lockPtr = &lockTime
+		lockValue = lockTime.Format(sqliteTimeFormat)
+	} else if lockedUntil.Valid {
+		if parsed, err := time.Parse(sqliteTimeFormat, lockedUntil.String); err == nil && parsed.After(now) {
+			lockPtr = &parsed
+			lockValue = lockedUntil.String
+		} else {
+			lockValue = nil
+		}
+	} else {
+		lockValue = nil
+	}
+
+	if _, err := tx.Exec(`
+		UPDATE users
+		SET failed_attempts = ?, locked_until = ?
+		WHERE id = ?`, currentCount, lockValue, userID); err != nil {
+		return 0, nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, nil, err
+	}
+
+	return currentCount, lockPtr, nil
+}
+
+// ResetFailedAttempts clears the failed attempt counter and lockout.
+func (s *SQLiteDB) ResetFailedAttempts(userID int64, _ time.Time) error {
+	_, err := s.db.Exec(`UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?`, userID)
+	return err
+}
+
+// UpdatePassword updates hash metadata, resets failures, and records algorithm/salt information.
+func (s *SQLiteDB) UpdatePassword(userID int64, hash, algo, salt string, now time.Time) error {
+	_, err := s.db.Exec(`
+		UPDATE users
+		SET password_hash = ?, password_algo = ?, password_salt = ?, password_updated_at = ?, failed_attempts = 0, locked_until = NULL
+		WHERE id = ?`,
+		hash,
+		NullString(algo),
+		NullString(salt),
+		now.Format(sqliteTimeFormat),
+		userID,
+	)
+	return err
+}
+
+// InsertAuthAudit inserts an authentication audit trail entry.
+func (s *SQLiteDB) InsertAuthAudit(entry *AuthAuditEntry) error {
+	if entry == nil {
+		return fmt.Errorf("auth audit entry is nil")
+	}
+
+	created := entry.CreatedAt
+	if created.IsZero() {
+		created = time.Now()
+	}
+
+	_, err := s.db.Exec(`
+		INSERT INTO auth_audit (user_id, username, event_type, ip_address, metadata, context, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		nullOrInt64(entry.UserID),
+		entry.Username,
+		entry.EventType,
+		entry.IPAddress,
+		entry.Metadata,
+		entry.Context,
+		created.Format(sqliteTimeFormat),
+	)
+	return err
+}
+
+// UpsertUserMFA creates or updates an MFA record for a user.
+func (s *SQLiteDB) UpsertUserMFA(record *UserMFARecord) error {
+	if record == nil {
+		return fmt.Errorf("user MFA record is nil")
+	}
+
+	now := time.Now().Format(sqliteTimeFormat)
+
+	var createdValue interface{}
+	if !record.CreatedAt.IsZero() {
+		createdValue = record.CreatedAt.Format(sqliteTimeFormat)
+	}
+
+	lastUsedValue := nullOrStringFromNullTime(record.LastUsedAt)
+
+	_, err := s.db.Exec(`
+		INSERT INTO user_mfa (
+			user_id, method, secret, config, is_enabled, created_at, updated_at, last_used_at, backup_codes, display_name
+		) VALUES (?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), ?, ?, ?, ?)
+		ON CONFLICT(user_id, method) DO UPDATE SET
+			secret = excluded.secret,
+			config = excluded.config,
+			is_enabled = excluded.is_enabled,
+			updated_at = excluded.updated_at,
+			last_used_at = excluded.last_used_at,
+			backup_codes = excluded.backup_codes,
+			display_name = excluded.display_name`,
+		record.UserID,
+		record.Method,
+		record.Secret,
+		record.Config,
+		boolToInt(record.IsEnabled),
+		createdValue,
+		now,
+		lastUsedValue,
+		record.BackupCodes,
+		record.DisplayName,
+	)
+	return err
+}
+
+// GetMFAForUser returns MFA entries for the specified user.
+func (s *SQLiteDB) GetMFAForUser(userID int64) ([]UserMFARecord, error) {
+	rows, err := s.db.Query(`
+		SELECT id, user_id, method, secret, config, is_enabled, created_at, updated_at, last_used_at, backup_codes, display_name
+		FROM user_mfa
+		WHERE user_id = ?
+		ORDER BY method`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []UserMFARecord
+	for rows.Next() {
+		var rec UserMFARecord
+		var isEnabled int
+		var createdStr, updatedStr string
+		var lastUsedStr sql.NullString
+
+		if err := rows.Scan(
+			&rec.ID,
+			&rec.UserID,
+			&rec.Method,
+			&rec.Secret,
+			&rec.Config,
+			&isEnabled,
+			&createdStr,
+			&updatedStr,
+			&lastUsedStr,
+			&rec.BackupCodes,
+			&rec.DisplayName,
+		); err != nil {
+			return nil, err
+		}
+
+		created, err := parseSQLiteTime(createdStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse created_at for MFA record %d: %w", rec.ID, err)
+		}
+		rec.CreatedAt = created
+
+		updated, err := parseSQLiteTime(updatedStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse updated_at for MFA record %d: %w", rec.ID, err)
+		}
+		rec.UpdatedAt = updated
+
+		if lastUsedStr.Valid {
+			if parsed, err := parseSQLiteTime(lastUsedStr.String); err == nil {
+				rec.LastUsedAt = sql.NullTime{Time: parsed, Valid: true}
+			} else {
+				return nil, fmt.Errorf("failed to parse last_used_at for MFA record %d: %w", rec.ID, err)
+			}
+		} else {
+			rec.LastUsedAt = sql.NullTime{}
+		}
+
+		rec.IsEnabled = isEnabled != 0
+		records = append(records, rec)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return records, nil
+}
+
+// DeleteMFAForUser removes MFA entries for a user. If method is empty, all methods are removed.
+func (s *SQLiteDB) DeleteMFAForUser(userID int64, method string) error {
+	if method == "" {
+		_, err := s.db.Exec(`DELETE FROM user_mfa WHERE user_id = ?`, userID)
+		return err
+	}
+	_, err := s.db.Exec(`DELETE FROM user_mfa WHERE user_id = ? AND method = ?`, userID, method)
+	return err
+}
+
+func parseSQLiteTime(value string) (time.Time, error) {
+	if value == "" {
+		return time.Time{}, fmt.Errorf("empty time value")
+	}
+
+	layouts := []string{
+		sqliteTimeFormat,
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02 15:04:05",
+	}
+
+	var lastErr error
+	for _, layout := range layouts {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			return parsed, nil
+		} else {
+			lastErr = err
+		}
+	}
+	return time.Time{}, lastErr
+}
+
+func boolToInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
+func nullOrString(value sql.NullString) interface{} {
+	if value.Valid {
+		return value.String
+	}
+	return nil
+}
+
+func nullOrInt64(value sql.NullInt64) interface{} {
+	if value.Valid {
+		return value.Int64
+	}
+	return nil
+}
+
+func nullOrStringFromNullTime(value sql.NullTime) interface{} {
+	if value.Valid {
+		return value.Time.Format(sqliteTimeFormat)
+	}
+	return nil
+}
+
+// BBSSessionRecord DAL functions
+
+// CreateBBSSession creates a new BBS session record.
+func (s *SQLiteDB) CreateBBSSession(session *BBSSessionRecord) (int64, error) {
+	result, err := s.db.Exec(`
+		INSERT INTO bbs_sessions (user_id, node_number, session_start, last_activity, time_left, calls_today, status, ip_address, connection_type, current_area, current_menu)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		session.UserID,
+		session.NodeNumber,
+		session.SessionStart,
+		session.LastActivity,
+		session.TimeLeft,
+		session.CallsToday,
+		session.Status,
+		nullOrString(session.IPAddress),
+		nullOrString(session.ConnectionType),
+		nullOrString(session.CurrentArea),
+		nullOrString(session.CurrentMenu),
+	)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create BBS session: %w", err)
+	}
+	return result.LastInsertId()
+}
+
+// GetBBSSessionByUser retrieves the active BBS session for a user.
+func (s *SQLiteDB) GetBBSSessionByUser(userID int64) (*BBSSessionRecord, error) {
+	row := s.db.QueryRow(`
+		SELECT id, user_id, node_number, session_start, last_activity, time_left, calls_today, status, ip_address, connection_type, current_area, current_menu
+		FROM bbs_sessions
+		WHERE user_id = ? AND status = 'active'`,
+		userID,
+	)
+	var session BBSSessionRecord
+	if err := row.Scan(
+		&session.ID,
+		&session.UserID,
+		&session.NodeNumber,
+		&session.SessionStart,
+		&session.LastActivity,
+		&session.TimeLeft,
+		&session.CallsToday,
+		&session.Status,
+		&session.IPAddress,
+		&session.ConnectionType,
+		&session.CurrentArea,
+		&session.CurrentMenu,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get BBS session: %w", err)
+	}
+	return &session, nil
+}
+
+// UpdateBBSSession updates a BBS session record.
+func (s *SQLiteDB) UpdateBBSSession(session *BBSSessionRecord) error {
+	_, err := s.db.Exec(`
+		UPDATE bbs_sessions
+		SET last_activity = ?, time_left = ?, calls_today = ?, status = ?, current_area = ?, current_menu = ?
+		WHERE id = ?`,
+		session.LastActivity,
+		session.TimeLeft,
+		session.CallsToday,
+		session.Status,
+		nullOrString(session.CurrentArea),
+		nullOrString(session.CurrentMenu),
+		session.ID,
+	)
+	return err
+}
+
+// DeleteBBSSession deletes a BBS session record.
+func (s *SQLiteDB) DeleteBBSSession(sessionID int64) error {
+	_, err := s.db.Exec(`DELETE FROM bbs_sessions WHERE id = ?`, sessionID)
+	return err
+}
+
+// BBSConfigRecord DAL functions
+
+// GetBBSConfig retrieves a BBS config value.
+func (s *SQLiteDB) GetBBSConfig(section, subsection, key string) (*BBSConfigRecord, error) {
+	row := s.db.QueryRow(`
+		SELECT id, section, subsection, key, value, value_type, description, modified_by, modified_at
+		FROM bbs_config
+		WHERE section = ? AND subsection = ? AND key = ?`,
+		section, nullOrString(sql.NullString{String: subsection, Valid: subsection != ""}), key,
+	)
+	var config BBSConfigRecord
+	if err := row.Scan(
+		&config.ID,
+		&config.Section,
+		&config.Subsection,
+		&config.Key,
+		&config.Value,
+		&config.ValueType,
+		&config.Description,
+		&config.ModifiedBy,
+		&config.ModifiedAt,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get BBS config: %w", err)
+	}
+	return &config, nil
+}
+
+// SetBBSConfig sets or updates a BBS config value.
+func (s *SQLiteDB) SetBBSConfig(config *BBSConfigRecord) error {
+	_, err := s.db.Exec(`
+		INSERT INTO bbs_config (section, subsection, key, value, value_type, description, modified_by, modified_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(section, subsection, key) DO UPDATE SET
+			value = excluded.value,
+			value_type = excluded.value_type,
+			description = excluded.description,
+			modified_by = excluded.modified_by,
+			modified_at = excluded.modified_at`,
+		config.Section,
+		nullOrString(config.Subsection),
+		config.Key,
+		config.Value,
+		config.ValueType,
+		nullOrString(config.Description),
+		nullOrString(config.ModifiedBy),
+		config.ModifiedAt,
+	)
+	return err
+}
+
+// GetAllBBSConfig retrieves all BBS config records.
+func (s *SQLiteDB) GetAllBBSConfig() ([]BBSConfigRecord, error) {
+	rows, err := s.db.Query(`
+		SELECT id, section, subsection, key, value, value_type, description, modified_by, modified_at
+		FROM bbs_config
+		ORDER BY section, subsection, key`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var configs []BBSConfigRecord
+	for rows.Next() {
+		var config BBSConfigRecord
+		if err := rows.Scan(
+			&config.ID,
+			&config.Section,
+			&config.Subsection,
+			&config.Key,
+			&config.Value,
+			&config.ValueType,
+			&config.Description,
+			&config.ModifiedBy,
+			&config.ModifiedAt,
+		); err != nil {
+			return nil, err
+		}
+		configs = append(configs, config)
+	}
+	return configs, rows.Err()
+}
+
+// UserPreferenceRecord DAL functions
+
+// GetUserPreference retrieves a user preference.
+func (s *SQLiteDB) GetUserPreference(userID int64, key string) (*UserPreferenceRecord, error) {
+	row := s.db.QueryRow(`
+		SELECT user_id, preference_key, preference_value, category
+		FROM user_preferences
+		WHERE user_id = ? AND preference_key = ?`,
+		userID, key,
+	)
+	var pref UserPreferenceRecord
+	if err := row.Scan(
+		&pref.UserID,
+		&pref.PreferenceKey,
+		&pref.PreferenceValue,
+		&pref.Category,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get user preference: %w", err)
+	}
+	return &pref, nil
+}
+
+// SetUserPreference sets or updates a user preference.
+func (s *SQLiteDB) SetUserPreference(pref *UserPreferenceRecord) error {
+	_, err := s.db.Exec(`
+		INSERT INTO user_preferences (user_id, preference_key, preference_value, category)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(user_id, preference_key) DO UPDATE SET
+			preference_value = excluded.preference_value,
+			category = excluded.category`,
+		pref.UserID,
+		pref.PreferenceKey,
+		pref.PreferenceValue,
+		nullOrString(pref.Category),
+	)
+	return err
+}
+
+// GetUserPreferences retrieves all preferences for a user.
+func (s *SQLiteDB) GetUserPreferences(userID int64) (map[string]UserPreferenceRecord, error) {
+	rows, err := s.db.Query(`
+		SELECT user_id, preference_key, preference_value, category
+		FROM user_preferences
+		WHERE user_id = ?`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	prefs := make(map[string]UserPreferenceRecord)
+	for rows.Next() {
+		var pref UserPreferenceRecord
+		if err := rows.Scan(
+			&pref.UserID,
+			&pref.PreferenceKey,
+			&pref.PreferenceValue,
+			&pref.Category,
+		); err != nil {
+			return nil, err
+		}
+		prefs[pref.PreferenceKey] = pref
+	}
+	return prefs, rows.Err()
+}
+
+// DeleteUserPreference deletes a user preference.
+func (s *SQLiteDB) DeleteUserPreference(userID int64, key string) error {
+	_, err := s.db.Exec(`DELETE FROM user_preferences WHERE user_id = ? AND preference_key = ?`, userID, key)
+	return err
+}
