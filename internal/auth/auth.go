@@ -10,13 +10,10 @@ import (
 	"time"
 
 	"github.com/robbiew/retrograde/internal/config"
-	"github.com/robbiew/retrograde/internal/database"
 	"github.com/robbiew/retrograde/internal/logging"
 	"github.com/robbiew/retrograde/internal/security"
 	"github.com/robbiew/retrograde/internal/telnet"
 )
-
-var db database.Database
 
 const userTimestampLayout = "2006-01-02 15:04:05"
 
@@ -25,7 +22,6 @@ const (
 	ansiReset   = "\033[0m"
 	ansiCyan    = "\033[36m"
 	ansiCyanHi  = "\033[36;1m"
-	ansiGreen   = "\033[32m"
 	ansiGreenHi = "\033[32;1m"
 	ansiRedHi   = "\033[31;1m"
 	ansiWhiteHi = "\033[37;1m"
@@ -347,6 +343,9 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 
 	io.Print(ansiCyan + " This will create your account for accessing Retrograde BBS.\r\n\r\n" + ansiReset)
 
+	// Compile regex once for username validation
+	usernameRegex := regexp.MustCompile(`^[a-zA-Z0-9 ]+$`)
+
 	// Get username with validation
 	var username string
 	for {
@@ -379,7 +378,7 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 			io.ShowTimedError("Username "+username+" already exists.", 2, 14)
 			io.ClearField("Username: ", 2, 10, 20)
 			continue
-		} else if matched, _ := regexp.MatchString(`^[a-zA-Z0-9 ]+$`, username); !matched {
+		} else if !usernameRegex.MatchString(username) {
 			logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "username contains illegal characters")
 			io.ShowTimedError("Username can only contain letters, numbers, and spaces.", 2, 14)
 			io.ClearField("Username: ", 2, 10, 20)
@@ -605,7 +604,7 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 	}
 
 	// Create user account
-	err := CreateUser(username, password, email, 0, userDetails) // Default security level 0
+	err := CreateUser(username, password, email, config.SecurityLevelRegular, userDetails) // Default security level for regular users
 	if err != nil {
 		logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", err.Error())
 		return nil, err

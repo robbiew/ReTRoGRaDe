@@ -52,6 +52,7 @@ const (
 	Level3MenuNavigation                        // Level 3: Submenu offset lower left from Level 2
 	Level4ModalNavigation                       // Level 4: Centered modal for final menus
 	EditingValue                                // Editing a value in modal form
+	UserManagementMode                          // User management interface
 	SavePrompt                                  // Confirming save on exit
 )
 
@@ -61,9 +62,8 @@ type Model struct {
 	config *config.Config
 
 	// Navigation state
-	navMode       NavigationMode
-	activeMenu    int // Current horizontal menu index
-	activeSubmenu int // Current submenu item index
+	navMode    NavigationMode
+	activeMenu int // Current horizontal menu index
 
 	// Menu structure
 	menuBar MenuBar
@@ -77,7 +77,6 @@ type Model struct {
 	modalSectionName string        // Section name for modal header
 
 	// Editing state
-	editing       bool
 	editingItem   *MenuItem
 	textInput     textinput.Model
 	editingError  string
@@ -242,7 +241,7 @@ func (c *MenuBarComponent) Render() string {
 	for i, item := range c.items {
 		style := c.getMenuItemStyle(i == c.activeIndex)
 		// Using clean format without hotkey to prevent stray characters
-		label := fmt.Sprintf("%s", item.Label)
+		label := item.Label
 		items = append(items, style.Render(" "+label+" "))
 	}
 
@@ -1187,6 +1186,11 @@ func buildMenuStructure(cfg *config.Config) MenuBar {
 				HotKey: 'E',
 				SubItems: []SubmenuItem{
 					{
+						ID:       "user-editor",
+						Label:    "Users",
+						ItemType: ActionItem,
+					},
+					{
 						ID:       "system-editors",
 						Label:    "System Editors",
 						ItemType: SectionHeader,
@@ -1445,6 +1449,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleLevel3MenuNavigation(msg)
 		case Level4ModalNavigation:
 			return m.handleLevel4ModalNavigation(msg)
+		case UserManagementMode:
+			return m.handleUserManagement(msg)
 		case SavePrompt:
 			return m.handleSavePrompt(msg)
 		}
@@ -1671,6 +1677,15 @@ func (m Model) handleLevel2MenuNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				} else {
 					m.message = "This section has no sub-items"
 				}
+			} else if item.submenuItem.ItemType == ActionItem {
+				// Handle action items
+				if item.submenuItem.ID == "user-editor" {
+					// Launch user management interface
+					m.navMode = UserManagementMode
+					m.message = ""
+				} else {
+					m.message = fmt.Sprintf("Action '%s' not implemented yet", item.submenuItem.Label)
+				}
 			}
 		}
 	case "esc":
@@ -1789,6 +1804,17 @@ func (m Model) handleSavePrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Cancel quit
 		m.savePrompt = false
 		m.navMode = MainMenuNavigation
+		m.message = ""
+	}
+	return m, nil
+}
+
+// handleUserManagement processes input in user management mode
+func (m Model) handleUserManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		// Return to Level 2 menu navigation
+		m.navMode = Level2MenuNavigation
 		m.message = ""
 	}
 	return m, nil
@@ -2082,6 +2108,13 @@ func (m Model) View() string {
 		m.overlayStringCentered(canvas, mainMenuStr)
 	}
 
+	// Layer 1.5: User Management (full screen mode)
+	if m.navMode == UserManagementMode {
+		userManagementStr := m.renderUserManagement()
+		m.overlayStringCentered(canvas, userManagementStr)
+		return m.canvasToString(canvas)
+	}
+
 	// Layer 2: Submenu (visible from Level2 onwards, but not if showing modal)
 	if m.navMode >= Level2MenuNavigation && !showAsModal {
 		isDimmed := m.navMode > Level2MenuNavigation
@@ -2146,46 +2179,6 @@ func (m Model) View() string {
 	return m.canvasToString(canvas)
 }
 
-// isEditableLevel checks if the current navigation level contains editable fields
-func (m *Model) isEditableLevel() bool {
-	switch m.navMode {
-	case Level2MenuNavigation:
-		// Check if the selected item in Level 2 has editable fields directly
-		selectedItem := m.submenuList.SelectedItem()
-		if selectedItem != nil {
-			item := selectedItem.(submenuListItem)
-			if item.submenuItem.ItemType == SectionHeader {
-				// Check if this section has only editable fields (no sub-sections)
-				hasEditableFields := false
-				hasSubSections := false
-
-				for _, subItem := range item.submenuItem.SubItems {
-					if subItem.ItemType == EditableField {
-						hasEditableFields = true
-					}
-					if subItem.ItemType == SectionHeader {
-						hasSubSections = true
-					}
-				}
-
-				// If it has editable fields but no sub-sections, it's an editable level
-				return hasEditableFields && !hasSubSections
-			}
-		}
-		return false
-
-	case Level3MenuNavigation:
-		// Level 3 with modalFields means we have editable fields
-		return len(m.modalFields) > 0
-
-	case Level4ModalNavigation, EditingValue:
-		// These are always editable levels
-		return true
-
-	default:
-		return false
-	}
-}
 
 // shouldRenderAsModal determines if current state should show a modal
 func (m *Model) shouldRenderAsModal() bool {
@@ -2202,47 +2195,6 @@ func (m *Model) shouldRenderAsModal() bool {
 	return false
 }
 
-// calculateLevel3Position calculates the row and column for Level 3 menu
-// based on anchor settings (top-left vs bottom-right)
-func (m *Model) calculateLevel3Position(level3Str string) (row, col int) {
-	lines := strings.Split(level3Str, "\n")
-	height := len(lines)
-
-	// Calculate width (max line width, accounting for ANSI codes)
-	width := 0
-	for _, line := range lines {
-		lineWidth := m.visualWidth(line)
-		if lineWidth > width {
-			width = lineWidth
-		}
-	}
-
-	// Calculate row position
-	if Level3AnchorBottom {
-		// Anchor to bottom: screen height - menu height - offset
-		row = m.screenHeight - height - Level3BottomOffset
-		if row < 0 {
-			row = 0
-		}
-	} else {
-		// Use fixed top position
-		row = Level3StartRow
-	}
-
-	// Calculate column position
-	if Level3AnchorRight {
-		// Anchor to right: screen width - menu width - offset
-		col = m.screenWidth - width - Level3RightOffset
-		if col < 0 {
-			col = 0
-		}
-	} else {
-		// Use fixed left position
-		col = Level3StartCol
-	}
-
-	return row, col
-}
 
 // renderMainMenu renders the centered main menu (only visible in MainMenuNavigation mode)
 func (m Model) renderMainMenu() string {
@@ -2767,6 +2719,22 @@ func (m Model) renderStatusMessage() string {
 	return msg
 }
 
+// renderUserManagement renders the user management interface
+func (m Model) renderUserManagement() string {
+	content := "User Management\n\n"
+	content += "This feature is under development.\n\n"
+	content += "[ESC] Return to menu"
+
+	userBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("33")).
+		Background(lipgloss.Color("235")).
+		Padding(2, 4).
+		Render(content)
+
+	return userBox
+}
+
 // renderFooter generates enhanced footer with sections
 func (m Model) renderFooter() string {
 	var sections []string
@@ -2788,6 +2756,8 @@ func (m Model) renderFooter() string {
 		} else {
 			helpText = "[Key]  Type value | Enter:Save | Esc:Cancel"
 		}
+	case UserManagementMode:
+		helpText = "[ESC] Back to menu [Q] Quit"
 	default:
 		helpText = "[Key]  Q:Quit"
 	}

@@ -3,6 +3,7 @@
 Retrograde Supports **three types of messages**:
 
 ## 1. **Local BBS Messages** (Non-FidoNet)
+
 Simple messages between users on your BBS only:
 
 ```go
@@ -16,12 +17,14 @@ mb.AddMessage(msg)
 ```
 
 **Features:**
+
 - No FidoNet addresses required
 - No kludges, tearlines, or origin lines
 - Uses `MSG_TYPELOCAL` attribute
 - Perfect for private BBS conferences
 
 ## 2. **FidoNet Echomail** (Public Conference)
+
 Public messages distributed across FidoNet:
 
 ```go
@@ -40,12 +43,14 @@ mb.AddMessage(msg)
 ```
 
 **Features:**
+
 - Origin address required (FromAddr)
 - Destination address optional (ToAddr not used)
 - Includes Origin line, tearline, SEEN-BY, PATH
 - Uses `MSG_TYPEECHO` attribute
 
 ## 3. **FidoNet Netmail** (Private Point-to-Point)
+
 Private messages between specific FidoNet nodes:
 
 ```go
@@ -63,6 +68,7 @@ mb.AddMessage(msg)
 ```
 
 **Features:**
+
 - Both FromAddr and ToAddr required
 - Includes INTL, TOPT, FMPT kludges for routing
 - No Origin line, SEEN-BY, or PATH (direct routing)
@@ -88,6 +94,7 @@ if msg.IsPrivate() {
 ```
 
 The library automatically handles:
+
 - Kludge formatting only for FidoNet messages
 - INTL/TOPT/FMPT kludges for netmail routing
 - Origin/tearline only for echomail

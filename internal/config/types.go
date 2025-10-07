@@ -5,6 +5,14 @@ import (
 	"time"
 )
 
+// Security Level Constants
+const (
+	SecurityLevelGuest     = 0   // Unauthenticated users
+	SecurityLevelRegular   = 10  // Standard registered users
+	SecurityLevelSysOp     = 100 // System operators with full access
+	SecurityLevelAdmin     = 255 // Special admin level (legacy compatibility)
+)
+
 // Config struct to hold settings from the ini file with hierarchical structure
 type Config struct {
 	Configuration ConfigurationSection

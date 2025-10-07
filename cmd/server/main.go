@@ -189,9 +189,9 @@ func handleConnection(conn net.Conn, cfg *config.Config, nodeID int) {
 
 	// Create a session for this connection - start as guest
 	session := &config.TelnetSession{
-		Alias:         "Guest", // Default for unauthenticated users
-		SecurityLevel: 0,       // Default security level
-		TimeLeft:      60,      // 60 minutes
+		Alias:         "Guest",                    // Default for unauthenticated users
+		SecurityLevel: config.SecurityLevelGuest, // Guest security level
+		TimeLeft:      60,                        // 60 minutes
 		StartTime:     time.Now(),
 		LastActivity:  time.Now(),
 		NodeNumber:    nodeID,
@@ -240,7 +240,7 @@ func mainMenu(io *telnet.TelnetIO, session *config.TelnetSession, cfg *config.Co
 				logging.LogLogout(session.NodeNumber, session.Alias, session.IPAddress)
 				io.Printf("\r\n Logging out %s...\r\n", session.Alias)
 				session.Alias = "Guest"
-				session.SecurityLevel = 0
+				session.SecurityLevel = config.SecurityLevelGuest
 				// Update node manager
 				if nm := logging.GetNodeManager(); nm != nil && session.NodeNumber > 0 {
 					if conn, exists := nm.Connections[session.NodeNumber]; exists {
