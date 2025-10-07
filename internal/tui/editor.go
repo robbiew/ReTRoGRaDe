@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"io"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -19,15 +20,39 @@ import (
 // Core Data Structures & Menu Bar
 // ============================================================================
 
+// ============================================================================
+// UI Layout Constants
+// ============================================================================
+
+const (
+	// Level 2 menu positioning (upper-left)
+	Level2StartRow = 2
+	Level2StartCol = 2
+
+	// Level 3 menu positioning (cascading from Level 2)
+	Level3StartRow = 4
+	Level3StartCol = 25
+
+	// Alternatively, for bottom-right anchoring:
+	// Set these to negative values to anchor from bottom-right
+	// Level3AnchorBottom will position from bottom of screen
+	// Level3AnchorRight will position from right of screen
+	Level3AnchorBottom = true // Set to true to anchor to bottom
+	Level3AnchorRight  = true // Set to true to anchor to right
+	Level3BottomOffset = 3    // Rows from bottom (for footer/breadcrumb space)
+	Level3RightOffset  = 2    // Columns from right edge
+)
+
 // NavigationMode represents the current UI state
 type NavigationMode int
 
 const (
-	MenuNavigation    NavigationMode = iota // Navigating horizontal menu bar
-	SubmenuNavigation                       // Navigating vertical submenu overlay
-	ModalFieldSelect                        // Selecting field in modal form
-	EditingValue                            // Editing a value in modal form
-	SavePrompt                              // Confirming save on exit
+	MainMenuNavigation    NavigationMode = iota // Level 1: Main menu centered H/V
+	Level2MenuNavigation                        // Level 2: Submenu anchored top left
+	Level3MenuNavigation                        // Level 3: Submenu offset lower left from Level 2
+	Level4ModalNavigation                       // Level 4: Centered modal for final menus
+	EditingValue                                // Editing a value in modal form
+	SavePrompt                                  // Confirming save on exit
 )
 
 // Model represents the complete application state
@@ -168,38 +193,32 @@ func (d submenuDelegate) Render(w io.Writer, m list.Model, index int, listItem l
 		return
 	}
 
-	// Sub-menu displays ONLY section names as navigation items
 	var str string
 	isSelected := index == m.Index()
 
-	// Calculate the width needed (including prefix)
+	// Get item text without any prefix
 	itemText := item.submenuItem.Label
-	prefix := "- "
-	if isSelected {
-		prefix = "> "
-	}
-	contentWidth := len(prefix) + len(itemText)
 
-	// Pad to max width so background extends full width
+	// Calculate width - use the full maxWidth for consistent lightbar
 	padding := ""
-	if d.maxWidth > contentWidth {
-		padding = strings.Repeat(" ", d.maxWidth-contentWidth)
+	if d.maxWidth > len(itemText) {
+		padding = strings.Repeat(" ", d.maxWidth-len(itemText))
 	}
 
-	// All items in the sub-menu are section headers (navigation items)
+	// Render with full-width lightbar (no prefix characters)
 	if isSelected {
-		// Selected section: white on blue with indicator, full width
+		// Selected section: white on blue, full width
 		style := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("15")).
 			Background(lipgloss.Color("33")).
 			Bold(true)
-		str = style.Render(prefix + itemText + padding)
+		str = style.Render(itemText + padding)
 	} else {
-		// Unselected section: gray text with dash, full width with background
+		// Unselected section: gray text, full width with background
 		style := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("250")).
 			Background(lipgloss.Color("235"))
-		str = style.Render(prefix + itemText + padding)
+		str = style.Render(itemText + padding)
 	}
 
 	fmt.Fprint(w, str)
@@ -1356,7 +1375,7 @@ func InitialModelV2(cfg *config.Config) Model {
 
 	return Model{
 		config:       cfg,
-		navMode:      MenuNavigation,
+		navMode:      MainMenuNavigation,
 		activeMenu:   0,
 		menuBar:      menuBar,
 		submenuList:  submenuList,
@@ -1418,19 +1437,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// State-specific handling for other modes
 		switch m.navMode {
-		case MenuNavigation:
-			return m.handleMenuNavigation(msg)
-		case SubmenuNavigation:
-			return m.handleSubmenuNavigation(msg)
-		case ModalFieldSelect:
-			return m.handleModalFieldSelect(msg)
+		case MainMenuNavigation:
+			return m.handleMainMenuNavigation(msg)
+		case Level2MenuNavigation:
+			return m.handleLevel2MenuNavigation(msg)
+		case Level3MenuNavigation:
+			return m.handleLevel3MenuNavigation(msg)
+		case Level4ModalNavigation:
+			return m.handleLevel4ModalNavigation(msg)
 		case SavePrompt:
 			return m.handleSavePrompt(msg)
 		}
 	}
 
-	// Update submenu list if in submenu navigation mode
-	if m.navMode == SubmenuNavigation {
+	// Update submenu list if in Level 2 menu navigation mode
+	if m.navMode == Level2MenuNavigation {
 		m.submenuList, cmd = m.submenuList.Update(msg)
 		return m, cmd
 	}
@@ -1438,149 +1459,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleMenuNavigation processes input while in menu navigation mode
-func (m Model) handleMenuNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "left", "h":
-		m.activeMenu = (m.activeMenu - 1 + len(m.menuBar.Items)) % len(m.menuBar.Items)
-		m.message = ""
-		m.messageType = InfoMessage
-	case "right", "l":
-		m.activeMenu = (m.activeMenu + 1) % len(m.menuBar.Items)
-		m.message = ""
-		m.messageType = InfoMessage
-	case "down", "j", "enter":
-		// Enter submenu navigation mode
-		m.navMode = SubmenuNavigation
-		// Update list with current menu's items
-		listItems := buildListItems(m.menuBar.Items[m.activeMenu])
-
-		// Recalculate max width for the new menu
-		maxWidth := 0
-		for _, item := range listItems {
-			if sli, ok := item.(submenuListItem); ok {
-				itemWidth := len(sli.submenuItem.Label) + 2
-				if itemWidth > maxWidth {
-					maxWidth = itemWidth
-				}
-			}
-		}
-		m.submenuList.SetDelegate(submenuDelegate{maxWidth: maxWidth})
-		m.submenuList.SetItems(listItems)
-		m.submenuList.Select(0)
-		m.message = ""
-	case "q":
-		m.savePrompt = true
-		m.navMode = SavePrompt
-	case "1", "2", "3", "4", "5":
-		// Direct menu access
-		idx := int(msg.String()[0] - '1')
-		if idx >= 0 && idx < len(m.menuBar.Items) {
-			m.activeMenu = idx
-			m.message = ""
-		}
-	}
-	return m, nil
-}
-
-// handleSubmenuNavigation processes input while in submenu navigation mode
-func (m Model) handleSubmenuNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "up", "k":
-		// Navigate up in list
-		currentIdx := m.submenuList.Index()
-		if currentIdx > 0 {
-			m.submenuList.Select(currentIdx - 1)
-		}
-		m.message = ""
-		return m, nil
-	case "down", "j":
-		// Navigate down in list
-		currentIdx := m.submenuList.Index()
-		items := m.submenuList.Items()
-		if currentIdx < len(items)-1 {
-			m.submenuList.Select(currentIdx + 1)
-		}
-		m.message = ""
-		return m, nil
-	case "left", "h":
-		// Switch to previous menu category
-		m.activeMenu = (m.activeMenu - 1 + len(m.menuBar.Items)) % len(m.menuBar.Items)
-		listItems := buildListItems(m.menuBar.Items[m.activeMenu])
-
-		// Recalculate max width
-		maxWidth := 0
-		for _, item := range listItems {
-			if sli, ok := item.(submenuListItem); ok {
-				itemWidth := len(sli.submenuItem.Label) + 2
-				if itemWidth > maxWidth {
-					maxWidth = itemWidth
-				}
-			}
-		}
-		m.submenuList.SetDelegate(submenuDelegate{maxWidth: maxWidth})
-		m.submenuList.SetItems(listItems)
-		m.submenuList.Select(0)
-		m.message = ""
-	case "right", "l":
-		// Switch to next menu category
-		m.activeMenu = (m.activeMenu + 1) % len(m.menuBar.Items)
-		listItems := buildListItems(m.menuBar.Items[m.activeMenu])
-
-		// Recalculate max width
-		maxWidth := 0
-		for _, item := range listItems {
-			if sli, ok := item.(submenuListItem); ok {
-				itemWidth := len(sli.submenuItem.Label) + 2
-				if itemWidth > maxWidth {
-					maxWidth = itemWidth
-				}
-			}
-		}
-		m.submenuList.SetDelegate(submenuDelegate{maxWidth: maxWidth})
-		m.submenuList.SetItems(listItems)
-		m.submenuList.Select(0)
-		m.message = ""
-	case "home":
-		// Jump to first item
-		m.submenuList.Select(0)
-		m.message = ""
-	case "end":
-		// Jump to last item
-		items := m.submenuList.Items()
-		if len(items) > 0 {
-			m.submenuList.Select(len(items) - 1)
-		}
-		m.message = ""
-	case "enter":
-		// Select section - show all fields in modal for navigation
-		selectedItem := m.submenuList.SelectedItem()
-		if selectedItem != nil {
-			item := selectedItem.(submenuListItem)
-			if item.submenuItem.ItemType == SectionHeader {
-				// Section selected - check if it has editable fields
-				if len(item.submenuItem.SubItems) > 0 {
-					// Enter modal field selection mode
-					m.modalFields = item.submenuItem.SubItems
-					m.modalFieldIndex = 0
-					m.modalSectionName = item.submenuItem.Label
-					m.navMode = ModalFieldSelect
-					m.message = ""
-				} else {
-					m.message = "This section has no editable fields"
-				}
-			}
-		}
-	case "esc":
-		// Return to menu navigation
-		m.navMode = MenuNavigation
-		m.message = ""
-	}
-	return m, nil
-}
-
-// handleModalFieldSelect processes input while selecting fields in modal
-func (m Model) handleModalFieldSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+// handleLevel4ModalNavigation processes input while in Level 4 modal navigation mode
+func (m Model) handleLevel4ModalNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "up", "k":
 		// Navigate up in field list
@@ -1644,8 +1524,242 @@ func (m Model) handleModalFieldSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "esc":
-		// Return to submenu navigation
-		m.navMode = SubmenuNavigation
+		// Check if we came from Level 3 with sub-sections, or directly from Level 2
+		// Look at modalFields to see if they contain sub-sections
+		hasSubSections := false
+		for _, field := range m.modalFields {
+			if field.ItemType == SectionHeader {
+				hasSubSections = true
+				break
+			}
+		}
+
+		if hasSubSections {
+			// Return to Level 3 menu navigation (sub-sections exist)
+			m.navMode = Level3MenuNavigation
+		} else {
+			// No sub-sections, return directly to Level 2
+			m.navMode = Level2MenuNavigation
+			m.modalFields = nil
+			m.modalFieldIndex = 0
+			m.modalSectionName = ""
+		}
+		m.message = ""
+		return m, nil
+	}
+	return m, nil
+}
+
+// handleMainMenuNavigation processes input while in main menu navigation mode (Level 1)
+func (m Model) handleMainMenuNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "left", "h":
+		m.activeMenu = (m.activeMenu - 1 + len(m.menuBar.Items)) % len(m.menuBar.Items)
+		m.message = ""
+		m.messageType = InfoMessage
+	case "right", "l":
+		m.activeMenu = (m.activeMenu + 1) % len(m.menuBar.Items)
+		m.message = ""
+		m.messageType = InfoMessage
+	case "up", "k":
+		m.activeMenu = (m.activeMenu - 1 + len(m.menuBar.Items)) % len(m.menuBar.Items)
+		m.message = ""
+		m.messageType = InfoMessage
+	case "down", "j":
+		m.activeMenu = (m.activeMenu + 1) % len(m.menuBar.Items)
+		m.message = ""
+		m.messageType = InfoMessage
+	case "enter":
+		// Enter Level 2 menu navigation mode
+		m.navMode = Level2MenuNavigation
+		// Update list with current menu's items
+		listItems := buildListItems(m.menuBar.Items[m.activeMenu])
+
+		// Recalculate max width for the new menu (without prefix)
+		maxWidth := 0
+		for _, item := range listItems {
+			if sli, ok := item.(submenuListItem); ok {
+				itemWidth := len(sli.submenuItem.Label) // No prefix added
+				if itemWidth > maxWidth {
+					maxWidth = itemWidth
+				}
+			}
+		}
+		m.submenuList.SetDelegate(submenuDelegate{maxWidth: maxWidth})
+		m.submenuList.SetItems(listItems)
+		m.submenuList.Select(0)
+		m.message = ""
+		m.submenuList.SetDelegate(submenuDelegate{maxWidth: maxWidth})
+		m.submenuList.SetItems(listItems)
+		m.submenuList.Select(0)
+		m.message = ""
+	case "q":
+		m.savePrompt = true
+		m.navMode = SavePrompt
+	case "1", "2", "3", "4", "5":
+		// Direct menu access
+		idx := int(msg.String()[0] - '1')
+		if idx >= 0 && idx < len(m.menuBar.Items) {
+			m.activeMenu = idx
+			m.message = ""
+		}
+	}
+	return m, nil
+}
+
+// handleLevel2MenuNavigation processes input while in Level 2 menu navigation mode
+func (m Model) handleLevel2MenuNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		// Navigate up in list
+		currentIdx := m.submenuList.Index()
+		if currentIdx > 0 {
+			m.submenuList.Select(currentIdx - 1)
+		}
+		m.message = ""
+		return m, nil
+	case "down", "j":
+		// Navigate down in list
+		currentIdx := m.submenuList.Index()
+		items := m.submenuList.Items()
+		if currentIdx < len(items)-1 {
+			m.submenuList.Select(currentIdx + 1)
+		}
+		m.message = ""
+		return m, nil
+	case "home":
+		// Jump to first item
+		m.submenuList.Select(0)
+		m.message = ""
+	case "end":
+		// Jump to last item
+		items := m.submenuList.Items()
+		if len(items) > 0 {
+			m.submenuList.Select(len(items) - 1)
+		}
+		m.message = ""
+	case "enter":
+		// Select section - check what type of content it has
+		selectedItem := m.submenuList.SelectedItem()
+		if selectedItem != nil {
+			item := selectedItem.(submenuListItem)
+			if item.submenuItem.ItemType == SectionHeader {
+				// Section selected - check if it has sub-items
+				if len(item.submenuItem.SubItems) > 0 {
+					// Check if sub-items are all editable fields or contain sub-sections
+					hasSubSections := false
+					for _, subItem := range item.submenuItem.SubItems {
+						if subItem.ItemType == SectionHeader {
+							hasSubSections = true
+							break
+						}
+					}
+
+					// Set up modal fields
+					m.modalFields = item.submenuItem.SubItems
+					m.modalFieldIndex = 0
+					m.modalSectionName = item.submenuItem.Label
+
+					if hasSubSections {
+						// Has sub-sections, go to Level 3 navigation
+						m.navMode = Level3MenuNavigation
+					} else {
+						// Only editable fields, go directly to Level 4 modal
+						m.navMode = Level4ModalNavigation
+					}
+					m.message = ""
+				} else {
+					m.message = "This section has no sub-items"
+				}
+			}
+		}
+	case "esc":
+		// Return to main menu navigation
+		m.navMode = MainMenuNavigation
+		m.message = ""
+	}
+	return m, nil
+}
+
+// handleLevel3MenuNavigation processes input while in Level 3 menu navigation mode
+func (m Model) handleLevel3MenuNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		// Navigate up in field list
+		if m.modalFieldIndex > 0 {
+			m.modalFieldIndex--
+		}
+		m.message = ""
+		return m, nil
+	case "down", "j":
+		// Navigate down in field list
+		if m.modalFieldIndex < len(m.modalFields)-1 {
+			m.modalFieldIndex++
+		}
+		m.message = ""
+		return m, nil
+	case "home":
+		// Jump to first field
+		m.modalFieldIndex = 0
+		m.message = ""
+		return m, nil
+	case "end":
+		// Jump to last field
+		if len(m.modalFields) > 0 {
+			m.modalFieldIndex = len(m.modalFields) - 1
+		}
+		m.message = ""
+		return m, nil
+	case "enter":
+		// Edit selected field - go to Level 4 modal
+		selectedField := m.modalFields[m.modalFieldIndex]
+		if selectedField.ItemType == EditableField && selectedField.EditableItem != nil {
+			m.editingItem = selectedField.EditableItem
+			m.originalValue = m.editingItem.Field.GetValue()
+			m.editingError = ""
+
+			// Initialize text input based on value type
+			if m.editingItem.ValueType == BoolValue {
+				// For bool, we don't use text input, just toggle
+				m.textInput.SetValue("")
+			} else {
+				// Set current value as text
+				currentValue := m.editingItem.Field.GetValue()
+				m.textInput.SetValue(formatValue(currentValue, m.editingItem.ValueType))
+
+				// Set placeholder, char limit and width based on type
+				switch m.editingItem.ValueType {
+				case PortValue:
+					m.textInput.Placeholder = "1-65535"
+					m.textInput.CharLimit = 5
+					m.textInput.Width = 10
+				case IntValue:
+					m.textInput.Placeholder = "Enter number"
+					m.textInput.CharLimit = 10
+					m.textInput.Width = 15
+				case PathValue:
+					m.textInput.Placeholder = "Enter path"
+					m.textInput.CharLimit = 200
+					m.textInput.Width = 25 // Fixed width for scrolling
+				case ListValue:
+					m.textInput.Placeholder = "comma,separated,values"
+					m.textInput.CharLimit = 200
+					m.textInput.Width = 25 // Fixed width for scrolling
+				default: // StringValue
+					m.textInput.Placeholder = "Enter value"
+					m.textInput.CharLimit = 200
+					m.textInput.Width = 25 // Fixed width for scrolling
+				}
+			}
+
+			m.textInput.Focus()
+			m.navMode = Level4ModalNavigation
+			m.message = ""
+		}
+		return m, nil
+	case "esc":
+		// Return to Level 2 menu navigation
+		m.navMode = Level2MenuNavigation
 		m.message = ""
 		m.modalFields = nil
 		m.modalFieldIndex = 0
@@ -1674,6 +1788,7 @@ func (m Model) handleSavePrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		// Cancel quit
 		m.savePrompt = false
+		m.navMode = MainMenuNavigation
 		m.message = ""
 	}
 	return m, nil
@@ -1695,11 +1810,11 @@ func (m Model) handleEditingValue(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.editingError = ""
 					m.message = ""
 					// Return to modal field selection
-					m.navMode = ModalFieldSelect
+					m.navMode = Level4ModalNavigation
 				}
 			} else {
 				// No change, just return
-				m.navMode = ModalFieldSelect
+				m.navMode = Level4ModalNavigation
 			}
 			return m, nil
 		case "n", "N":
@@ -1713,11 +1828,11 @@ func (m Model) handleEditingValue(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.editingError = ""
 					m.message = ""
 					// Return to modal field selection
-					m.navMode = ModalFieldSelect
+					m.navMode = Level4ModalNavigation
 				}
 			} else {
 				// No change, just return
-				m.navMode = ModalFieldSelect
+				m.navMode = Level4ModalNavigation
 			}
 			return m, nil
 		case "enter", " ", "tab":
@@ -1733,7 +1848,7 @@ func (m Model) handleEditingValue(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "esc":
 			// Cancel - restore original value
 			m.editingItem.Field.SetValue(m.originalValue)
-			m.navMode = ModalFieldSelect
+			m.navMode = Level4ModalNavigation
 			m.editingError = ""
 			m.message = ""
 			return m, nil
@@ -1796,13 +1911,13 @@ func (m Model) handleEditingValue(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.message = ""
 
 		// Return to modal field selection
-		m.navMode = ModalFieldSelect
+		m.navMode = Level4ModalNavigation
 		m.textInput.Blur()
 
 	case "esc":
 		// Cancel editing - restore original value
 		m.editingItem.Field.SetValue(m.originalValue)
-		m.navMode = ModalFieldSelect
+		m.navMode = Level4ModalNavigation
 		m.editingError = ""
 		m.message = ""
 		m.textInput.Blur()
@@ -1812,262 +1927,372 @@ func (m Model) handleEditingValue(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // ============================================================================
-// View Rendering
+// Canvas-Based Rendering System
 // ============================================================================
 
-// View renders the complete UI
-func (m Model) View() string {
-	var doc strings.Builder
+// overlayString places a string onto the canvas at the given position
+func (m *Model) overlayString(canvas []string, str string, startRow, startCol int) {
+	lines := strings.Split(str, "\n")
 
-	// Menu bar
-	menuBarComponent := MenuBarComponent{
-		items:       m.menuBar.Items,
-		activeIndex: m.activeMenu,
-		width:       m.screenWidth,
-	}
-	doc.WriteString(menuBarComponent.Render() + "\n\n")
-
-	// Save prompt overlay - Enhanced
-	if m.savePrompt {
-		var promptText string
-		if m.modifiedCount > 0 {
-			promptText = fmt.Sprintf("[!]  Save %d change(s) to database?\n\n", m.modifiedCount)
-			promptText += "    [Y] Yes, save changes\n"
-			promptText += "    [N] No, discard changes\n"
-			promptText += "    [Esc] Cancel and continue editing"
-		} else {
-			promptText = "Exit configuration editor?\n\n"
-			promptText += "    [Y] Yes\n"
-			promptText += "    [N] No\n"
-			promptText += "    [Esc] Cancel"
+	for i, line := range lines {
+		row := startRow + i
+		if row < 0 || row >= len(canvas) {
+			continue
 		}
 
-		promptBox := lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color("214")). // Orange/yellow
-			Background(lipgloss.Color("235")).
-			Padding(1, 3).
-			Align(lipgloss.Center).
-			Width(60).
-			Render(promptText)
+		if startCol <= 0 {
+			// Simple case: replace entire line
+			canvas[row] = line
+		} else {
+			// Complex case: need to preserve left portion and append
+			// Get visual width of the line we're adding
+			lineVisualWidth := m.visualWidth(line)
 
-		centeredPrompt := lipgloss.Place(
-			m.screenWidth,
-			10,
-			lipgloss.Center,
-			lipgloss.Center,
-			promptBox,
-		)
-		doc.WriteString(centeredPrompt + "\n")
-	} else if m.quitting {
-		// Quitting message
+			// Create padding to reach startCol
+			prefix := strings.Repeat(" ", startCol)
+
+			// Clear the rest of the line by padding with spaces
+			totalWidth := startCol + lineVisualWidth
+			suffix := ""
+			if totalWidth < m.screenWidth {
+				suffix = strings.Repeat(" ", m.screenWidth-totalWidth)
+			}
+
+			canvas[row] = prefix + line + suffix
+		}
+	}
+}
+
+// overlayStringCenteredWithClear - centers and clears the area behind
+func (m *Model) overlayStringCenteredWithClear(canvas []string, str string) {
+	lines := strings.Split(str, "\n")
+	if len(lines) == 0 {
+		return
+	}
+
+	// Find the widest line
+	maxWidth := 0
+	for _, line := range lines {
+		width := m.visualWidth(line)
+		if width > maxWidth {
+			maxWidth = width
+		}
+	}
+
+	startRow := (m.screenHeight - len(lines)) / 2
+	if startRow < 0 {
+		startRow = 0
+	}
+	startCol := (m.screenWidth - maxWidth) / 2
+	if startCol < 0 {
+		startCol = 0
+	}
+
+	// Clear the area first (important for modals!)
+	for i := 0; i < len(lines); i++ {
+		row := startRow + i
+		if row >= 0 && row < len(canvas) {
+			// Clear the entire row in the modal area
+			canvas[row] = strings.Repeat(" ", m.screenWidth)
+		}
+	}
+
+	// Now overlay the content
+	m.overlayString(canvas, str, startRow, startCol)
+}
+
+// overlayStringCentered places a string in the center of the canvas
+func (m *Model) overlayStringCentered(canvas []string, str string) {
+	lines := strings.Split(str, "\n")
+	if len(lines) == 0 {
+		return
+	}
+
+	// Find the widest line (accounting for ANSI codes)
+	maxWidth := 0
+	for _, line := range lines {
+		width := m.visualWidth(line)
+		if width > maxWidth {
+			maxWidth = width
+		}
+	}
+
+	startRow := (m.screenHeight - len(lines)) / 2
+	if startRow < 0 {
+		startRow = 0
+	}
+	startCol := (m.screenWidth - maxWidth) / 2
+	if startCol < 0 {
+		startCol = 0
+	}
+
+	m.overlayString(canvas, str, startRow, startCol)
+}
+
+// canvasToString converts the canvas back to a string
+func (m *Model) canvasToString(canvas []string) string {
+	return strings.Join(canvas, "\n")
+}
+
+// visualWidth calculates the display width of a string (excluding ANSI codes)
+func (m *Model) visualWidth(s string) int {
+	// Remove ANSI escape sequences
+	ansiPattern := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	stripped := ansiPattern.ReplaceAllString(s, "")
+	return len([]rune(stripped))
+}
+
+// ============================================================================
+// View Rendering with Layered Approach
+// ============================================================================
+
+// View renders the complete UI using a layered canvas approach
+func (m Model) View() string {
+	// Create a base canvas (array of strings, one per line)
+	canvas := make([]string, m.screenHeight)
+	for i := range canvas {
+		canvas[i] = strings.Repeat(" ", m.screenWidth)
+	}
+
+	// Save prompt overlay - highest priority
+	if m.savePrompt {
+		promptStr := m.renderSavePrompt()
+		m.overlayStringCenteredWithClear(canvas, promptStr)
+		return m.canvasToString(canvas)
+	}
+
+	if m.quitting {
 		if m.message != "" {
 			messageBox := lipgloss.NewStyle().
 				Border(lipgloss.NormalBorder()).
 				BorderForeground(lipgloss.Color("46")).
 				Padding(1, 2).
 				Render(m.message)
-			doc.WriteString(messageBox + "\n")
+			m.overlayStringCenteredWithClear(canvas, messageBox)
+		}
+		return m.canvasToString(canvas)
+	}
+
+	// Determine if we should render as modal
+	showAsModal := m.shouldRenderAsModal()
+
+	// Layer 1: Main Menu (only shown when in MainMenuNavigation mode, centered)
+	if m.navMode == MainMenuNavigation {
+		mainMenuStr := m.renderMainMenu()
+		m.overlayStringCentered(canvas, mainMenuStr)
+	}
+
+	// Layer 2: Submenu (visible from Level2 onwards, but not if showing modal)
+	if m.navMode >= Level2MenuNavigation && !showAsModal {
+		isDimmed := m.navMode > Level2MenuNavigation
+		level2Str := m.renderLevel2Menu(isDimmed)
+		m.overlayString(canvas, level2Str, Level2StartRow, Level2StartCol)
+	}
+
+	// Layer 3: Field list (visible from Level3 onwards, but only if NOT showing as modal)
+	if m.navMode == Level3MenuNavigation && !showAsModal {
+		// This means Level 3 has sub-sections to navigate
+		level3Str := m.renderLevel3Menu(false)
+
+		// Calculate bottom-right position
+		lines := strings.Split(level3Str, "\n")
+		height := len(lines)
+
+		// Get width of the menu
+		width := 0
+		for _, line := range lines {
+			lineWidth := m.visualWidth(line)
+			if lineWidth > width {
+				width = lineWidth
+			}
+		}
+
+		// Position at bottom-right with offsets
+		row := m.screenHeight - height - 4
+		col := m.screenWidth - width - 2
+
+		if row < 0 {
+			row = 0
+		}
+		if col < 0 {
+			col = 0
+		}
+
+		m.overlayString(canvas, level3Str, row, col)
+	}
+
+	// Modal: Show when we have editable fields (Level 3 with fields, or Level 4)
+	if showAsModal {
+		modalStr := m.renderModalForm()
+		m.overlayStringCenteredWithClear(canvas, modalStr)
+	}
+
+	// Add breadcrumb near bottom (row screenHeight - 3)
+	if m.navMode > MainMenuNavigation {
+		breadcrumb := m.renderBreadcrumb()
+		m.overlayString(canvas, breadcrumb, m.screenHeight-3, 0)
+	}
+
+	// Add status message if present
+	if m.message != "" && time.Since(m.messageTime) < 3*time.Second && !m.savePrompt && !m.quitting {
+		msgStr := m.renderStatusMessage()
+		m.overlayString(canvas, msgStr, m.screenHeight-4, 2)
+	}
+
+	// Add footer at bottom (row screenHeight - 1)
+	footer := m.renderFooter()
+	m.overlayString(canvas, footer, m.screenHeight-1, 0)
+
+	return m.canvasToString(canvas)
+}
+
+// isEditableLevel checks if the current navigation level contains editable fields
+func (m *Model) isEditableLevel() bool {
+	switch m.navMode {
+	case Level2MenuNavigation:
+		// Check if the selected item in Level 2 has editable fields directly
+		selectedItem := m.submenuList.SelectedItem()
+		if selectedItem != nil {
+			item := selectedItem.(submenuListItem)
+			if item.submenuItem.ItemType == SectionHeader {
+				// Check if this section has only editable fields (no sub-sections)
+				hasEditableFields := false
+				hasSubSections := false
+
+				for _, subItem := range item.submenuItem.SubItems {
+					if subItem.ItemType == EditableField {
+						hasEditableFields = true
+					}
+					if subItem.ItemType == SectionHeader {
+						hasSubSections = true
+					}
+				}
+
+				// If it has editable fields but no sub-sections, it's an editable level
+				return hasEditableFields && !hasSubSections
+			}
+		}
+		return false
+
+	case Level3MenuNavigation:
+		// Level 3 with modalFields means we have editable fields
+		return len(m.modalFields) > 0
+
+	case Level4ModalNavigation, EditingValue:
+		// These are always editable levels
+		return true
+
+	default:
+		return false
+	}
+}
+
+// shouldRenderAsModal determines if current state should show a modal
+func (m *Model) shouldRenderAsModal() bool {
+	// If we're in Level 3 with modal fields, render as modal
+	if m.navMode == Level3MenuNavigation && len(m.modalFields) > 0 {
+		return true
+	}
+
+	// If we're in Level 4 or editing, always show modal
+	if m.navMode >= Level4ModalNavigation {
+		return true
+	}
+
+	return false
+}
+
+// calculateLevel3Position calculates the row and column for Level 3 menu
+// based on anchor settings (top-left vs bottom-right)
+func (m *Model) calculateLevel3Position(level3Str string) (row, col int) {
+	lines := strings.Split(level3Str, "\n")
+	height := len(lines)
+
+	// Calculate width (max line width, accounting for ANSI codes)
+	width := 0
+	for _, line := range lines {
+		lineWidth := m.visualWidth(line)
+		if lineWidth > width {
+			width = lineWidth
+		}
+	}
+
+	// Calculate row position
+	if Level3AnchorBottom {
+		// Anchor to bottom: screen height - menu height - offset
+		row = m.screenHeight - height - Level3BottomOffset
+		if row < 0 {
+			row = 0
 		}
 	} else {
-		// Always render content for each mode (don't skip menu bar)
-		switch m.navMode {
-		case SubmenuNavigation:
-			// Render submenu overlay
-			submenuOverlay := m.renderSubmenuOverlay()
-			doc.WriteString(submenuOverlay + "\n")
-		case ModalFieldSelect, EditingValue:
-			// Render modal (handles both selection and inline editing)
-			modalForm := m.renderModalForm()
-			doc.WriteString(modalForm + "\n")
-		default:
-			// Content area placeholder for menu navigation
-			content := m.renderContentArea()
-			doc.WriteString(content + "\n")
+		// Use fixed top position
+		row = Level3StartRow
+	}
+
+	// Calculate column position
+	if Level3AnchorRight {
+		// Anchor to right: screen width - menu width - offset
+		col = m.screenWidth - width - Level3RightOffset
+		if col < 0 {
+			col = 0
+		}
+	} else {
+		// Use fixed left position
+		col = Level3StartCol
+	}
+
+	return row, col
+}
+
+// renderMainMenu renders the centered main menu (only visible in MainMenuNavigation mode)
+func (m Model) renderMainMenu() string {
+	var menuItems []string
+
+	// Calculate max width for consistent sizing
+	maxWidth := 0
+	for _, category := range m.menuBar.Items {
+		if len(category.Label) > maxWidth {
+			maxWidth = len(category.Label)
 		}
 	}
 
-	// Enhanced message display with icons and colors based on type
-	if m.message != "" && !m.savePrompt && !m.quitting {
-		// Check if message should fade (3 seconds)
-		if time.Since(m.messageTime) < 3*time.Second {
-			var icon string
-			var color string
+	for i, category := range m.menuBar.Items {
+		var style lipgloss.Style
 
-			switch m.messageType {
-			case SuccessMessage:
-				icon = "[OK]"
-				color = "46" // Green
-			case ErrorMessage:
-				icon = "[√]"
-				color = "196" // Red
-			case WarningMessage:
-				icon = "[!]"
-				color = "214" // Orange
-			default: // InfoMessage
-				icon = "[i]"
-				color = "39" // Blue
-			}
-
-			msg := lipgloss.NewStyle().
-				Foreground(lipgloss.Color(color)).
+		if i == m.activeMenu {
+			// Active item - bright highlight, full width
+			style = lipgloss.NewStyle().
 				Bold(true).
-				Render(fmt.Sprintf("%s %s", icon, m.message))
-			doc.WriteString("\n" + msg + "\n")
-		}
-	}
-
-	// Get the content so far
-	contentStr := doc.String()
-
-	// Enhanced footer with sections - anchored to bottom row
-	if !m.quitting {
-		footer := m.renderFooter()
-
-		// Calculate how many lines the content uses
-		contentLines := strings.Count(contentStr, "\n")
-
-		// Add padding to push footer to row 25 (fixed position)
-		// After contentLines newlines, we're at row (contentLines + 1)
-		// We want the footer to start at row 25, so we need (25 - (contentLines + 1)) more newlines
-		targetRow := 24 // Row 25 in 0-indexed terms
-		paddingNeeded := targetRow - contentLines
-
-		if paddingNeeded > 0 {
-			doc.WriteString(strings.Repeat("\n", paddingNeeded))
+				Foreground(lipgloss.Color("15")).
+				Background(lipgloss.Color("33")).
+				Width(maxWidth + 4). // +4 for padding
+				Align(lipgloss.Center)
+		} else {
+			// Inactive item - same width for consistency
+			style = lipgloss.NewStyle().
+				Bold(false).
+				Foreground(lipgloss.Color("250")).
+				Background(lipgloss.Color("235")).
+				Width(maxWidth + 4). // +4 for padding
+				Align(lipgloss.Center)
 		}
 
-		doc.WriteString(footer)
+		menuItems = append(menuItems, style.Render(category.Label))
 	}
 
-	return doc.String()
-}
+	menuContent := strings.Join(menuItems, "\n")
 
-// renderContentArea renders the main content area
-func (m Model) renderContentArea() string {
-	if m.activeMenu >= len(m.menuBar.Items) {
-		return ""
-	}
-
-	var content strings.Builder
-
-	content.WriteString("\n")
-	content.WriteString(lipgloss.NewStyle().
-		Foreground(lipgloss.Color("243")).
-		Render("Press v or Enter to view items in this menu"))
-
-	return content.String()
-}
-
-// renderSubmenuOverlay renders the submenu dropdown overlay
-func (m Model) renderSubmenuOverlay() string {
-	// Check if submenu is empty
-	if len(m.submenuList.Items()) == 0 {
-		emptyMsg := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("243")).
-			Italic(true).
-			Render("No items available in this category")
-
-		emptyBox := lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color("33")).
-			Background(lipgloss.Color("235")).
-			Padding(1, 2).
-			Render(emptyMsg)
-
-		return emptyBox
-	}
-
-	// Render the list - compact dropdown style with just the items
-	listView := m.submenuList.View()
-
-	// Calculate submenu width (get width from the rendered content)
-	listLines := strings.Split(listView, "\n")
-	maxListWidth := 0
-	for _, line := range listLines {
-		if len(line) > maxListWidth {
-			maxListWidth = len(line)
-		}
-	}
-	submenuWidth := maxListWidth + 4 // +4 for border and padding
-
-	// Calculate position to align under the active menu item
-	separator := " | " // 3 chars
-
-	// Calculate total width of all menu items plus separators
-	totalMenuWidth := 0
-	for i, item := range m.menuBar.Items {
-		itemWidth := len(item.Label) + 2 // +2 for padding spaces
-		totalMenuWidth += itemWidth
-		if i < len(m.menuBar.Items)-1 {
-			totalMenuWidth += len(separator)
-		}
-	}
-
-	// Calculate starting position (centered menu bar)
-	menuStartPos := (m.screenWidth - totalMenuWidth) / 2
-
-	// Calculate position of active menu item
-	activeMenuPos := menuStartPos
-	for i := 0; i < m.activeMenu; i++ {
-		activeMenuPos += len(m.menuBar.Items[i].Label) + 2 // +2 for padding
-		activeMenuPos += len(separator)
-	}
-
-	// Check if submenu would extend beyond screen width
-	if activeMenuPos+submenuWidth > m.screenWidth {
-		// Adjust position to keep within bounds
-		activeMenuPos = m.screenWidth - submenuWidth
-		if activeMenuPos < 0 {
-			activeMenuPos = 0
-		}
-	}
-
-	// Create a compact dropdown-style box
-	submenuBox := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
+	// Wrap in a box
+	menuBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("33")).
-		Background(lipgloss.Color("235")).
-		Padding(0, 1).
-		Render(listView)
+		Padding(1, 2).
+		Render(menuContent)
 
-	// Add left padding to align under menu item
-	lines := strings.Split(submenuBox, "\n")
-	for i, line := range lines {
-		if line != "" {
-			lines[i] = strings.Repeat(" ", activeMenuPos) + line
-		}
-	}
-	alignedSubmenu := strings.Join(lines, "\n")
-
-	// Calculate how many lines the submenu takes
-	submenuLines := strings.Count(alignedSubmenu, "\n")
-
-	// Breadcrumb should be at row 23 (0-indexed, so position 22)
-	targetRow := 23
-	// Current position after menu bar (line 2) and submenu
-	currentRow := 2 + submenuLines
-
-	// Calculate padding needed to reach row 23
-	paddingNeeded := targetRow - currentRow
-	if paddingNeeded < 0 {
-		paddingNeeded = 0
-	}
-
-	// Enhanced breadcrumb with full path
-	breadcrumb := m.renderBreadcrumb()
-
-	var result strings.Builder
-	result.WriteString(alignedSubmenu)
-	if paddingNeeded > 0 {
-		result.WriteString(strings.Repeat("\n", paddingNeeded))
-	}
-	result.WriteString(breadcrumb)
-
-	return result.String()
+	return menuBox
 }
 
-// renderModalForm renders the modal with all fields for navigation
+// renderModalForm renders the modal with all fields for navigation and editing
 func (m Model) renderModalForm() string {
 	if len(m.modalFields) == 0 {
 		return ""
@@ -2190,126 +2415,233 @@ func (m Model) renderModalForm() string {
 
 	// Create compact modal box
 	modalBox := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
+		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("33")).
 		Background(lipgloss.Color("235")).
 		Padding(1, 2).
 		Render(modalContent.String())
 
-	// Center the modal horizontally
-	centeredModal := lipgloss.Place(
-		m.screenWidth,
-		m.screenHeight-10, // Leave room for menu, breadcrumb, and footer
-		lipgloss.Center,
-		lipgloss.Top,
-		modalBox,
-		lipgloss.WithWhitespaceChars(" "),
-	)
-
-	// Add breadcrumb at bottom
-	breadcrumb := m.renderBreadcrumb()
-
-	var result strings.Builder
-	result.WriteString(centeredModal)
-	result.WriteString("\n" + breadcrumb)
-
-	return result.String()
+	return modalBox
 }
 
-// renderModalEditor renders the modal editing dialog
-func (m Model) renderModalEditor() string {
-	if m.editingItem == nil {
+// ============================================================================
+// Individual Component Renderers
+// ============================================================================
+
+// renderLevel2Menu renders the Level 2 submenu as a floating panel
+func (m Model) renderLevel2Menu(dimmed bool) string {
+	if len(m.submenuList.Items()) == 0 {
+		emptyMsg := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("243")).
+			Italic(true).
+			Render("No items available")
+
+		var borderColor, bgColor string
+		if dimmed {
+			borderColor = "240"
+			bgColor = "234"
+		} else {
+			borderColor = "51" // Bright cyan like Synchronet
+			bgColor = "23"     // Dark cyan
+		}
+
+		emptyBox := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(borderColor)).
+			Background(lipgloss.Color(bgColor)).
+			Padding(1, 2).
+			Render(emptyMsg)
+
+		return emptyBox
+	}
+
+	// Get category label for header
+	categoryLabel := ""
+	if m.activeMenu < len(m.menuBar.Items) {
+		categoryLabel = m.menuBar.Items[m.activeMenu].Label
+	}
+
+	// Create header
+	var headerStyle lipgloss.Style
+	if dimmed {
+		headerStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("240")).
+			Foreground(lipgloss.Color("0")).
+			Bold(false).
+			Padding(0, 1)
+	} else {
+		headerStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("51")). // Bright cyan
+			Foreground(lipgloss.Color("0")).  // Black text
+			Bold(true).
+			Padding(0, 1)
+	}
+
+	// Calculate width for header
+	listView := m.submenuList.View()
+	listLines := strings.Split(listView, "\n")
+	maxWidth := 0
+	for _, line := range listLines {
+		width := m.visualWidth(line)
+		if width > maxWidth {
+			maxWidth = width
+		}
+	}
+
+	header := headerStyle.Width(maxWidth + 2).Render(categoryLabel)
+
+	// Combine header and list
+	var combined strings.Builder
+	combined.WriteString(header + "\n")
+	combined.WriteString(listView)
+
+	var borderColor, bgColor string
+	if dimmed {
+		borderColor = "240" // Dim border
+		bgColor = "234"     // Very dark background
+	} else {
+		borderColor = "51" // Bright cyan
+		bgColor = "23"     // Dark cyan
+	}
+
+	submenuBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(borderColor)).
+		Background(lipgloss.Color(bgColor)).
+		Padding(0, 1).
+		Render(combined.String())
+
+	return submenuBox
+}
+
+// renderLevel3Menu renders the Level 3 field list as a cascading modal
+func (m Model) renderLevel3Menu(dimmed bool) string {
+	if len(m.modalFields) == 0 {
 		return ""
 	}
 
-	var modalContent strings.Builder
+	// Create header with section name
+	var headerStyle lipgloss.Style
+	if dimmed {
+		headerStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("240")).
+			Foreground(lipgloss.Color("0")).
+			Bold(false).
+			Padding(0, 1)
+	} else {
+		headerStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("21")). // Blue like Synchronet
+			Foreground(lipgloss.Color("15")). // White text
+			Bold(true).
+			Padding(0, 1)
+	}
 
-	// Compact header with section name - Mystic style
-	// Get the parent section name
-	var sectionName string
-	category := m.menuBar.Items[m.activeMenu]
-	for _, section := range category.SubItems {
-		if section.ItemType == SectionHeader {
-			for _, subItem := range section.SubItems {
-				if subItem.EditableItem != nil && subItem.EditableItem.ID == m.editingItem.ID {
-					sectionName = section.Label
-					break
-				}
+	// Build field list
+	var fieldLines []string
+	maxFieldWidth := 0
+
+	// First pass: calculate max width
+	for _, field := range m.modalFields {
+		if field.ItemType == EditableField && field.EditableItem != nil {
+			currentValue := field.EditableItem.Field.GetValue()
+			valueStr := formatValue(currentValue, field.EditableItem.ValueType)
+			line := fmt.Sprintf("%-20s %s", field.EditableItem.Label+":", valueStr)
+			if len(line) > maxFieldWidth {
+				maxFieldWidth = len(line)
 			}
 		}
-		if sectionName != "" {
-			break
+	}
+
+	// Second pass: render with consistent width
+	for i, field := range m.modalFields {
+		if field.ItemType == EditableField && field.EditableItem != nil {
+			currentValue := field.EditableItem.Field.GetValue()
+			valueStr := formatValue(currentValue, field.EditableItem.ValueType)
+
+			// Format: "Label: Value"
+			line := fmt.Sprintf("%-20s %s", field.EditableItem.Label+":", valueStr)
+
+			// Pad to max width for consistent lightbar
+			if len(line) < maxFieldWidth {
+				line += strings.Repeat(" ", maxFieldWidth-len(line))
+			}
+
+			var style lipgloss.Style
+			if dimmed {
+				style = lipgloss.NewStyle().
+					Foreground(lipgloss.Color("240")).
+					Background(lipgloss.Color("234")).
+					Width(maxFieldWidth)
+			} else if i == m.modalFieldIndex {
+				// Selected field - full width lightbar
+				style = lipgloss.NewStyle().
+					Foreground(lipgloss.Color("15")).
+					Background(lipgloss.Color("21")). // Blue highlight
+					Bold(true).
+					Width(maxFieldWidth)
+			} else {
+				// Unselected field
+				style = lipgloss.NewStyle().
+					Foreground(lipgloss.Color("250")).
+					Background(lipgloss.Color("234")).
+					Width(maxFieldWidth)
+			}
+
+			fieldLines = append(fieldLines, style.Render(line))
 		}
 	}
 
-	// Header with section name on blue background
-	headerStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("33")).
-		Foreground(lipgloss.Color("15")).
-		Bold(true).
-		Width(56).
-		Align(lipgloss.Center)
+	header := headerStyle.Width(maxFieldWidth + 2).Render(m.modalSectionName)
 
-	if sectionName != "" {
-		modalContent.WriteString(headerStyle.Render(sectionName) + "\n\n")
+	// Combine header and fields
+	var combined strings.Builder
+	combined.WriteString(header + "\n")
+	combined.WriteString(strings.Join(fieldLines, "\n"))
+
+	var borderColor, bgColor string
+	if dimmed {
+		borderColor = "240"
+		bgColor = "234"
+	} else {
+		borderColor = "21" // Blue
+		bgColor = "234"    // Dark background
 	}
 
-	// Show field in compact format: Label + Value
-	currentValue := m.editingItem.Field.GetValue()
-
-	// Selected field style (blue highlight like Mystic)
-	fieldStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("33")).
-		Foreground(lipgloss.Color("15")).
-		Bold(true).
-		Width(54)
-
-	// Format: "Label: Value" or editing interface
-	var fieldDisplay string
-	switch m.editingItem.ValueType {
-	case BoolValue:
-		// Show label and toggle options
-		currentBool := currentValue.(bool)
-		if currentBool {
-			fieldDisplay = fmt.Sprintf("%s: [Y] Yes  [ ] No", m.editingItem.Label)
-		} else {
-			fieldDisplay = fmt.Sprintf("%s: [ ] Yes  [N] No", m.editingItem.Label)
-		}
-		modalContent.WriteString(fieldStyle.Render(fieldDisplay) + "\n")
-	default:
-		// Text input field
-		fieldLabel := fmt.Sprintf("%s:", m.editingItem.Label)
-		modalContent.WriteString(fieldStyle.Render(fieldLabel) + "\n")
-		modalContent.WriteString(m.textInput.View() + "\n")
-	}
-
-	// Show error if present (compact)
-	if m.editingError != "" {
-		modalContent.WriteString("\n")
-		errorMsg := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("196")).
-			Render("Error: " + m.editingError)
-		modalContent.WriteString(errorMsg)
-	}
-
-	// Create compact modal box
 	modalBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(borderColor)).
+		Background(lipgloss.Color(bgColor)).
+		Padding(0, 1).
+		Render(combined.String())
+
+	return modalBox
+}
+
+// renderSavePrompt renders the save confirmation dialog
+func (m Model) renderSavePrompt() string {
+	var promptText string
+	if m.modifiedCount > 0 {
+		promptText = fmt.Sprintf("[!]  Save %d change(s) to database?\n\n", m.modifiedCount)
+		promptText += "    [Y] Yes, save changes\n"
+		promptText += "    [N] No, discard changes\n"
+		promptText += "    [Esc] Cancel and continue editing"
+	} else {
+		promptText = "Exit configuration editor?\n\n"
+		promptText += "    [Y] Yes\n"
+		promptText += "    [N] No\n"
+		promptText += "    [Esc] Cancel"
+	}
+
+	promptBox := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("33")).
+		BorderForeground(lipgloss.Color("214")). // Orange/yellow
 		Background(lipgloss.Color("235")).
-		Padding(1, 2).
-		Render(modalContent.String())
+		Padding(1, 3).
+		Align(lipgloss.Center).
+		Width(60).
+		Render(promptText)
 
-	// Position modal below menu bar, no dimmed background
-	var result strings.Builder
-	result.WriteString("\n")
-	result.WriteString(modalBox)
-
-	// Add breadcrumb
-	breadcrumb := m.renderBreadcrumb()
-	result.WriteString("\n\n" + breadcrumb)
-
-	return result.String()
+	return promptBox
 }
 
 // renderBreadcrumb generates enhanced breadcrumb navigation
@@ -2332,47 +2664,74 @@ func (m Model) renderBreadcrumb() string {
 	detailStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("250"))
 
+	highlightStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("214")).
+		Bold(true)
+
+	editingStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("196")).
+		Bold(true)
+
+	// Always show category
 	path.WriteString(categoryStyle.Render(category.Label))
 
-	if m.navMode == SubmenuNavigation {
-		// Show current submenu item
+	// Build path based on navigation mode
+	switch m.navMode {
+	case MainMenuNavigation:
+		// Nothing more to show
+
+	case Level2MenuNavigation:
+		// Show current Level 2 submenu item
 		selectedItem := m.submenuList.SelectedItem()
 		if selectedItem != nil {
 			item := selectedItem.(submenuListItem)
 			path.WriteString(arrowStyle.Render(" -> "))
-
-			// Find section name if item is in a section
-			var sectionName string
-			for _, section := range category.SubItems {
-				if section.ItemType == SectionHeader {
-					for _, subItem := range section.SubItems {
-						if subItem.ID == item.submenuItem.ID {
-							sectionName = section.Label
-							break
-						}
-					}
-				}
-				if sectionName != "" {
-					break
-				}
-			}
-
-			if sectionName != "" {
-				path.WriteString(detailStyle.Render(sectionName))
-				path.WriteString(arrowStyle.Render(" -> "))
-			}
-
 			path.WriteString(detailStyle.Render(item.submenuItem.Label))
 		}
-	} else if m.navMode == EditingValue && m.editingItem != nil {
-		// Show editing state
-		path.WriteString(arrowStyle.Render(" -> "))
-		path.WriteString(detailStyle.Render(m.editingItem.Label))
-		path.WriteString(arrowStyle.Render(" -> "))
-		path.WriteString(lipgloss.NewStyle().
-			Foreground(lipgloss.Color("214")).
-			Bold(true).
-			Render("EDITING"))
+
+	case Level3MenuNavigation:
+		// Show: Category -> Section -> Field (if modalFields exist)
+		if m.modalSectionName != "" {
+			path.WriteString(arrowStyle.Render(" -> "))
+			path.WriteString(detailStyle.Render(m.modalSectionName))
+		}
+
+		if len(m.modalFields) > 0 && m.modalFieldIndex < len(m.modalFields) {
+			field := m.modalFields[m.modalFieldIndex]
+			if field.ItemType == EditableField && field.EditableItem != nil {
+				path.WriteString(arrowStyle.Render(" -> "))
+				path.WriteString(highlightStyle.Render(field.EditableItem.Label))
+			}
+		}
+
+	case Level4ModalNavigation:
+		// Show: Category -> Section -> Field (currently selected)
+		if m.modalSectionName != "" {
+			path.WriteString(arrowStyle.Render(" -> "))
+			path.WriteString(detailStyle.Render(m.modalSectionName))
+		}
+
+		if len(m.modalFields) > 0 && m.modalFieldIndex < len(m.modalFields) {
+			field := m.modalFields[m.modalFieldIndex]
+			if field.ItemType == EditableField && field.EditableItem != nil {
+				path.WriteString(arrowStyle.Render(" -> "))
+				path.WriteString(highlightStyle.Render(field.EditableItem.Label))
+			}
+		}
+
+	case EditingValue:
+		// Show: Category -> Section -> Field -> EDITING
+		if m.modalSectionName != "" {
+			path.WriteString(arrowStyle.Render(" -> "))
+			path.WriteString(detailStyle.Render(m.modalSectionName))
+		}
+
+		if m.editingItem != nil {
+			path.WriteString(arrowStyle.Render(" -> "))
+			path.WriteString(highlightStyle.Render(m.editingItem.Label))
+			path.WriteString(arrowStyle.Render(" -> "))
+			path.WriteString(editingStyle.Render("EDITING"))
+		}
 	}
 
 	return lipgloss.NewStyle().
@@ -2380,20 +2739,49 @@ func (m Model) renderBreadcrumb() string {
 		Render(" " + path.String())
 }
 
+// renderStatusMessage renders the status message with icon and color
+func (m Model) renderStatusMessage() string {
+	var icon string
+	var color string
+
+	switch m.messageType {
+	case SuccessMessage:
+		icon = "[OK]"
+		color = "46" // Green
+	case ErrorMessage:
+		icon = "[X]"
+		color = "196" // Red
+	case WarningMessage:
+		icon = "[!]"
+		color = "214" // Orange
+	default: // InfoMessage
+		icon = "[i]"
+		color = "39" // Blue
+	}
+
+	msg := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(color)).
+		Bold(true).
+		Render(fmt.Sprintf("%s %s", icon, m.message))
+
+	return msg
+}
+
 // renderFooter generates enhanced footer with sections
 func (m Model) renderFooter() string {
 	var sections []string
 
-	// Breadcrumb section (already rendered elsewhere for some modes)
 	// Help section based on current mode
 	var helpText string
 	switch m.navMode {
-	case MenuNavigation:
-		helpText = "◄► Menu ↑↓ Move [ESC] Back [Q] Quit"
-	case SubmenuNavigation:
-		helpText = "◄► Menu ↑↓ Move [ESC] Back [Q] Quit"
-	case ModalFieldSelect:
-		helpText = "◄► Menu ↑↓ Move [ESC] Back [Q] Quit"
+	case MainMenuNavigation:
+		helpText = "↑↓◄► Navigate [ENTER] Select [Q] Quit"
+	case Level2MenuNavigation:
+		helpText = "↑↓ Navigate [ENTER] Select [ESC] Back [Q] Quit"
+	case Level3MenuNavigation:
+		helpText = "↑↓ Navigate [ENTER] Edit [ESC] Back [Q] Quit"
+	case Level4ModalNavigation:
+		helpText = "↑↓ Navigate [ENTER] Edit [ESC] Back [Q] Quit"
 	case EditingValue:
 		if m.editingItem != nil && m.editingItem.ValueType == BoolValue {
 			helpText = "[Key]  Y/N:Select | Space/Tab:Toggle | Enter:Save | Esc:Cancel"
