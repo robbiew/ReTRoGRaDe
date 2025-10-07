@@ -8,6 +8,12 @@ retrograde
 *.dll
 *.so
 *.dylib
+!release/retrograde
+!release/*.exe
+!release/*.exe~
+!release/*.dll
+!release/*.so
+!release/*.dylib
 
 # Test binary, built with `go test -c`
 *.test
