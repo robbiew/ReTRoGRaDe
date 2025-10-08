@@ -97,6 +97,9 @@ const (
 	UserManagementMode                          // User management interface
 	SecurityLevelsMode                          // Security levels management interface
 	MenuManagementMode                          // Menu management interface
+	MenuModifyMode                              // Menu modification interface (command list)
+	MenuEditDataMode                            // Edit menu data modal
+	MenuEditCommandMode                         // Edit command modal
 	SavePrompt                                  // Confirming save on exit
 	SaveChangesPrompt                           // NEW: Prompt to save changes when exiting edit modal
 
@@ -146,10 +149,15 @@ type Model struct {
 	editingSecurityLevel *database.SecurityLevelRecord  // Currently editing security level
 
 	// Menu management state
-	menuList []database.Menu // List of menus for management
+	menuList         []database.Menu        // List of menus for management
+	menuCommandsList []database.MenuCommand // List of commands for current menu
 
 	// User management state
 	editingUser *database.UserRecord // Currently editing user
+
+	// Confirmation state
+	confirmAction string // Current confirmation action
+	confirmMenuID int64  // Menu ID for confirmation
 
 	// UI state
 	screenWidth   int
@@ -165,8 +173,20 @@ type Model struct {
 	returnToMode        NavigationMode // Where to return after save prompt
 
 	// Texture configuration
-	texturePatterns []string       // ADD THIS
-	textureStyle    lipgloss.Style // ADD THIS
+	texturePatterns []string
+	textureStyle    lipgloss.Style
+
+	// Menu editing state
+	editingMenu          *database.Menu        // Currently editing menu
+	editingMenuCommand   *database.MenuCommand // Currently editing menu command
+	selectedCommandIndex int                   // Selected command in modify mode
+	currentMenuTab       int                   // Current tab in menu modify mode (0=Menu Data, 1=Menu Commands)
+	menuDataFields       []SubmenuItem         // Preserve menu data fields when editing commands
+
+	// racking original state:
+	originalMenu         *database.Menu         // Original menu before editing
+	originalMenuCommands []database.MenuCommand // Original commands before editing
+	menuModified         bool                   // Track if menu has been modified
 }
 
 // MessageType defines the type of status message
@@ -1668,6 +1688,7 @@ func InitialModelV2(cfg *config.Config) Model {
 		screenHeight:    24,
 		texturePatterns: texturePatterns, // ADD THIS
 		textureStyle:    textureStyle,    // ADD THIS
+		currentMenuTab:  0,               // Default to Menu Data tab
 	}
 }
 
@@ -1737,6 +1758,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleSecurityLevelsManagement(msg)
 		case MenuManagementMode:
 			return m.handleMenuManagement(msg)
+		case MenuModifyMode:
+			return m.handleMenuModify(msg)
+		case MenuEditDataMode:
+			return m.handleMenuEditData(msg)
+		case MenuEditCommandMode:
+			return m.handleMenuEditCommand(msg)
 		case SavePrompt:
 			return m.handleSavePrompt(msg)
 		case SaveChangesPrompt: // ADD THIS
@@ -1900,7 +1927,7 @@ func (m Model) handleLevel4ModalNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 	return m, nil
 }
 
-// handleSaveChangesPrompt processes input during save changes confirmation
+// Update handleSaveChangesPrompt to handle menu saving
 func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "left", "h", "right", "l", "tab":
@@ -1917,7 +1944,52 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.savePromptSelection == 1 {
 			// Yes - Save changes
 			var err error
-			if m.editingSecurityLevel != nil {
+
+			if m.editingMenu != nil {
+				// Save menu changes
+				err = m.db.UpdateMenu(m.editingMenu)
+				if err != nil {
+					m.message = fmt.Sprintf("Error saving menu: %v", err)
+					m.messageTime = time.Now()
+					m.messageType = ErrorMessage
+					m.savePrompt = false
+					m.navMode = m.returnToMode
+					return m, nil
+				}
+
+				// Save all command changes
+				for _, cmd := range m.menuCommandsList {
+					if cmd.ID == 0 {
+						// New command - insert
+						_, err = m.db.CreateMenuCommand(&cmd)
+					} else {
+						// Existing command - update
+						err = m.db.UpdateMenuCommand(&cmd)
+					}
+					if err != nil {
+						m.message = fmt.Sprintf("Error saving command: %v", err)
+						m.messageTime = time.Now()
+						m.messageType = ErrorMessage
+						m.savePrompt = false
+						m.navMode = m.returnToMode
+						return m, nil
+					}
+				}
+
+				// Reload menus list to reflect changes
+				if reloadErr := m.loadMenus(); reloadErr != nil {
+					m.message = fmt.Sprintf("Error reloading menus: %v", reloadErr)
+					m.messageTime = time.Now()
+					m.messageType = ErrorMessage
+				}
+
+				m.menuModified = false
+				m.editingMenu = nil
+				m.originalMenu = nil
+				m.menuCommandsList = nil
+				m.originalMenuCommands = nil
+				m.menuDataFields = nil
+			} else if m.editingSecurityLevel != nil {
 				// Save security level changes
 				err = m.db.UpdateSecurityLevel(m.editingSecurityLevel)
 				if err != nil {
@@ -1934,7 +2006,7 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.messageTime = time.Now()
 					m.messageType = ErrorMessage
 				}
-				m.editingSecurityLevel = nil // Clear editing state
+				m.editingSecurityLevel = nil
 			} else if m.editingUser != nil {
 				// Save user changes
 				err = m.db.UpdateUser(m.editingUser)
@@ -1952,7 +2024,7 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.messageTime = time.Now()
 					m.messageType = ErrorMessage
 				}
-				m.editingUser = nil // Clear editing state
+				m.editingUser = nil
 			} else {
 				// Save config changes
 				err = config.SaveConfig(m.config, "")
@@ -1968,13 +2040,27 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 			// DON'T show success message - just reset counter
-			m.modifiedCount = 0 // Reset counter
+			m.modifiedCount = 0
+		} else {
+			// No - Discard changes
+			if m.editingMenu != nil {
+				// Restore original menu and commands
+				m.editingMenu = m.originalMenu
+				m.menuCommandsList = m.originalMenuCommands
+				m.menuModified = false
+				m.editingMenu = nil
+				m.originalMenu = nil
+				m.menuCommandsList = nil
+				m.originalMenuCommands = nil
+				m.menuDataFields = nil
+			}
 		}
+
 		// Either way, return to previous mode
 		m.savePrompt = false
 		m.navMode = m.returnToMode
-		m.editingSecurityLevel = nil // Clear editing state
-		m.editingUser = nil          // Clear editing state
+		m.editingSecurityLevel = nil
+		m.editingUser = nil
 
 		// Clean up modal if returning to Level 2
 		if m.returnToMode == Level2MenuNavigation {
@@ -1984,43 +2070,17 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "y", "Y":
-		// Save and return
-		if err := config.SaveConfig(m.config, ""); err != nil {
-			m.message = fmt.Sprintf("Error saving: %v", err)
-			m.messageTime = time.Now()
-			m.messageType = ErrorMessage
-		} else {
-			// DON'T show success message - just reset counter
-			m.modifiedCount = 0
-		}
-		m.savePrompt = false
-		m.editingSecurityLevel = nil
-		m.editingUser = nil
-		m.navMode = m.returnToMode
-		if m.returnToMode == Level2MenuNavigation {
-			m.modalFields = nil
-			m.modalFieldIndex = 0
-			m.modalSectionName = ""
-		}
-		return m, nil
+		// Quick Yes - same as enter with selection 1
+		m.savePromptSelection = 1
+		return m.handleSaveChangesPrompt(tea.KeyMsg{Type: tea.KeyEnter})
 	case "n", "N":
-		// Don't save, just return
-		m.savePrompt = false
-		m.editingSecurityLevel = nil
-		m.editingUser = nil
-		m.navMode = m.returnToMode
-		if m.returnToMode == Level2MenuNavigation {
-			m.modalFields = nil
-			m.modalFieldIndex = 0
-			m.modalSectionName = ""
-		}
-		return m, nil
+		// Quick No - same as enter with selection 0
+		m.savePromptSelection = 0
+		return m.handleSaveChangesPrompt(tea.KeyMsg{Type: tea.KeyEnter})
 	case "esc":
-		// Cancel - return to modal
+		// Cancel - return to menu modify mode (don't exit)
 		m.savePrompt = false
-		m.editingSecurityLevel = nil
-		m.editingUser = nil
-		m.navMode = Level4ModalNavigation
+		m.navMode = MenuModifyMode
 	}
 	return m, nil
 }
@@ -2139,7 +2199,8 @@ func (m Model) handleLevel2MenuNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 			} else if item.submenuItem.ItemType == ActionItem {
 				// Handle action items
-				if item.submenuItem.ID == "user-editor" {
+				switch item.submenuItem.ID {
+				case "user-editor":
 					// Launch user management interface
 					// Check if database path is configured
 					if m.config.Configuration.Paths.Database == "" {
@@ -2179,7 +2240,7 @@ func (m Model) handleLevel2MenuNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 						m.navMode = UserManagementMode
 						m.message = ""
 					}
-				} else if item.submenuItem.ID == "security-levels-editor" {
+				case "security-levels-editor":
 					// Launch security levels management interface
 					// Check if database path is configured
 					if m.config.Configuration.Paths.Database == "" {
@@ -2219,7 +2280,7 @@ func (m Model) handleLevel2MenuNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 						m.navMode = SecurityLevelsMode
 						m.message = ""
 					}
-				} else if item.submenuItem.ID == "menu-editor" {
+				case "menu-editor":
 					// Launch menu management interface
 					// Check if database path is configured
 					if m.config.Configuration.Paths.Database == "" {
@@ -2259,7 +2320,7 @@ func (m Model) handleLevel2MenuNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 						m.navMode = MenuManagementMode
 						m.message = ""
 					}
-				} else {
+				default:
 					m.message = fmt.Sprintf("Action '%s' not implemented yet", item.submenuItem.Label)
 					m.messageTime = time.Now()
 				}
@@ -2419,7 +2480,7 @@ func (m Model) handleSavePrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// renderSavePrompt renders the save confirmation dialog with lightbar selection
+// Update renderSavePrompt to show appropriate warning
 func (m Model) renderSavePrompt() string {
 	modalWidth := 50
 
@@ -2435,9 +2496,19 @@ func (m Model) renderSavePrompt() string {
 	var promptMsg string
 
 	if m.navMode == SaveChangesPrompt {
-		// Saving changes before exiting modal
-		header = headerStyle.Render(fmt.Sprintf("▸ Save Changes? (%d) ◂", m.modifiedCount))
-		promptMsg = "Save changes before exiting?"
+		if m.editingMenu != nil {
+			// Saving menu changes
+			header = headerStyle.Render("▸ Save Menu Changes? ◂")
+			if m.menuModified {
+				promptMsg = "Save changes to menu and commands?"
+			} else {
+				promptMsg = "Exit without changes?"
+			}
+		} else {
+			// Saving other changes (user, security level, etc)
+			header = headerStyle.Render(fmt.Sprintf("▸ Save Changes? (%d) ◂", m.modifiedCount))
+			promptMsg = "Save changes before exiting?"
+		}
 	} else {
 		// Exiting application
 		if m.modifiedCount > 0 {
@@ -2449,7 +2520,7 @@ func (m Model) renderSavePrompt() string {
 		}
 	}
 
-	// Create separator style - ADD THIS
+	// Create separator style
 	separatorStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color(ColorBgMedium)).
 		Foreground(lipgloss.Color(ColorPrimary)).
@@ -2762,6 +2833,386 @@ func (m Model) handleUserManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// In handleMenuModify - fix the ENTER, I, and D key handlers
+func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+
+	switch msg.String() {
+	case "tab":
+		// Switch between Commands and Menu Data tabs
+		m.currentMenuTab = (m.currentMenuTab + 1) % 2
+		// Reset selection when switching tabs
+		m.selectedCommandIndex = 0
+		return m, nil
+	case "1":
+		// Switch to Menu Data tab
+		m.currentMenuTab = 0
+		m.selectedCommandIndex = 0
+		return m, nil
+	case "2":
+		// Switch to Menu Commands tab
+		m.currentMenuTab = 1
+		m.selectedCommandIndex = 0
+		return m, nil
+
+	case "up", "k":
+		// Navigate up in current tab
+		if m.currentMenuTab == 0 {
+			// Menu Data tab - navigate through menu data fields
+			if len(m.modalFields) > 0 {
+				m.selectedCommandIndex = (m.selectedCommandIndex - 1 + len(m.modalFields)) % len(m.modalFields)
+			}
+		} else {
+			// Commands tab
+			if len(m.menuCommandsList) > 0 {
+				m.selectedCommandIndex = (m.selectedCommandIndex - 1 + len(m.menuCommandsList)) % len(m.menuCommandsList)
+			}
+		}
+		return m, nil
+	case "down", "j":
+		// Navigate down in current tab
+		if m.currentMenuTab == 0 {
+			// Menu Data tab - navigate through menu data fields
+			if len(m.modalFields) > 0 {
+				m.selectedCommandIndex = (m.selectedCommandIndex + 1) % len(m.modalFields)
+			}
+		} else {
+			// Commands tab
+			if len(m.menuCommandsList) > 0 {
+				m.selectedCommandIndex = (m.selectedCommandIndex + 1) % len(m.menuCommandsList)
+			}
+		}
+		return m, nil
+	case "home":
+		// Jump to first item in current tab
+		m.selectedCommandIndex = 0
+		return m, nil
+	case "end":
+		// Jump to last item in current tab
+		if m.currentMenuTab == 0 {
+			// Menu Data tab
+			if len(m.modalFields) > 0 {
+				m.selectedCommandIndex = len(m.modalFields) - 1
+			}
+		} else {
+			// Commands tab
+			if len(m.menuCommandsList) > 0 {
+				m.selectedCommandIndex = len(m.menuCommandsList) - 1
+			}
+		}
+		return m, nil
+		// In handleMenuModify - when entering command edit, don't overwrite modalFields
+	case "enter":
+		// Edit selected item based on current tab
+		if m.currentMenuTab == 0 {
+			// Menu Data tab - edit field INLINE
+			if len(m.modalFields) > 0 && m.selectedCommandIndex < len(m.modalFields) {
+				selectedField := m.modalFields[m.selectedCommandIndex]
+				if selectedField.ItemType == EditableField && selectedField.EditableItem != nil {
+					m.editingItem = selectedField.EditableItem
+					m.originalValue = m.editingItem.Field.GetValue()
+					m.editingError = ""
+					m.modalFieldIndex = m.selectedCommandIndex // Sync the index
+
+					// Initialize text input based on value type
+					if m.editingItem.ValueType == BoolValue {
+						m.textInput.SetValue("")
+					} else {
+						currentValue := m.editingItem.Field.GetValue()
+						m.textInput.SetValue(formatValue(currentValue, m.editingItem.ValueType))
+
+						// Set placeholder and limits based on type
+						switch m.editingItem.ValueType {
+						case IntValue:
+							m.textInput.Placeholder = "Enter number"
+							m.textInput.CharLimit = 10
+							m.textInput.Width = 15
+						case ListValue:
+							m.textInput.Placeholder = "comma,separated,values"
+							m.textInput.CharLimit = 200
+							m.textInput.Width = 25
+						default: // StringValue
+							m.textInput.Placeholder = "Enter value"
+							m.textInput.CharLimit = 200
+							m.textInput.Width = 25
+						}
+					}
+
+					m.textInput.Focus()
+					m.navMode = EditingValue
+					m.message = ""
+				}
+			}
+		} else {
+			// Commands tab - edit selected command in MODAL
+			if len(m.menuCommandsList) > 0 && m.selectedCommandIndex < len(m.menuCommandsList) {
+				// Create a copy of the command for editing
+				selectedCmd := m.menuCommandsList[m.selectedCommandIndex]
+				m.editingMenuCommand = &database.MenuCommand{
+					ID:               selectedCmd.ID,
+					MenuID:           selectedCmd.MenuID,
+					CommandNumber:    selectedCmd.CommandNumber,
+					Keys:             selectedCmd.Keys,
+					LongDescription:  selectedCmd.LongDescription,
+					ShortDescription: selectedCmd.ShortDescription,
+					ACSRequired:      selectedCmd.ACSRequired,
+					CmdKeys:          selectedCmd.CmdKeys,
+					Options:          selectedCmd.Options,
+					Flags:            selectedCmd.Flags,
+				}
+				// Set up modal fields for command editing
+				m.setupMenuEditCommandModal()
+				m.navMode = MenuEditCommandMode
+			}
+		}
+		return m, nil
+	case "i", "I":
+		// Insert new command (only works in Commands tab)
+		if m.currentMenuTab == 1 { // FIXED: Was 0, should be 1 for commands tab
+			m.editingMenuCommand = &database.MenuCommand{
+				MenuID:           m.editingMenu.ID,
+				CommandNumber:    len(m.menuCommandsList) + 1,
+				Keys:             "",
+				LongDescription:  "",
+				ShortDescription: "",
+				ACSRequired:      "",
+				CmdKeys:          "",
+				Options:          "",
+				Flags:            "",
+			}
+			// Set up modal fields for command editing
+			m.setupMenuEditCommandModal()
+			m.navMode = MenuEditCommandMode
+		}
+		return m, nil
+	case "d", "D":
+		// Delete selected command (only works in Commands tab)
+		if m.currentMenuTab == 1 && len(m.menuCommandsList) > 0 && m.selectedCommandIndex < len(m.menuCommandsList) { // FIXED: Was 0, should be 1
+			selectedCmd := m.menuCommandsList[m.selectedCommandIndex]
+			m.message = fmt.Sprintf("Delete command '%s'? (Y/N)", selectedCmd.Keys)
+			m.messageTime = time.Now()
+			m.messageType = WarningMessage
+			m.confirmAction = "delete_command"
+			m.confirmMenuID = int64(selectedCmd.ID)
+		}
+		return m, nil
+	case "x", "X":
+		// Switch to Menu Data tab
+		m.currentMenuTab = 0
+		m.selectedCommandIndex = 0
+		return m, nil
+	case "f1":
+		// Show help
+		m.message = "Help: ↑↓ Navigate | ENTER Edit | TAB Switch | I Insert | D Delete | ESC Back"
+		m.messageTime = time.Now()
+		m.messageType = InfoMessage
+		return m, nil
+		// Update handleMenuModify ESC handler to check for unsaved changes
+	case "esc":
+		// Check if there are unsaved changes
+		if m.menuModified {
+			m.savePrompt = true
+			m.savePromptSelection = 1 // Default to Yes
+			m.returnToMode = MenuManagementMode
+			m.navMode = SaveChangesPrompt
+			return m, nil
+		}
+
+		// No unsaved changes, exit normally
+		m.navMode = MenuManagementMode
+		m.editingMenu = nil
+		m.originalMenu = nil
+		m.menuCommandsList = nil
+		m.originalMenuCommands = nil
+		m.selectedCommandIndex = 0
+		m.currentMenuTab = 0
+		m.menuDataFields = nil
+		return m, nil
+	}
+
+	// Handle confirmation for delete
+	if m.confirmAction == "delete_command" && (msg.String() == "y" || msg.String() == "Y") {
+		if err := m.db.DeleteMenuCommand(m.confirmMenuID); err != nil {
+			m.message = fmt.Sprintf("Error deleting command: %v", err)
+			m.messageTime = time.Now()
+			m.messageType = ErrorMessage
+		} else {
+			// Reload commands
+			if err := m.loadMenuCommandsForEditing(); err != nil {
+				m.message = fmt.Sprintf("Error reloading commands: %v", err)
+				m.messageTime = time.Now()
+				m.messageType = ErrorMessage
+			} else {
+				m.message = "Command deleted successfully"
+				m.messageTime = time.Now()
+				m.messageType = SuccessMessage
+				// Adjust selection if necessary
+				if m.selectedCommandIndex >= len(m.menuCommandsList) && len(m.menuCommandsList) > 0 {
+					m.selectedCommandIndex = len(m.menuCommandsList) - 1
+				}
+			}
+		}
+		m.confirmAction = ""
+		m.confirmMenuID = 0
+		return m, nil
+	} else if m.confirmAction == "delete_command" && (msg.String() == "n" || msg.String() == "N" || msg.String() == "esc") {
+		m.message = ""
+		m.confirmAction = ""
+		m.confirmMenuID = 0
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// handleMenuEditData processes input in menu edit data mode
+func (m Model) handleMenuEditData(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Use the same logic as Level4ModalNavigation for field editing
+	switch msg.String() {
+	case "up", "k":
+		// Navigate up in field list
+		if m.modalFieldIndex > 0 {
+			m.modalFieldIndex--
+		}
+		m.message = ""
+		return m, nil
+	case "down", "j":
+		// Navigate down in field list
+		if m.modalFieldIndex < len(m.modalFields)-1 {
+			m.modalFieldIndex++
+		}
+		m.message = ""
+		return m, nil
+	case "enter":
+		// Edit selected field
+		selectedField := m.modalFields[m.modalFieldIndex]
+		if selectedField.ItemType == EditableField && selectedField.EditableItem != nil {
+			m.editingItem = selectedField.EditableItem
+			m.originalValue = m.editingItem.Field.GetValue()
+			m.editingError = ""
+
+			// Initialize text input based on value type
+			if m.editingItem.ValueType == BoolValue {
+				m.textInput.SetValue("")
+			} else {
+				currentValue := m.editingItem.Field.GetValue()
+				m.textInput.SetValue(formatValue(currentValue, m.editingItem.ValueType))
+
+				// Set placeholder and limits based on type
+				switch m.editingItem.ValueType {
+				case IntValue:
+					m.textInput.Placeholder = "Enter number"
+					m.textInput.CharLimit = 10
+					m.textInput.Width = 15
+				case ListValue:
+					m.textInput.Placeholder = "comma,separated,values"
+					m.textInput.CharLimit = 200
+					m.textInput.Width = 25
+				default: // StringValue
+					m.textInput.Placeholder = "Enter value"
+					m.textInput.CharLimit = 200
+					m.textInput.Width = 25
+				}
+			}
+
+			m.textInput.Focus()
+			m.navMode = EditingValue
+			m.message = ""
+		}
+		return m, nil
+	case "esc":
+		// Check if there are unsaved changes
+		hasUnsavedChanges := false
+		// TODO: Implement change detection for menu data
+		if hasUnsavedChanges {
+			m.savePrompt = true
+			m.savePromptSelection = 1
+			m.returnToMode = MenuModifyMode
+			m.navMode = SaveChangesPrompt
+		} else {
+			m.navMode = MenuModifyMode
+			m.modalFields = nil
+			m.modalFieldIndex = 0
+			m.modalSectionName = ""
+		}
+		m.message = ""
+		return m, nil
+	}
+	return m, nil
+}
+
+// handleMenuEditCommand processes input in menu edit command mode
+func (m Model) handleMenuEditCommand(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Use the same logic as Level4ModalNavigation for field editing
+	switch msg.String() {
+	case "up", "k":
+		// Navigate up in field list
+		if m.modalFieldIndex > 0 {
+			m.modalFieldIndex--
+		}
+		m.message = ""
+		return m, nil
+	case "down", "j":
+		// Navigate down in field list
+		if m.modalFieldIndex < len(m.modalFields)-1 {
+			m.modalFieldIndex++
+		}
+		m.message = ""
+		return m, nil
+	case "enter":
+		// Edit selected field
+		selectedField := m.modalFields[m.modalFieldIndex]
+		if selectedField.ItemType == EditableField && selectedField.EditableItem != nil {
+			m.editingItem = selectedField.EditableItem
+			m.originalValue = m.editingItem.Field.GetValue()
+			m.editingError = ""
+
+			// Initialize text input based on value type
+			if m.editingItem.ValueType == BoolValue {
+				m.textInput.SetValue("")
+			} else {
+				currentValue := m.editingItem.Field.GetValue()
+				m.textInput.SetValue(formatValue(currentValue, m.editingItem.ValueType))
+
+				// Set placeholder and limits based on type
+				switch m.editingItem.ValueType {
+				case IntValue:
+					m.textInput.Placeholder = "Enter number"
+					m.textInput.CharLimit = 10
+					m.textInput.Width = 15
+				case ListValue:
+					m.textInput.Placeholder = "comma,separated,values"
+					m.textInput.CharLimit = 200
+					m.textInput.Width = 25
+				default: // StringValue
+					m.textInput.Placeholder = "Enter value"
+					m.textInput.CharLimit = 200
+					m.textInput.Width = 25
+				}
+			}
+
+			m.textInput.Focus()
+			m.navMode = EditingValue
+			m.message = ""
+		}
+		return m, nil
+	case "esc":
+		// Restore menu data fields from backup
+		if len(m.menuDataFields) > 0 {
+			m.modalFields = make([]SubmenuItem, len(m.menuDataFields))
+			copy(m.modalFields, m.menuDataFields)
+		}
+
+		// Return to MenuModifyMode
+		m.navMode = MenuModifyMode
+		m.editingMenuCommand = nil
+		m.modalFieldIndex = 0
+		m.modalSectionName = ""
+		m.message = ""
+		return m, nil
+	}
+	return m, nil
+}
+
 // handleSecurityLevelsManagement processes input in security levels management mode
 func (m Model) handleSecurityLevelsManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
@@ -2975,90 +3426,219 @@ func (m Model) handleMenuManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.menuListUI.Select(len(items) - 1)
 		}
 		return m, nil
-	case "enter":
-		// Select menu - show menu details
+		// In handleMenuManagement - when entering MenuModifyMode
+		// In handleMenuManagement - when entering MenuModifyMode, save the menu data fields
+	case "enter", "m", "M":
+		// Modify menu - open modify menu interface
 		selectedItem := m.menuListUI.SelectedItem()
 		if selectedItem != nil {
 			menuItem := selectedItem.(menuListItem)
-			// Get command count
-			commands, err := m.db.GetMenuCommands(menuItem.menu.ID)
-			commandCount := 0
-			if err == nil {
-				commandCount = len(commands)
+
+			// Make a DEEP COPY of the original menu
+			originalMenu := menuItem.menu
+			m.originalMenu = &database.Menu{
+				ID:                  originalMenu.ID,
+				Name:                originalMenu.Name,
+				Titles:              append([]string{}, originalMenu.Titles...),
+				HelpFile:            originalMenu.HelpFile,
+				LongHelpFile:        originalMenu.LongHelpFile,
+				Prompt:              originalMenu.Prompt,
+				ACSRequired:         originalMenu.ACSRequired,
+				Password:            originalMenu.Password,
+				FallbackMenu:        originalMenu.FallbackMenu,
+				ForcedHelpLevel:     originalMenu.ForcedHelpLevel,
+				GenericColumns:      originalMenu.GenericColumns,
+				GenericBracketColor: originalMenu.GenericBracketColor,
+				GenericCommandColor: originalMenu.GenericCommandColor,
+				GenericDescColor:    originalMenu.GenericDescColor,
+				Flags:               originalMenu.Flags,
 			}
-			m.message = fmt.Sprintf("Menu '%s': %d commands, prompt: %s", menuItem.menu.Name, commandCount, menuItem.menu.Prompt)
-			m.messageTime = time.Now()
+
+			// Make a working copy
+			m.editingMenu = &database.Menu{
+				ID:                  originalMenu.ID,
+				Name:                originalMenu.Name,
+				Titles:              append([]string{}, originalMenu.Titles...),
+				HelpFile:            originalMenu.HelpFile,
+				LongHelpFile:        originalMenu.LongHelpFile,
+				Prompt:              originalMenu.Prompt,
+				ACSRequired:         originalMenu.ACSRequired,
+				Password:            originalMenu.Password,
+				FallbackMenu:        originalMenu.FallbackMenu,
+				ForcedHelpLevel:     originalMenu.ForcedHelpLevel,
+				GenericColumns:      originalMenu.GenericColumns,
+				GenericBracketColor: originalMenu.GenericBracketColor,
+				GenericCommandColor: originalMenu.GenericCommandColor,
+				GenericDescColor:    originalMenu.GenericDescColor,
+				Flags:               originalMenu.Flags,
+			}
+
+			if err := m.loadMenuCommandsForEditing(); err != nil {
+				m.message = fmt.Sprintf("Error loading menu commands: %v", err)
+				m.messageTime = time.Now()
+				m.messageType = ErrorMessage
+				return m, nil
+			}
+
+			// Make a DEEP COPY of original commands
+			m.originalMenuCommands = make([]database.MenuCommand, len(m.menuCommandsList))
+			for i, cmd := range m.menuCommandsList {
+				m.originalMenuCommands[i] = database.MenuCommand{
+					ID:               cmd.ID,
+					MenuID:           cmd.MenuID,
+					CommandNumber:    cmd.CommandNumber,
+					Keys:             cmd.Keys,
+					LongDescription:  cmd.LongDescription,
+					ShortDescription: cmd.ShortDescription,
+					ACSRequired:      cmd.ACSRequired,
+					CmdKeys:          cmd.CmdKeys,
+					Options:          cmd.Options,
+					Flags:            cmd.Flags,
+				}
+			}
+
+			// Set up modal fields for menu data editing
+			m.setupMenuEditDataModal()
+			// SAVE the menu data fields for later restoration
+			m.menuDataFields = make([]SubmenuItem, len(m.modalFields))
+			copy(m.menuDataFields, m.modalFields)
+
+			m.menuModified = false // Reset modification flag
+			m.navMode = MenuModifyMode
+			m.selectedCommandIndex = 0
+			m.currentMenuTab = 0
+			m.message = ""
 		}
 		return m, nil
-	case "esc":
+	case "i", "I":
+		// Insert new menu
+		m.editingMenu = &database.Menu{
+			Name:                "",
+			Titles:              []string{""},
+			HelpFile:            "",
+			LongHelpFile:        "",
+			Prompt:              "",
+			ACSRequired:         "",
+			Password:            "",
+			FallbackMenu:        "",
+			ForcedHelpLevel:     0,
+			GenericColumns:      4,
+			GenericBracketColor: 1,
+			GenericCommandColor: 9,
+			GenericDescColor:    1,
+			Flags:               "C---T-----",
+		}
+		m.navMode = MenuEditDataMode
+		m.message = "Creating new menu"
+		m.messageTime = time.Now()
+		m.messageType = InfoMessage
+		return m, nil
+	case "d", "D":
+		// Delete menu - confirm first
+		selectedItem := m.menuListUI.SelectedItem()
+		if selectedItem != nil {
+			menuItem := selectedItem.(menuListItem)
+			m.message = fmt.Sprintf("Delete menu '%s'? (Y/N)", menuItem.menu.Name)
+			m.messageTime = time.Now()
+			m.messageType = WarningMessage
+			m.confirmAction = "delete_menu"
+			m.confirmMenuID = int64(menuItem.menu.ID)
+		}
+		return m, nil
+	case "q", "Q", "esc":
 		// Return to Level 2 menu navigation (Editors menu)
 		m.navMode = Level2MenuNavigation
 		m.message = ""
 	}
 
+	// Handle confirmation for delete
+	if m.confirmAction == "delete_menu" && (msg.String() == "y" || msg.String() == "Y") {
+		if err := m.db.DeleteMenu(m.confirmMenuID); err != nil {
+			m.message = fmt.Sprintf("Error deleting menu: %v", err)
+			m.messageTime = time.Now()
+			m.messageType = ErrorMessage
+		} else {
+			// Reload menu list
+			if err := m.loadMenus(); err != nil {
+				m.message = fmt.Sprintf("Error reloading menus: %v", err)
+				m.messageTime = time.Now()
+				m.messageType = ErrorMessage
+			} else {
+				m.message = "Menu deleted successfully"
+				m.messageTime = time.Now()
+				m.messageType = SuccessMessage
+			}
+		}
+		m.confirmAction = ""
+		m.confirmMenuID = 0
+		return m, nil
+	} else if m.confirmAction == "delete_menu" && (msg.String() == "n" || msg.String() == "N" || msg.String() == "esc") {
+		m.message = ""
+		m.confirmAction = ""
+		m.confirmMenuID = 0
+		return m, nil
+	}
+
 	// Update the list for any other input (like filtering)
 	// Only update if not handled above and not ESC (to prevent quit command)
-	if msg.String() != "esc" {
+	if msg.String() != "esc" && msg.String() != "q" && msg.String() != "Q" {
 		m.menuListUI, cmd = m.menuListUI.Update(msg)
 	}
 	return m, cmd
 }
 
-// handleEditingValue processes input while editing a value in the modal
+// Update handleEditingValue to set menuModified flag when editing menu data
 func (m Model) handleEditingValue(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Handle bool toggle separately
 	if m.editingItem.ValueType == BoolValue {
 		switch msg.String() {
 		case "y", "Y":
-			// Set to true
 			newValue := true
 			if newValue != m.originalValue {
 				if err := m.editingItem.Field.SetValue(newValue); err != nil {
 					m.editingError = err.Error()
 				} else {
 					m.modifiedCount++
+					if m.editingMenu != nil {
+						m.menuModified = true // Mark menu as modified
+					}
 					m.editingError = ""
 					m.message = ""
-					// Return to modal field selection
-					m.navMode = Level4ModalNavigation
+					m.navMode = m.returnToMenuModifyOrModal()
 				}
 			} else {
-				// No change, just return
-				m.navMode = Level4ModalNavigation
+				m.navMode = m.returnToMenuModifyOrModal()
 			}
 			return m, nil
 		case "n", "N":
-			// Set to false
 			newValue := false
 			if newValue != m.originalValue {
 				if err := m.editingItem.Field.SetValue(newValue); err != nil {
 					m.editingError = err.Error()
 				} else {
 					m.modifiedCount++
+					if m.editingMenu != nil {
+						m.menuModified = true // Mark menu as modified
+					}
 					m.editingError = ""
 					m.message = ""
-					// Return to modal field selection
-					m.navMode = Level4ModalNavigation
+					m.navMode = m.returnToMenuModifyOrModal()
 				}
 			} else {
-				// No change, just return
-				m.navMode = Level4ModalNavigation
+				m.navMode = m.returnToMenuModifyOrModal()
 			}
 			return m, nil
 		case "enter", " ", "tab":
-			// Toggle current value
 			currentValue := m.editingItem.Field.GetValue().(bool)
 			if err := m.editingItem.Field.SetValue(!currentValue); err != nil {
 				m.editingError = err.Error()
 			} else {
 				m.editingError = ""
-				// Don't exit, just update display to show toggled value
 			}
 			return m, nil
 		case "esc":
-			// Cancel - restore original value
 			m.editingItem.Field.SetValue(m.originalValue)
-			m.navMode = Level4ModalNavigation
+			m.navMode = m.returnToMenuModifyOrModal()
 			m.editingError = ""
 			m.message = ""
 			return m, nil
@@ -3117,23 +3697,40 @@ func (m Model) handleEditingValue(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		// Success - silently save and return
 		m.modifiedCount++
+		if m.editingMenu != nil {
+			m.menuModified = true // Mark menu as modified
+		}
 		m.editingError = ""
 		m.message = ""
 
-		// Return to modal field selection
-		m.navMode = Level4ModalNavigation
+		// Return to the appropriate mode
+		m.navMode = m.returnToMenuModifyOrModal()
 		m.textInput.Blur()
 
 	case "esc":
 		// Cancel editing - restore original value
 		m.editingItem.Field.SetValue(m.originalValue)
-		m.navMode = Level4ModalNavigation
+		m.navMode = m.returnToMenuModifyOrModal()
 		m.editingError = ""
 		m.message = ""
 		m.textInput.Blur()
 	}
 
 	return m, nil
+}
+
+// Update this helper function
+func (m Model) returnToMenuModifyOrModal() NavigationMode {
+	// If we're editing a menu command, return to command edit mode
+	if m.editingMenuCommand != nil {
+		return MenuEditCommandMode
+	}
+	// If we have editingMenu set, we're in MenuModifyMode
+	if m.editingMenu != nil {
+		return MenuModifyMode
+	}
+	// Otherwise return to Level4ModalNavigation
+	return Level4ModalNavigation
 }
 
 // ============================================================================
@@ -3313,11 +3910,67 @@ func (m Model) View() string {
 	if m.navMode == MenuManagementMode {
 		menuManagementStr := m.renderMenuManagement()
 		m.overlayStringCentered(canvas, menuManagementStr)
+
+		// Add footer BEFORE returning
+		footer := m.renderFooter()
+		m.overlayString(canvas, footer, m.screenHeight-1, 0)
+
+		return m.canvasToString(canvas)
+	}
+
+	// Layer 1.8: Menu Modify (full screen mode) - but NOT when editing command
+	if m.navMode == MenuModifyMode || (m.navMode == EditingValue && m.editingMenu != nil && m.editingMenuCommand == nil) {
+		menuModifyStr := m.renderMenuModify()
+		m.overlayStringCenteredWithClear(canvas, menuModifyStr)
+
+		// Add breadcrumb when editing in menu modify mode
+		if m.navMode == EditingValue && m.editingMenu != nil {
+			breadcrumb := m.renderMenuModifyBreadcrumb()
+			m.overlayString(canvas, breadcrumb, m.screenHeight-3, 0)
+		}
+
+		// Add footer BEFORE returning
+		footer := m.renderFooter()
+		m.overlayString(canvas, footer, m.screenHeight-1, 0)
+
+		return m.canvasToString(canvas)
+	}
+
+	// Layer 1.10: Menu Edit Command (modal overlay)
+	if m.navMode == MenuEditCommandMode {
+		menuEditCommandStr := m.renderMenuEditCommand()
+		m.overlayStringCenteredWithClear(canvas, menuEditCommandStr)
+
+		// Add breadcrumb when editing command
+		breadcrumb := m.renderCommandEditBreadcrumb()
+		m.overlayString(canvas, breadcrumb, m.screenHeight-3, 0)
+
+		// Add footer BEFORE returning
+		footer := m.renderFooter()
+		m.overlayString(canvas, footer, m.screenHeight-1, 0)
+
+		return m.canvasToString(canvas)
+	}
+
+	// Layer 1.11: Editing a command field
+	if m.navMode == EditingValue && m.editingMenuCommand != nil {
+		// Still show the modal underneath, but with editing state
+		menuEditCommandStr := m.renderMenuEditCommand()
+		m.overlayStringCenteredWithClear(canvas, menuEditCommandStr)
+
+		// Add breadcrumb when editing command field
+		breadcrumb := m.renderCommandEditBreadcrumb()
+		m.overlayString(canvas, breadcrumb, m.screenHeight-3, 0)
+
+		// Add footer BEFORE returning
+		footer := m.renderFooter()
+		m.overlayString(canvas, footer, m.screenHeight-1, 0)
+
 		return m.canvasToString(canvas)
 	}
 
 	// Layer 2: Submenu (visible from Level2 onwards, but not if showing modal)
-	if m.navMode >= Level2MenuNavigation && !showAsModal {
+	if m.navMode >= Level2MenuNavigation && !showAsModal && m.navMode != MenuEditCommandMode {
 		isDimmed := m.navMode > Level2MenuNavigation
 		level2Str := m.renderLevel2Menu(isDimmed)
 		// Start at row 2 to leave space for persistent header
@@ -3325,7 +3978,7 @@ func (m Model) View() string {
 	}
 
 	// Layer 3: Field list (visible from Level3 onwards, but only if NOT showing as modal)
-	if m.navMode == Level3MenuNavigation && !showAsModal {
+	if m.navMode == Level3MenuNavigation && !showAsModal && m.navMode != MenuEditCommandMode {
 		// This means Level 3 has sub-sections to navigate
 		level3Str := m.renderLevel3Menu(false)
 
@@ -3381,8 +4034,66 @@ func (m Model) View() string {
 	return m.canvasToString(canvas)
 }
 
-// shouldRenderAsModal determines if current state should show a modal
+// Add a breadcrumb function for command editing
+func (m Model) renderCommandEditBreadcrumb() string {
+	var path strings.Builder
+
+	categoryStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("243")).
+		Bold(true)
+
+	arrowStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("240"))
+
+	detailStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("250"))
+
+	highlightStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("214")).
+		Bold(true)
+
+	editingStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("196")).
+		Bold(true)
+
+	// Show: Editors -> Edit Menu: MAIN -> Menu Commands -> Edit Command: R
+	path.WriteString(categoryStyle.Render("Editors"))
+	path.WriteString(arrowStyle.Render(" -> "))
+	path.WriteString(detailStyle.Render("Edit Menu: " + m.editingMenu.Name))
+	path.WriteString(arrowStyle.Render(" -> "))
+	path.WriteString(detailStyle.Render("Menu Commands"))
+
+	if m.editingMenuCommand != nil {
+		path.WriteString(arrowStyle.Render(" -> "))
+		path.WriteString(highlightStyle.Render("Edit Command: " + m.editingMenuCommand.Keys))
+
+		if m.navMode == EditingValue && m.editingItem != nil {
+			path.WriteString(arrowStyle.Render(" -> "))
+			path.WriteString(highlightStyle.Render(m.editingItem.Label))
+			path.WriteString(arrowStyle.Render(" -> "))
+			path.WriteString(editingStyle.Render("EDITING"))
+		}
+	}
+
+	breadcrumbText := " " + path.String()
+
+	return lipgloss.NewStyle().
+		Foreground(lipgloss.Color("243")).
+		Render(breadcrumbText)
+}
+
+// Update shouldRenderAsModal to include MenuEditCommandMode
 func (m *Model) shouldRenderAsModal() bool {
+	// Don't render as modal if we're editing menu data inline
+	if m.editingMenu != nil && m.navMode == EditingValue {
+		return false
+	}
+
+	// Render as modal for command editing
+	if m.navMode == MenuEditCommandMode {
+		return true
+	}
+
 	// If we're in Level 3 with modal fields, render as modal
 	if m.navMode == Level3MenuNavigation && len(m.modalFields) > 0 {
 		return true
@@ -3394,6 +4105,55 @@ func (m *Model) shouldRenderAsModal() bool {
 	}
 
 	return false
+}
+
+// Add this new function for menu modify breadcrumb
+func (m Model) renderMenuModifyBreadcrumb() string {
+	var path strings.Builder
+
+	categoryStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("243")).
+		Bold(true)
+
+	arrowStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("240"))
+
+	detailStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("250"))
+
+	highlightStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("214")).
+		Bold(true)
+
+	editingStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("196")).
+		Bold(true)
+
+	// Show: Editors -> Edit Menu: MAIN -> Field -> EDITING
+	path.WriteString(categoryStyle.Render("Editors"))
+	path.WriteString(arrowStyle.Render(" -> "))
+	path.WriteString(detailStyle.Render("Edit Menu: " + m.editingMenu.Name))
+
+	if m.currentMenuTab == 0 {
+		path.WriteString(arrowStyle.Render(" -> "))
+		path.WriteString(detailStyle.Render("Menu Data"))
+	} else {
+		path.WriteString(arrowStyle.Render(" -> "))
+		path.WriteString(detailStyle.Render("Menu Commands"))
+	}
+
+	if m.navMode == EditingValue && m.editingItem != nil {
+		path.WriteString(arrowStyle.Render(" -> "))
+		path.WriteString(highlightStyle.Render(m.editingItem.Label))
+		path.WriteString(arrowStyle.Render(" -> "))
+		path.WriteString(editingStyle.Render("EDITING"))
+	}
+
+	breadcrumbText := " " + path.String()
+
+	return lipgloss.NewStyle().
+		Foreground(lipgloss.Color("243")).
+		Render(breadcrumbText)
 }
 
 // renderMainMenu renders the centered main menu with left-justified items
@@ -3535,6 +4295,7 @@ func (m Model) renderModalForm() string {
 					} else {
 						fieldDisplay = fmt.Sprintf(" %-25s [ ] Yes  [N] No", field.EditableItem.Label+":")
 					}
+
 					fullRowStyle := lipgloss.NewStyle().
 						Background(lipgloss.Color(ColorAccent)).
 						Foreground(lipgloss.Color(ColorTextBright)).
@@ -3559,7 +4320,7 @@ func (m Model) renderModalForm() string {
 				labelText := fmt.Sprintf(" %-25s", field.EditableItem.Label+":")
 				valueText := " " + currentValueStr
 
-				availableValueSpace := modalWidth - 26 - 1
+				availableValueSpace := modalWidth - 26
 				if len(valueText) > availableValueSpace {
 					valueText = valueText[:availableValueSpace-3] + "..."
 				}
@@ -4159,6 +4920,21 @@ func (m *Model) seedDefaultMenu() error {
 	return nil
 }
 
+// loadMenuCommandsForEditing loads commands for the currently editing menu
+func (m *Model) loadMenuCommandsForEditing() error {
+	if m.editingMenu == nil {
+		return fmt.Errorf("no menu being edited")
+	}
+
+	commands, err := m.db.GetMenuCommands(m.editingMenu.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get menu commands: %w", err)
+	}
+
+	m.menuCommandsList = commands
+	return nil
+}
+
 // renderUserManagement renders the user management interface
 func (m Model) renderUserManagement() string {
 	if len(m.userListUI.Items()) == 0 {
@@ -4318,9 +5094,736 @@ func (m Model) renderMenuManagement() string {
 	return menuBox
 }
 
-// renderFooter generates simple footer
+// Update renderMenuModify to handle editing state
+func (m Model) renderMenuModify() string {
+	if m.editingMenu == nil {
+		emptyMsg := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorTextDim)).
+			Italic(true).
+			Render("No menu selected for editing")
+
+		emptyBox := lipgloss.NewStyle().
+			Background(lipgloss.Color(ColorBgMedium)).
+			Padding(2, 4).
+			Render(emptyMsg)
+
+		return emptyBox
+	}
+
+	width := 60
+
+	// Create header with menu name
+	headerStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorPrimary)).
+		Foreground(lipgloss.Color(ColorTextBright)).
+		Bold(true).
+		Width(width).
+		Align(lipgloss.Center)
+
+	header := headerStyle.Render(fmt.Sprintf("▸ Modify Menu: %s ◂", m.editingMenu.Name))
+
+	// Create tab bar
+	tabNames := []string{"Menu Data", "Menu Commands"}
+	var tabParts []string
+
+	for i, name := range tabNames {
+		var style lipgloss.Style
+		if i == m.currentMenuTab {
+			style = lipgloss.NewStyle().
+				Background(lipgloss.Color(ColorAccent)).
+				Foreground(lipgloss.Color(ColorTextBright)).
+				Bold(true).
+				Width(15).
+				Align(lipgloss.Center)
+		} else {
+			style = lipgloss.NewStyle().
+				Background(lipgloss.Color(ColorBgGrey)).
+				Foreground(lipgloss.Color(ColorTextNormal)).
+				Width(15).
+				Align(lipgloss.Center)
+		}
+		tabParts = append(tabParts, style.Render(fmt.Sprintf(" %s ", name)))
+	}
+
+	tabSeparator := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(ColorBgLight)).
+		Render(" │ ")
+
+	tabsLine := strings.Join(tabParts, tabSeparator)
+
+	padding := (width - m.visualWidth(tabsLine)) / 2
+	if padding > 0 {
+		tabsLine = strings.Repeat(" ", padding) + tabsLine
+	}
+
+	tabBar := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorBgMedium)).
+		Width(width).
+		Render(tabsLine)
+
+	separatorStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorBgMedium)).
+		Foreground(lipgloss.Color(ColorPrimary)).
+		Width(width)
+	separator := separatorStyle.Render(strings.Repeat("─", width))
+
+	var contentLines []string
+
+	// Render content based on tab, handling editing state
+	if m.currentMenuTab == 0 {
+		// Menu Data tab
+		contentLines = m.renderMenuDataListWithEditing(width)
+	} else {
+		// Commands tab
+		contentLines = m.renderCommandList(width)
+	}
+
+	footerSeparator := separatorStyle.Render(strings.Repeat("─", width))
+
+	allLines := []string{header, tabBar, separator}
+	allLines = append(allLines, contentLines...)
+	allLines = append(allLines, footerSeparator)
+
+	combined := strings.Join(allLines, "\n")
+
+	menuBox := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorBgMedium)).
+		Render(combined)
+
+	return menuBox
+}
+
+// Add new function to handle editing in the menu data list
+func (m Model) renderMenuDataListWithEditing(width int) []string {
+	if len(m.modalFields) == 0 {
+		return []string{
+			lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorTextDim)).
+				Background(lipgloss.Color(ColorBgMedium)).
+				Width(width - 4).
+				Render(" No menu data fields available"),
+		}
+	}
+
+	// Check if we're actively editing
+	isEditing := m.navMode == EditingValue
+
+	var dataLines []string
+	for i, field := range m.modalFields {
+		if field.ItemType == EditableField && field.EditableItem != nil {
+			currentValue := field.EditableItem.Field.GetValue()
+			valueStr := formatValue(currentValue, field.EditableItem.ValueType)
+
+			isSelected := i == m.selectedCommandIndex
+
+			if isSelected && isEditing {
+				// EDITING MODE: Full row highlight with inline input
+				if field.EditableItem.ValueType == BoolValue {
+					currentBool := currentValue.(bool)
+					var fieldDisplay string
+					if currentBool {
+						fieldDisplay = fmt.Sprintf(" %-20s: [Y] Yes  [ ] No", field.EditableItem.Label)
+					} else {
+						fieldDisplay = fmt.Sprintf(" %-20s: [ ] Yes  [N] No", field.EditableItem.Label)
+					}
+
+					fullRowStyle := lipgloss.NewStyle().
+						Background(lipgloss.Color(ColorAccent)).
+						Foreground(lipgloss.Color(ColorTextBright)).
+						Bold(true).
+						Width(width - 4)
+					dataLines = append(dataLines, fullRowStyle.Render(fieldDisplay))
+				} else {
+					label := fmt.Sprintf(" %-20s:", field.EditableItem.Label)
+
+					fullRowStyle := lipgloss.NewStyle().
+						Background(lipgloss.Color(ColorAccent)).
+						Foreground(lipgloss.Color(ColorTextBright)).
+						Bold(true).
+						Width(width - 4)
+
+					inlineDisplay := label + " " + m.textInput.View()
+					dataLines = append(dataLines, fullRowStyle.Render(inlineDisplay))
+				}
+			} else if isSelected && !isEditing {
+				// SELECTION MODE: Split highlighting - only highlight the label
+				labelText := fmt.Sprintf(" %-20s:", field.EditableItem.Label)
+				valueText := " " + valueStr
+
+				labelWidth := 22
+				availableValueSpace := width - 4 - labelWidth
+				if len(valueText) > availableValueSpace {
+					valueText = valueText[:availableValueSpace-3] + "..."
+				}
+
+				labelStyle := lipgloss.NewStyle().
+					Background(lipgloss.Color(ColorAccent)).
+					Foreground(lipgloss.Color(ColorTextBright)).
+					Bold(true).
+					Width(labelWidth)
+
+				valueStyle := lipgloss.NewStyle().
+					Background(lipgloss.Color(ColorBgMedium)).
+					Foreground(lipgloss.Color(ColorTextNormal)).
+					Width(width - 4 - labelWidth)
+
+				label := labelStyle.Render(labelText)
+				value := valueStyle.Render(valueText)
+
+				dataLines = append(dataLines, label+value)
+			} else {
+				// UNSELECTED: Normal display
+				maxValueLen := 30
+				if len(valueStr) > maxValueLen {
+					valueStr = valueStr[:maxValueLen-3] + "..."
+				}
+
+				line := fmt.Sprintf(" %-20s: %s", field.EditableItem.Label, valueStr)
+				if len(line) > width-4 {
+					line = line[:width-7] + "..."
+				}
+
+				style := lipgloss.NewStyle().
+					Foreground(lipgloss.Color(ColorTextNormal)).
+					Background(lipgloss.Color(ColorBgMedium)).
+					Width(width - 4)
+
+				dataLines = append(dataLines, style.Render(line))
+			}
+		}
+	}
+
+	// Pad to 14 lines
+	for len(dataLines) < 14 {
+		dataLines = append(dataLines, lipgloss.NewStyle().
+			Background(lipgloss.Color(ColorBgMedium)).
+			Width(width-4).
+			Render(""))
+	}
+
+	return dataLines
+}
+
+// renderCommandList renders the command list for the commands tab
+func (m Model) renderCommandList(width int) []string {
+	var commandLines []string
+	for i, cmd := range m.menuCommandsList {
+		// Format: [CommandNumber] [Keys] [ShortDescription]
+		line := fmt.Sprintf(" %d. %-3s %s", cmd.CommandNumber, cmd.Keys, cmd.ShortDescription)
+		if len(line) > width-4 {
+			line = line[:width-7] + "..."
+		}
+		if len(line) < width-4 {
+			line += strings.Repeat(" ", width-4-len(line))
+		}
+
+		var style lipgloss.Style
+		if i == m.selectedCommandIndex {
+			style = lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorTextBright)).
+				Background(lipgloss.Color(ColorAccent)).
+				Bold(true).
+				Width(width - 4)
+		} else {
+			style = lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorTextNormal)).
+				Background(lipgloss.Color(ColorBgMedium)).
+				Width(width - 4)
+		}
+		commandLines = append(commandLines, style.Render(line))
+	}
+
+	// If no commands, show message
+	if len(commandLines) == 0 {
+		commandLines = []string{
+			lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorTextDim)).
+				Background(lipgloss.Color(ColorBgMedium)).
+				Width(width - 4).
+				Render(" No commands defined - press 'I' to add"),
+		}
+	}
+
+	// Pad to 14 lines to match menu data list height
+	for len(commandLines) < 14 {
+		commandLines = append(commandLines, lipgloss.NewStyle().
+			Background(lipgloss.Color(ColorBgMedium)).
+			Width(width-4).
+			Render(""))
+	}
+
+	return commandLines
+}
+
+// setupMenuEditCommandModal sets up modal fields for command editing
+func (m *Model) setupMenuEditCommandModal() {
+	if m.editingMenuCommand == nil {
+		return
+	}
+
+	// Create modal fields for command editing
+	m.modalFields = []SubmenuItem{
+		{
+			ID:       "command-number",
+			Label:    "Command Number",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "command-number",
+				Label:     "Command Number",
+				ValueType: IntValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenuCommand.CommandNumber },
+					SetValue: func(v interface{}) error {
+						m.editingMenuCommand.CommandNumber = v.(int)
+						return nil
+					},
+				},
+				HelpText: "Command number in menu",
+			},
+		},
+		{
+			ID:       "command-keys",
+			Label:    "Keys",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "command-keys",
+				Label:     "Keys",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenuCommand.Keys },
+					SetValue: func(v interface{}) error {
+						m.editingMenuCommand.Keys = v.(string)
+						return nil
+					},
+				},
+				HelpText: "Hotkeys for this command",
+			},
+		},
+		{
+			ID:       "command-long-description",
+			Label:    "Long Description",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "command-long-description",
+				Label:     "Long Description",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenuCommand.LongDescription },
+					SetValue: func(v interface{}) error {
+						m.editingMenuCommand.LongDescription = v.(string)
+						return nil
+					},
+				},
+				HelpText: "Long description for help display",
+			},
+		},
+		{
+			ID:       "command-short-description",
+			Label:    "Short Description",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "command-short-description",
+				Label:     "Short Description",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenuCommand.ShortDescription },
+					SetValue: func(v interface{}) error {
+						m.editingMenuCommand.ShortDescription = v.(string)
+						return nil
+					},
+				},
+				HelpText: "Short description for menu display",
+			},
+		},
+		{
+			ID:       "command-acs-required",
+			Label:    "ACS Required",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "command-acs-required",
+				Label:     "ACS Required",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenuCommand.ACSRequired },
+					SetValue: func(v interface{}) error {
+						m.editingMenuCommand.ACSRequired = v.(string)
+						return nil
+					},
+				},
+				HelpText: "Access Control String required",
+			},
+		},
+		{
+			ID:       "command-cmdkeys",
+			Label:    "CmdKeys",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "command-cmdkeys",
+				Label:     "CmdKeys",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenuCommand.CmdKeys },
+					SetValue: func(v interface{}) error {
+						m.editingMenuCommand.CmdKeys = v.(string)
+						return nil
+					},
+				},
+				HelpText: "Command key for execution handler",
+			},
+		},
+		{
+			ID:       "command-options",
+			Label:    "Options",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "command-options",
+				Label:     "Options",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenuCommand.Options },
+					SetValue: func(v interface{}) error {
+						m.editingMenuCommand.Options = v.(string)
+						return nil
+					},
+				},
+				HelpText: "Command options/parameters",
+			},
+		},
+		{
+			ID:       "command-flags",
+			Label:    "Flags",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "command-flags",
+				Label:     "Flags",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenuCommand.Flags },
+					SetValue: func(v interface{}) error {
+						m.editingMenuCommand.Flags = v.(string)
+						return nil
+					},
+				},
+				HelpText: "Command flags",
+			},
+		},
+	}
+
+	m.modalFieldIndex = 0
+	m.modalSectionName = fmt.Sprintf("Edit Command: %s", m.editingMenuCommand.Keys)
+}
+
+// setupMenuEditDataModal sets up modal fields for menu data editing
+func (m *Model) setupMenuEditDataModal() {
+	// Create modal fields for menu data editing
+	m.modalFields = []SubmenuItem{
+		{
+			ID:       "menu-name",
+			Label:    "Name",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "menu-name",
+				Label:     "Name",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenu.Name },
+					SetValue: func(v interface{}) error {
+						m.editingMenu.Name = v.(string)
+						return nil
+					},
+				},
+				HelpText: "Menu name (unique identifier)",
+			},
+		},
+		{
+			ID:       "menu-titles",
+			Label:    "Titles",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "menu-titles",
+				Label:     "Titles",
+				ValueType: ListValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return strings.Join(m.editingMenu.Titles, ", ") },
+					SetValue: func(v interface{}) error {
+						s := v.(string)
+						m.editingMenu.Titles = nil
+						for _, title := range strings.Split(s, ",") {
+							title = strings.TrimSpace(title)
+							if title != "" {
+								m.editingMenu.Titles = append(m.editingMenu.Titles, title)
+							}
+						}
+						return nil
+					},
+				},
+				HelpText: "Menu titles (comma-separated)",
+			},
+		},
+		{
+			ID:       "menu-help-file",
+			Label:    "Help File",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "menu-help-file",
+				Label:     "Help File",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenu.HelpFile },
+					SetValue: func(v interface{}) error {
+						m.editingMenu.HelpFile = v.(string)
+						return nil
+					},
+				},
+				HelpText: "Help file path",
+			},
+		},
+		{
+			ID:       "menu-long-help-file",
+			Label:    "Long Help File",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "menu-long-help-file",
+				Label:     "Long Help File",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenu.LongHelpFile },
+					SetValue: func(v interface{}) error {
+						m.editingMenu.LongHelpFile = v.(string)
+						return nil
+					},
+				},
+				HelpText: "Long help file path",
+			},
+		},
+		{
+			ID:       "menu-prompt",
+			Label:    "Prompt",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "menu-prompt",
+				Label:     "Prompt",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenu.Prompt },
+					SetValue: func(v interface{}) error {
+						m.editingMenu.Prompt = v.(string)
+						return nil
+					},
+				},
+				HelpText: "Menu prompt text",
+			},
+		},
+		{
+			ID:       "menu-acs-required",
+			Label:    "ACS Required",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "menu-acs-required",
+				Label:     "ACS Required",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenu.ACSRequired },
+					SetValue: func(v interface{}) error {
+						m.editingMenu.ACSRequired = v.(string)
+						return nil
+					},
+				},
+				HelpText: "Access Control String required",
+			},
+		},
+		{
+			ID:       "menu-fallback-menu",
+			Label:    "Fallback Menu",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "menu-fallback-menu",
+				Label:     "Fallback Menu",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenu.FallbackMenu },
+					SetValue: func(v interface{}) error {
+						m.editingMenu.FallbackMenu = v.(string)
+						return nil
+					},
+				},
+				HelpText: "Fallback menu name",
+			},
+		},
+		{
+			ID:       "menu-forced-help-level",
+			Label:    "Forced Help Level",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "menu-forced-help-level",
+				Label:     "Forced Help Level",
+				ValueType: IntValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenu.ForcedHelpLevel },
+					SetValue: func(v interface{}) error {
+						m.editingMenu.ForcedHelpLevel = v.(int)
+						return nil
+					},
+				},
+				HelpText: "Forced help level (0-3)",
+				Validation: func(v interface{}) error {
+					level := v.(int)
+					if level < 0 || level > 3 {
+						return fmt.Errorf("help level must be between 0 and 3")
+					}
+					return nil
+				},
+			},
+		},
+		{
+			ID:       "menu-generic-columns",
+			Label:    "Generic Columns",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "menu-generic-columns",
+				Label:     "Columns",
+				ValueType: IntValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenu.GenericColumns },
+					SetValue: func(v interface{}) error {
+						m.editingMenu.GenericColumns = v.(int)
+						return nil
+					},
+				},
+				HelpText: "Number of columns for generic display",
+			},
+		},
+		{
+			ID:       "menu-generic-bracket-color",
+			Label:    "Bracket Color",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "menu-generic-bracket-color",
+				Label:     "Bracket Color",
+				ValueType: IntValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenu.GenericBracketColor },
+					SetValue: func(v interface{}) error {
+						m.editingMenu.GenericBracketColor = v.(int)
+						return nil
+					},
+				},
+				HelpText: "Color for brackets in generic display",
+			},
+		},
+		{
+			ID:       "menu-generic-command-color",
+			Label:    "Command Color",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "menu-generic-command-color",
+				Label:     "Command Color",
+				ValueType: IntValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenu.GenericCommandColor },
+					SetValue: func(v interface{}) error {
+						m.editingMenu.GenericCommandColor = v.(int)
+						return nil
+					},
+				},
+				HelpText: "Color for commands in generic display",
+			},
+		},
+		{
+			ID:       "menu-generic-desc-color",
+			Label:    "Desc Color",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "menu-generic-desc-color",
+				Label:     "Desc Color",
+				ValueType: IntValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenu.GenericDescColor },
+					SetValue: func(v interface{}) error {
+						m.editingMenu.GenericDescColor = v.(int)
+						return nil
+					},
+				},
+				HelpText: "Color for descriptions in generic display",
+			},
+		},
+		{
+			ID:       "menu-flags",
+			Label:    "Flags",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "menu-flags",
+				Label:     "Flags",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenu.Flags },
+					SetValue: func(v interface{}) error {
+						m.editingMenu.Flags = v.(string)
+						return nil
+					},
+				},
+				HelpText: "Menu flags",
+			},
+		},
+	}
+
+	m.modalFieldIndex = 0
+	m.modalSectionName = fmt.Sprintf("Edit Menu: %s", m.editingMenu.Name)
+}
+
+// renderMenuEditCommand renders the menu edit command modal
+func (m Model) renderMenuEditCommand() string {
+	if m.editingMenuCommand == nil {
+		return "No command selected for editing"
+	}
+
+	// Use the existing modal rendering
+	return m.renderModalForm()
+}
+
+// Update renderFooter to show correct footer when editing in MenuModifyMode
 func (m Model) renderFooter() string {
-	footerText := "  F1  Help   ESC Exit"
+	var footerText string
+
+	switch m.navMode {
+	case MainMenuNavigation:
+		footerText = "  ↑↓ Navigate   ENTER Select   ESC Exit"
+	case Level2MenuNavigation:
+		footerText = "  ↑↓ Navigate   ENTER Select   ESC Back"
+	case Level3MenuNavigation:
+		footerText = "  ↑↓ Navigate   ENTER Edit   ESC Back"
+	case Level4ModalNavigation:
+		footerText = "  ↑↓ Navigate   ENTER Edit   ESC Back"
+	case EditingValue:
+		// Check if editing in menu modify mode
+		if m.editingMenu != nil {
+			footerText = "  ENTER Save   ESC Cancel"
+		} else {
+			footerText = "  ENTER Save   ESC Cancel"
+		}
+	case UserManagementMode:
+		footerText = "  ↑↓ Navigate   ENTER Edit   ESC Back"
+	case SecurityLevelsMode:
+		footerText = "  ↑↓ Navigate   ENTER Edit   ESC Back"
+	case MenuManagementMode:
+		footerText = "  ↑↓ Navigate   ENTER/M Modify   I Insert   D Delete   ESC Back"
+	case MenuModifyMode:
+		if m.currentMenuTab == 0 {
+			footerText = "  ↑↓ Navigate   ENTER Edit   TAB Switch   ESC Back"
+		} else {
+			footerText = "  ↑↓ Navigate   ENTER Edit   I Insert   D Delete   TAB Switch   ESC Back"
+		}
+	case MenuEditDataMode:
+		footerText = "  ↑↓ Navigate   ENTER Edit   ESC Back"
+	case MenuEditCommandMode:
+		footerText = "  ↑↓ Navigate   ENTER Edit   ESC Back to Commands"
+	case SavePrompt:
+		footerText = "  Y Yes   N No   ESC Cancel"
+	case SaveChangesPrompt:
+		footerText = "  Y Yes   N No   ESC Cancel"
+	default:
+		footerText = "  F1 Help   ESC Exit"
+	}
 
 	// Style the footer with full width
 	footer := lipgloss.NewStyle().

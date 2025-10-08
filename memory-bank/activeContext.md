@@ -2,6 +2,12 @@
 
 ## Current Focus
 
+- Implementing Menu Editor to allow constructing of menus in TUI
+- Create essential menu commands/command keys
+- build the UI experience in the BBS for menus
+
+## Next Focus
+
 - Implementing JAM message base functionality and user interface
 - Building message reading, posting, and area management features
 - Adding echomail and netmail support for FidoNet networking

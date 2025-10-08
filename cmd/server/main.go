@@ -39,14 +39,64 @@ func fileExists(path string) bool {
 
 func seedDefaultMenu(db database.Database) error {
 	// Check if MAIN menu already exists
-	_, err := db.GetMenuByName("MAIN")
+	menu, err := db.GetMenuByName("MAIN")
 	if err == nil {
-		// Menu already exists, skip seeding
+		// Menu exists, check if it has commands
+		commands, err := db.GetMenuCommands(menu.ID)
+		if err != nil {
+			return fmt.Errorf("failed to get menu commands: %w", err)
+		}
+		if len(commands) > 0 {
+			// Already has commands, skip
+			return nil
+		}
+		// Add default commands
+		defaultCommands := []database.MenuCommand{
+			{
+				MenuID:           menu.ID,
+				CommandNumber:    1,
+				Keys:             "R",
+				LongDescription:  "(R)ead Mail - Read private Electronic mail",
+				ShortDescription: "(R)ead Mail",
+				ACSRequired:      "",
+				CmdKeys:          "MM",
+				Options:          "",
+				Flags:            "",
+			},
+			{
+				MenuID:           menu.ID,
+				CommandNumber:    2,
+				Keys:             "P",
+				LongDescription:  "(P)ost Message - Post a message",
+				ShortDescription: "(P)ost Message",
+				ACSRequired:      "",
+				CmdKeys:          "MP",
+				Options:          "",
+				Flags:            "",
+			},
+			{
+				MenuID:           menu.ID,
+				CommandNumber:    3,
+				Keys:             "G",
+				LongDescription:  "(G)oodbye - Logout and disconnect",
+				ShortDescription: "(G)oodbye",
+				ACSRequired:      "",
+				CmdKeys:          "G",
+				Options:          "",
+				Flags:            "",
+			},
+		}
+		for _, cmd := range defaultCommands {
+			_, err := db.CreateMenuCommand(&cmd)
+			if err != nil {
+				return fmt.Errorf("failed to create menu command %s: %w", cmd.Keys, err)
+			}
+		}
 		return nil
 	}
 
-	// Create MAIN menu
-	menu := &database.Menu{
+	// Menu doesn't exist, create it with commands
+	menu = &database.Menu{
 		Name:                "MAIN",
 		Titles:              []string{"-= Retrograde BBS =-", "-- Main Menu --"},
 		HelpFile:            "",

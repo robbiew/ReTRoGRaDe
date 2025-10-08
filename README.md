@@ -31,7 +31,7 @@ As a hobbyist Go developer, I'm leveraging AI tools like Roo Code to accelerate 
 | Node Management | 100% | Completed |
 | Login UI | 50% | Needs layout work |
 | Event System | 0% | e.g. Logon Event List -> main menu |
-| Menu Construction System | 0% | Renegade-style system for constructing menus and prompts |
+| Menu Construction System | 25% | Renegade-style system (TUI) for constructing menus and prompts |
 | Message Base Configuration & UI | 0% | JAM format: local, echomail (FTN), netmail, User-to-User |
 | Message Editor (basic) | 0% | Simple FSE |
 | Message Reader (basic) | 0% | Simple FSR |
