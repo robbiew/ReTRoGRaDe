@@ -18,6 +18,45 @@ import (
 )
 
 // ============================================================================
+// Color Scheme & Styling
+// ============================================================================
+
+// Color palette for modern theme
+const (
+	// Primary colors
+	ColorPrimary     = "39"  // Bright blue
+	ColorPrimaryDark = "33"  // Dark blue
+	ColorAccent      = "170" // Purple/magenta
+	ColorAccentLight = "177" // Light purple
+
+	// Backgrounds
+	ColorBgDark   = "235" // Very dark gray
+	ColorBgMedium = "237" // Medium dark gray
+	ColorBgLight  = "239" // Lighter gray
+
+	// Text colors
+	ColorTextBright = "15"  // White
+	ColorTextNormal = "252" // Light gray
+	ColorTextDim    = "243" // Dim gray
+	ColorTextAccent = "213" // Pink
+
+	// Status colors
+	ColorSuccess = "42"  // Green
+	ColorWarning = "214" // Orange
+	ColorError   = "196" // Red
+	ColorInfo    = "117" // Sky blue
+)
+
+// Background texture patterns
+var (
+	TexturePattern1 = "░" // Light shade
+	TexturePattern2 = "▒" // Medium shade
+	TexturePattern3 = "▓" // Dark shade
+	TextureDot      = "·"
+	TextureBox      = "▪"
+)
+
+// ============================================================================
 // Core Data Structures & Menu Bar
 // ============================================================================
 
@@ -55,6 +94,8 @@ const (
 	EditingValue                                // Editing a value in modal form
 	UserManagementMode                          // User management interface
 	SavePrompt                                  // Confirming save on exit
+	SaveChangesPrompt                           // NEW: Prompt to save changes when exiting edit modal
+
 )
 
 // Model represents the complete application state
@@ -85,7 +126,7 @@ type Model struct {
 	originalValue interface{}
 
 	// User management state
-	userList       []database.UserRecord // List of users for management
+	userList []database.UserRecord // List of users for management
 
 	// UI state
 	screenWidth   int
@@ -96,6 +137,9 @@ type Model struct {
 	savePrompt    bool
 	quitting      bool
 	modifiedCount int
+
+	savePromptSelection int            // 0 = No, 1 = Yes
+	returnToMode        NavigationMode // Where to return after save prompt
 }
 
 // MessageType defines the type of status message
@@ -200,8 +244,8 @@ func (d submenuDelegate) Render(w io.Writer, m list.Model, index int, listItem l
 	var str string
 	isSelected := index == m.Index()
 
-	// Get item text with leading space for padding
-	itemText := " " + item.submenuItem.Label
+	// Get item text with icon
+	itemText := " ▪ " + item.submenuItem.Label
 
 	// Truncate if text is too long
 	if len(itemText) > d.maxWidth {
@@ -214,20 +258,20 @@ func (d submenuDelegate) Render(w io.Writer, m list.Model, index int, listItem l
 		padding = strings.Repeat(" ", d.maxWidth-len(itemText))
 	}
 
-	// Render with full-width lightbar (no prefix characters)
+	// Render with modern colors
 	if isSelected {
-		// Selected section: white on blue, full width
+		// Selected: bright accent color
 		style := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("15")).
-			Background(lipgloss.Color("33")).
+			Foreground(lipgloss.Color(ColorTextBright)).
+			Background(lipgloss.Color(ColorAccent)).
 			Bold(true).
 			Width(d.maxWidth)
 		str = style.Render(itemText + padding)
 	} else {
-		// Unselected section: gray text, full width with background
+		// Unselected: subtle
 		style := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("250")).
-			Background(lipgloss.Color("235")).
+			Foreground(lipgloss.Color(ColorTextNormal)).
+			Background(lipgloss.Color(ColorBgMedium)).
 			Width(d.maxWidth)
 		str = style.Render(itemText + padding)
 	}
@@ -1369,14 +1413,14 @@ func InitialModelV2(cfg *config.Config) Model {
 	// Calculate max width for light bar - narrow width for level 2 menus
 	maxWidth := 25
 
-submenuList := list.New(listItems, submenuDelegate{maxWidth: maxWidth}, maxWidth, 10)
+	submenuList := list.New(listItems, submenuDelegate{maxWidth: maxWidth}, maxWidth, 10)
 	submenuList.Title = ""
 	submenuList.SetShowStatusBar(false)
 	submenuList.SetFilteringEnabled(false)
 	submenuList.SetShowHelp(false)
 	submenuList.SetShowPagination(false)
 
-	// Apply Mystic BBS styling to the list
+	// Remove any default list styling/padding
 	submenuList.Styles.Title = lipgloss.NewStyle()
 	submenuList.Styles.PaginationStyle = lipgloss.NewStyle()
 	submenuList.Styles.HelpStyle = lipgloss.NewStyle()
@@ -1471,6 +1515,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleUserManagement(msg)
 		case SavePrompt:
 			return m.handleSavePrompt(msg)
+		case SaveChangesPrompt: // ADD THIS
+			return m.handleSaveChangesPrompt(msg)
+
 		}
 	}
 
@@ -1548,8 +1595,43 @@ func (m Model) handleLevel4ModalNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 		}
 		return m, nil
 	case "esc":
-		// Check if we came from Level 3 with sub-sections, or directly from Level 2
-		// Look at modalFields to see if they contain sub-sections
+		// Check if there are unsaved changes in this modal
+		hasUnsavedChanges := false
+		for _, field := range m.modalFields {
+			if field.ItemType == EditableField && field.EditableItem != nil {
+				// You could track which fields were modified, or just check modifiedCount
+				if m.modifiedCount > 0 {
+					hasUnsavedChanges = true
+					break
+				}
+			}
+		}
+
+		if hasUnsavedChanges {
+			// Show save prompt
+			m.savePrompt = true
+			m.savePromptSelection = 1 // Default to Yes
+			m.navMode = SaveChangesPrompt
+
+			// Remember where to go after save/cancel
+			hasSubSections := false
+			for _, field := range m.modalFields {
+				if field.ItemType == SectionHeader {
+					hasSubSections = true
+					break
+				}
+			}
+
+			if hasSubSections {
+				m.returnToMode = Level3MenuNavigation
+			} else {
+				m.returnToMode = Level2MenuNavigation
+			}
+
+			return m, nil
+		}
+
+		// No unsaved changes, exit normally
 		hasSubSections := false
 		for _, field := range m.modalFields {
 			if field.ItemType == SectionHeader {
@@ -1559,10 +1641,8 @@ func (m Model) handleLevel4ModalNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 		}
 
 		if hasSubSections {
-			// Return to Level 3 menu navigation (sub-sections exist)
 			m.navMode = Level3MenuNavigation
 		} else {
-			// No sub-sections, return directly to Level 2
 			m.navMode = Level2MenuNavigation
 			m.modalFields = nil
 			m.modalFieldIndex = 0
@@ -1570,6 +1650,80 @@ func (m Model) handleLevel4ModalNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 		}
 		m.message = ""
 		return m, nil
+	}
+	return m, nil
+}
+
+// handleSaveChangesPrompt processes input during save changes confirmation
+func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "left", "h", "right", "l", "tab":
+		// Toggle between Yes and No
+		m.savePromptSelection = (m.savePromptSelection + 1) % 2
+		return m, nil
+	case "up", "k":
+		m.savePromptSelection = 1
+		return m, nil
+	case "down", "j":
+		m.savePromptSelection = 0
+		return m, nil
+	case "enter":
+		if m.savePromptSelection == 1 {
+			// Yes - Save changes
+			if err := config.SaveConfig(m.config, ""); err != nil {
+				m.message = fmt.Sprintf("Error saving: %v", err)
+				m.messageTime = time.Now()
+				m.messageType = ErrorMessage
+				m.savePrompt = false
+				m.navMode = m.returnToMode
+				return m, nil
+			}
+			// DON'T show success message - just reset counter
+			m.modifiedCount = 0 // Reset counter
+		}
+		// Either way, return to previous mode
+		m.savePrompt = false
+		m.navMode = m.returnToMode
+
+		// Clean up modal if returning to Level 2
+		if m.returnToMode == Level2MenuNavigation {
+			m.modalFields = nil
+			m.modalFieldIndex = 0
+			m.modalSectionName = ""
+		}
+		return m, nil
+	case "y", "Y":
+		// Save and return
+		if err := config.SaveConfig(m.config, ""); err != nil {
+			m.message = fmt.Sprintf("Error saving: %v", err)
+			m.messageTime = time.Now()
+			m.messageType = ErrorMessage
+		} else {
+			// DON'T show success message - just reset counter
+			m.modifiedCount = 0
+		}
+		m.savePrompt = false
+		m.navMode = m.returnToMode
+		if m.returnToMode == Level2MenuNavigation {
+			m.modalFields = nil
+			m.modalFieldIndex = 0
+			m.modalSectionName = ""
+		}
+		return m, nil
+	case "n", "N":
+		// Don't save, just return
+		m.savePrompt = false
+		m.navMode = m.returnToMode
+		if m.returnToMode == Level2MenuNavigation {
+			m.modalFields = nil
+			m.modalFieldIndex = 0
+			m.modalSectionName = ""
+		}
+		return m, nil
+	case "esc":
+		// Cancel - return to modal
+		m.savePrompt = false
+		m.navMode = Level4ModalNavigation
 	}
 	return m, nil
 }
@@ -1605,8 +1759,10 @@ func (m Model) handleMainMenuNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.submenuList.SetItems(listItems)
 		m.submenuList.Select(0)
 		m.message = ""
-	case "q":
+	case "esc":
+		// Show exit confirmation modal
 		m.savePrompt = true
+		m.savePromptSelection = 0 // Default to "No" (index 0)
 		m.navMode = SavePrompt
 	case "1", "2", "3", "4", "5":
 		// Direct menu access
@@ -1681,55 +1837,55 @@ func (m Model) handleLevel2MenuNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					}
 					m.message = ""
 				} else {
-				    m.message = "This section has no sub-items"
-				    m.messageTime = time.Now()
+					m.message = "This section has no sub-items"
+					m.messageTime = time.Now()
 				}
 			} else if item.submenuItem.ItemType == ActionItem {
-			    // Handle action items
-			    if item.submenuItem.ID == "user-editor" {
-			        // Launch user management interface
-			        // Check if database path is configured
-			        if m.config.Configuration.Paths.Database == "" {
-			            m.message = "Database path not configured. Please set it under Configuration > Paths > Database first."
-			            m.messageTime = time.Now()
-			            return m, nil
-			        }
+				// Handle action items
+				if item.submenuItem.ID == "user-editor" {
+					// Launch user management interface
+					// Check if database path is configured
+					if m.config.Configuration.Paths.Database == "" {
+						m.message = "Database path not configured. Please set it under Configuration > Paths > Database first."
+						m.messageTime = time.Now()
+						return m, nil
+					}
 
-			        // Try to get database connection if not already available
-			        if m.db == nil {
-			            if existingDB := config.GetDatabase(); existingDB != nil {
-			                if sqliteDB, ok := existingDB.(*database.SQLiteDB); ok {
-			                    m.db = sqliteDB
-			                    // Ensure user schema is initialized
-			                    if err := m.db.InitializeSchema(); err != nil {
-			                        m.message = fmt.Sprintf("Failed to initialize database schema: %v", err)
-			                        m.messageTime = time.Now()
-			                        return m, nil
-			                    }
-			                } else {
-			                    m.message = "Database connection type mismatch"
-			                    m.messageTime = time.Now()
-			                    return m, nil
-			                }
-			            } else {
-			                m.message = "No database connection available"
-			                m.messageTime = time.Now()
-			                return m, nil
-			            }
-			        }
+					// Try to get database connection if not already available
+					if m.db == nil {
+						if existingDB := config.GetDatabase(); existingDB != nil {
+							if sqliteDB, ok := existingDB.(*database.SQLiteDB); ok {
+								m.db = sqliteDB
+								// Ensure user schema is initialized
+								if err := m.db.InitializeSchema(); err != nil {
+									m.message = fmt.Sprintf("Failed to initialize database schema: %v", err)
+									m.messageTime = time.Now()
+									return m, nil
+								}
+							} else {
+								m.message = "Database connection type mismatch"
+								m.messageTime = time.Now()
+								return m, nil
+							}
+						} else {
+							m.message = "No database connection available"
+							m.messageTime = time.Now()
+							return m, nil
+						}
+					}
 
-			        // Load users
-			        if err := m.loadUsers(); err != nil {
-			            m.message = fmt.Sprintf("Error loading users: %v", err)
-			            m.messageTime = time.Now()
-			        } else {
-			            m.navMode = UserManagementMode
-			            m.message = ""
-			        }
-			    } else {
-			        m.message = fmt.Sprintf("Action '%s' not implemented yet", item.submenuItem.Label)
-			        m.messageTime = time.Now()
-			    }
+					// Load users
+					if err := m.loadUsers(); err != nil {
+						m.message = fmt.Sprintf("Error loading users: %v", err)
+						m.messageTime = time.Now()
+					} else {
+						m.navMode = UserManagementMode
+						m.message = ""
+					}
+				} else {
+					m.message = fmt.Sprintf("Action '%s' not implemented yet", item.submenuItem.Label)
+					m.messageTime = time.Now()
+				}
 			}
 		}
 	case "esc":
@@ -1830,27 +1986,156 @@ func (m Model) handleLevel3MenuNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // handleSavePrompt processes input during save confirmation
 func (m Model) handleSavePrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
+	case "left", "h", "right", "l", "tab":
+		// Toggle between Yes and No
+		m.savePromptSelection = (m.savePromptSelection + 1) % 2
+		return m, nil
+	case "up", "k":
+		// Move to Yes (1)
+		m.savePromptSelection = 1
+		return m, nil
+	case "down", "j":
+		// Move to No (0)
+		m.savePromptSelection = 0
+		return m, nil
+	case "enter":
+		// Execute based on selection
+		if m.savePromptSelection == 1 {
+			// Yes - Save and quit
+			if err := config.SaveConfig(m.config, ""); err != nil {
+				m.message = fmt.Sprintf("Error saving: %v", err)
+				m.savePrompt = false
+				return m, nil
+			}
+			m.message = "Configuration saved to database" // Show ONLY this message
+			m.quitting = true
+			return m, tea.Quit
+		} else {
+			// No - Quit without saving
+			m.quitting = true
+			return m, tea.Quit
+		}
 	case "y", "Y":
-		// Save and quit
+		// Shortcut for Yes
 		if err := config.SaveConfig(m.config, ""); err != nil {
 			m.message = fmt.Sprintf("Error saving: %v", err)
 			m.savePrompt = false
 			return m, nil
 		}
-		m.message = "Configuration saved successfully!"
+		m.message = "Configuration saved to database" // Show ONLY this message
 		m.quitting = true
 		return m, tea.Quit
 	case "n", "N":
-		// Quit without saving
+		// Shortcut for No
 		m.quitting = true
 		return m, tea.Quit
 	case "esc":
-		// Cancel quit
+		// Cancel - return to main menu
 		m.savePrompt = false
 		m.navMode = MainMenuNavigation
 		m.message = ""
 	}
 	return m, nil
+}
+
+// renderSavePrompt renders the save confirmation dialog with lightbar selection
+func (m Model) renderSavePrompt() string {
+	modalWidth := 50
+
+	// Create header
+	headerStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorPrimary)).
+		Foreground(lipgloss.Color(ColorTextBright)).
+		Bold(true).
+		Width(modalWidth).
+		Align(lipgloss.Center)
+
+	var header string
+	var promptMsg string
+
+	if m.navMode == SaveChangesPrompt {
+		// Saving changes before exiting modal
+		header = headerStyle.Render(fmt.Sprintf("▸ Save Changes? (%d) ◂", m.modifiedCount))
+		promptMsg = "Save changes before exiting?"
+	} else {
+		// Exiting application
+		if m.modifiedCount > 0 {
+			header = headerStyle.Render(fmt.Sprintf("▸ Exit Config? (%d changes) ◂", m.modifiedCount))
+			promptMsg = "You have unsaved changes. Save before exiting?"
+		} else {
+			header = headerStyle.Render("▸ Exit Config? ◂")
+			promptMsg = "Exit configuration editor?"
+		}
+	}
+
+	// Create separator style - ADD THIS
+	separatorStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorBgMedium)).
+		Foreground(lipgloss.Color(ColorPrimary)).
+		Width(modalWidth)
+
+	separator := separatorStyle.Render(strings.Repeat("─", modalWidth))
+
+	promptStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(ColorTextNormal)).
+		Background(lipgloss.Color(ColorBgMedium)).
+		Width(modalWidth).
+		Align(lipgloss.Center).
+		Padding(1, 0)
+
+	promptLine := promptStyle.Render(promptMsg)
+
+	// Create Yes/No options with lightbar
+	var yesOption, noOption string
+
+	if m.savePromptSelection == 1 {
+		// Yes is selected
+		yesOption = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorTextBright)).
+			Background(lipgloss.Color(ColorAccent)).
+			Bold(true).
+			Padding(0, 2).
+			Render("Yes")
+		noOption = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorTextNormal)).
+			Background(lipgloss.Color(ColorBgMedium)).
+			Padding(0, 2).
+			Render("No")
+	} else {
+		// No is selected
+		yesOption = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorTextNormal)).
+			Background(lipgloss.Color(ColorBgMedium)).
+			Padding(0, 2).
+			Render("Yes")
+		noOption = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorTextBright)).
+			Background(lipgloss.Color(ColorAccent)).
+			Bold(true).
+			Padding(0, 2).
+			Render("No")
+	}
+
+	// Center the options
+	optionsLine := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorBgMedium)).
+		Width(modalWidth).
+		Align(lipgloss.Center).
+		Render(yesOption + noOption)
+
+	// Create footer separator
+	footerSeparator := separatorStyle.Render(strings.Repeat("─", modalWidth))
+
+	// Build the modal
+	allLines := []string{header, separator, promptLine, optionsLine, footerSeparator}
+	combined := strings.Join(allLines, "\n")
+
+	// Wrap with background
+	modalBox := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorBgMedium)).
+		Render(combined)
+
+	return modalBox
 }
 
 // handleUserManagement processes input in user management mode
@@ -2124,6 +2409,10 @@ func (m Model) View() string {
 		canvas[i] = strings.Repeat(" ", m.screenWidth)
 	}
 
+	// ALWAYS render persistent header at top (row 0)
+	persistentHeader := m.renderPersistentHeader()
+	m.overlayString(canvas, persistentHeader, 0, 0)
+
 	// Save prompt overlay - highest priority
 	if m.savePrompt {
 		promptStr := m.renderSavePrompt()
@@ -2161,7 +2450,8 @@ func (m Model) View() string {
 	if m.navMode >= Level2MenuNavigation && !showAsModal {
 		isDimmed := m.navMode > Level2MenuNavigation
 		level2Str := m.renderLevel2Menu(isDimmed)
-		m.overlayString(canvas, level2Str, Level2StartRow, Level2StartCol)
+		// Start at row 2 to leave space for persistent header
+		m.overlayString(canvas, level2Str, 2, Level2StartCol)
 	}
 
 	// Layer 3: Field list (visible from Level3 onwards, but only if NOT showing as modal)
@@ -2221,7 +2511,6 @@ func (m Model) View() string {
 	return m.canvasToString(canvas)
 }
 
-
 // shouldRenderAsModal determines if current state should show a modal
 func (m *Model) shouldRenderAsModal() bool {
 	// If we're in Level 3 with modal fields, render as modal
@@ -2237,48 +2526,83 @@ func (m *Model) shouldRenderAsModal() bool {
 	return false
 }
 
-
-// renderMainMenu renders the centered main menu (only visible in MainMenuNavigation mode)
+// renderMainMenu renders the centered main menu with left-justified items
 func (m Model) renderMainMenu() string {
 	var menuItems []string
 
-	// Calculate max width for consistent sizing
-	maxWidth := 0
+	// Calculate max width for menu items
+	maxItemWidth := 0
 	for _, category := range m.menuBar.Items {
-		if len(category.Label) > maxWidth {
-			maxWidth = len(category.Label)
+		if len(category.Label) > maxItemWidth {
+			maxItemWidth = len(category.Label)
 		}
 	}
 
+	// Menu width - add padding for icon and spacing
+	menuWidth := maxItemWidth + 10
+
+	// Create header with gradient-like effect
+	headerStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorPrimary)).
+		Foreground(lipgloss.Color(ColorTextBright)).
+		Bold(true).
+		Width(menuWidth).
+		Align(lipgloss.Center)
+
+	header := headerStyle.Render("⚡ Main Menu ⚡")
+
+	// Create decorative separator with pattern
+	separatorStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorBgMedium)).
+		Foreground(lipgloss.Color(ColorBgLight)).
+		Width(menuWidth).
+		Align(lipgloss.Center)
+	separator := separatorStyle.Render(strings.Repeat("─", menuWidth))
+
+	// Render menu items with left justification
 	for i, category := range m.menuBar.Items {
+		// Add icon prefix like other menus
+		itemText := " ▪ " + category.Label
+
+		// Calculate padding to fill to menuWidth
+		padding := ""
+		if len(itemText) < menuWidth {
+			padding = strings.Repeat(" ", menuWidth-len(itemText))
+		}
+
 		var style lipgloss.Style
 
 		if i == m.activeMenu {
-			// Active item - bright highlight, full width
+			// Active item - bright highlight with accent color, left-aligned
 			style = lipgloss.NewStyle().
 				Bold(true).
-				Foreground(lipgloss.Color("15")).
-				Background(lipgloss.Color("33")).
-				Width(maxWidth + 4). // +4 for padding
-				Align(lipgloss.Center)
+				Foreground(lipgloss.Color(ColorTextBright)).
+				Background(lipgloss.Color(ColorAccent)).
+				Width(menuWidth)
 		} else {
-			// Inactive item - same width for consistency
+			// Inactive item - subtle styling, left-aligned
 			style = lipgloss.NewStyle().
-				Bold(false).
-				Foreground(lipgloss.Color("250")).
-				Background(lipgloss.Color("235")).
-				Width(maxWidth + 4). // +4 for padding
-				Align(lipgloss.Center)
+				Foreground(lipgloss.Color(ColorTextNormal)).
+				Background(lipgloss.Color(ColorBgMedium)).
+				Width(menuWidth)
 		}
 
-		menuItems = append(menuItems, style.Render(category.Label))
+		menuItems = append(menuItems, style.Render(itemText+padding))
 	}
 
-	menuContent := strings.Join(menuItems, "\n")
+	// Create footer separator
+	footerSeparator := separatorStyle.Render(strings.Repeat("─", menuWidth))
 
-	// Render without border
+	// Build the full menu
+	allLines := []string{header, separator}
+	allLines = append(allLines, menuItems...)
+	allLines = append(allLines, footerSeparator)
+
+	menuContent := strings.Join(allLines, "\n")
+
+	// Just wrap with background - NO BORDER, NO PADDING
 	menuBox := lipgloss.NewStyle().
-		Padding(1, 2).
+		Background(lipgloss.Color(ColorBgMedium)).
 		Render(menuContent)
 
 	return menuBox
@@ -2291,23 +2615,24 @@ func (m Model) renderModalForm() string {
 	}
 
 	// Calculate modal width first
-	modalWidth := 56
+	modalWidth := 58 // Slightly wider for modern look
 
-	// Create header style matching Level 2/3
+	// Create header style
 	headerStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("33")).
-		Foreground(lipgloss.Color("15")).
+		Background(lipgloss.Color(ColorAccent)).
+		Foreground(lipgloss.Color(ColorTextBright)).
 		Bold(true).
 		Width(modalWidth).
 		Align(lipgloss.Center)
 
-	header := headerStyle.Render(m.modalSectionName)
+	header := headerStyle.Render("▸ " + m.modalSectionName + " ◂")
 
-	// Create separator row (colored background row matching modal background)
+	// Create separator row
 	separatorStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("235")).
+		Background(lipgloss.Color(ColorBgMedium)).
+		Foreground(lipgloss.Color(ColorAccent)).
 		Width(modalWidth)
-	separator := separatorStyle.Render("")
+	separator := separatorStyle.Render(strings.Repeat("─", modalWidth))
 
 	// Check if we're actively editing
 	isEditing := m.navMode == EditingValue
@@ -2320,7 +2645,7 @@ func (m Model) renderModalForm() string {
 			currentValue := field.EditableItem.Field.GetValue()
 			currentValueStr := formatValue(currentValue, field.EditableItem.ValueType)
 
-			// Truncate long values to prevent wrapping (max 50 chars for value)
+			// Truncate long values to prevent wrapping
 			maxValueLen := 50
 			if len(currentValueStr) > maxValueLen {
 				currentValueStr = currentValueStr[:maxValueLen-3] + "..."
@@ -2341,46 +2666,43 @@ func (m Model) renderModalForm() string {
 						fieldDisplay = fmt.Sprintf(" %-25s [ ] Yes  [N] No", field.EditableItem.Label+":")
 					}
 					fullRowStyle := lipgloss.NewStyle().
-						Background(lipgloss.Color("33")).
-						Foreground(lipgloss.Color("15")).
+						Background(lipgloss.Color(ColorAccent)).
+						Foreground(lipgloss.Color(ColorTextBright)).
 						Bold(true).
 						Width(modalWidth)
 					fieldLines = append(fieldLines, fullRowStyle.Render(fieldDisplay))
 				} else {
-					// Text input field - inline editing with cursor at value position
+					// Text input field - inline editing
 					label := fmt.Sprintf(" %-25s", field.EditableItem.Label+":")
 
-					// Create inline display with text input at value position
 					fullRowStyle := lipgloss.NewStyle().
-						Background(lipgloss.Color("33")).
-						Foreground(lipgloss.Color("15")).
+						Background(lipgloss.Color(ColorAccent)).
+						Foreground(lipgloss.Color(ColorTextBright)).
 						Bold(true).
 						Width(modalWidth)
 
-					// Combine label and input inline
 					inlineDisplay := label + " " + m.textInput.View()
 					fieldLines = append(fieldLines, fullRowStyle.Render(inlineDisplay))
 				}
 			} else if isSelected && !isEditing {
-				// SELECTION MODE: Only label portion highlighted in blue, rest has dark background
+				// SELECTION MODE: Split highlighting
 				labelText := fmt.Sprintf(" %-25s", field.EditableItem.Label+":")
 				valueText := " " + currentValueStr
 
-				// Calculate available space for value (56 total - 1 space - 26 label)
 				availableValueSpace := modalWidth - 26 - 1
 				if len(valueText) > availableValueSpace {
 					valueText = valueText[:availableValueSpace-3] + "..."
 				}
 
 				labelStyle := lipgloss.NewStyle().
-					Background(lipgloss.Color("33")).
-					Foreground(lipgloss.Color("15")).
+					Background(lipgloss.Color(ColorAccent)).
+					Foreground(lipgloss.Color(ColorTextBright)).
 					Bold(true).
-					Width(26) // 25 + 1 for leading space
+					Width(26)
 
 				valueStyle := lipgloss.NewStyle().
-					Background(lipgloss.Color("235")).
-					Foreground(lipgloss.Color("250")).
+					Background(lipgloss.Color(ColorBgMedium)).
+					Foreground(lipgloss.Color(ColorTextNormal)).
 					Width(modalWidth - 26)
 
 				label := labelStyle.Render(labelText)
@@ -2388,17 +2710,16 @@ func (m Model) renderModalForm() string {
 
 				fieldLines = append(fieldLines, label+value)
 			} else {
-				// UNSELECTED: Normal display with dark background
+				// UNSELECTED: Normal display
 				fieldDisplay := fmt.Sprintf(" %-25s %s", field.EditableItem.Label+":", currentValueStr)
 
-				// Truncate if too long
 				if len(fieldDisplay) > modalWidth-1 {
 					fieldDisplay = fieldDisplay[:modalWidth-4] + "..."
 				}
 
 				fieldStyle := lipgloss.NewStyle().
-					Background(lipgloss.Color("235")).
-					Foreground(lipgloss.Color("250")).
+					Background(lipgloss.Color(ColorBgMedium)).
+					Foreground(lipgloss.Color(ColorTextNormal)).
 					Width(modalWidth)
 				fieldLines = append(fieldLines, fieldStyle.Render(fieldDisplay))
 			}
@@ -2408,24 +2729,26 @@ func (m Model) renderModalForm() string {
 	// Show error if present
 	if isEditing && m.editingError != "" {
 		errorMsg := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("196")).
-			Background(lipgloss.Color("235")).
+			Foreground(lipgloss.Color(ColorError)).
+			Background(lipgloss.Color(ColorBgMedium)).
 			Width(modalWidth).
 			Render(" Error: " + m.editingError)
 		fieldLines = append(fieldLines, errorMsg)
 	}
 
-	// Build the full content: header + separator + fields
+	// Create footer separator
+	footerSeparator := separatorStyle.Render(strings.Repeat("─", modalWidth))
+
+	// Build the full content
 	allLines := []string{header, separator}
 	allLines = append(allLines, fieldLines...)
-	
-	// Join all lines together
+	allLines = append(allLines, footerSeparator)
+
 	combined := strings.Join(allLines, "\n")
 
-	// Wrap entire modal with fixed width and background
+	// Just wrap with background - NO BORDER, NO PADDING
 	modalBox := lipgloss.NewStyle().
-		Background(lipgloss.Color("235")).
-		Width(modalWidth).
+		Background(lipgloss.Color(ColorBgMedium)).
 		Render(combined)
 
 	return modalBox
@@ -2435,23 +2758,16 @@ func (m Model) renderModalForm() string {
 // Individual Component Renderers
 // ============================================================================
 
-// renderLevel2Menu renders the Level 2 submenu as a floating panel
+// renderLevel2Menu renders the Level 2 submenu with modern styling
 func (m Model) renderLevel2Menu(dimmed bool) string {
 	if len(m.submenuList.Items()) == 0 {
 		emptyMsg := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("243")).
+			Foreground(lipgloss.Color(ColorTextDim)).
 			Italic(true).
 			Render("No items available")
 
-		var bgColor string
-		if dimmed {
-			bgColor = "234"
-		} else {
-			bgColor = "23" // Dark cyan
-		}
-
 		emptyBox := lipgloss.NewStyle().
-			Background(lipgloss.Color(bgColor)).
+			Background(lipgloss.Color(ColorBgMedium)).
 			Padding(1, 2).
 			Render(emptyMsg)
 
@@ -2464,42 +2780,62 @@ func (m Model) renderLevel2Menu(dimmed bool) string {
 		categoryLabel = m.menuBar.Items[m.activeMenu].Label
 	}
 
-	// Use fixed max width (25 chars as defined in initialization)
-	maxWidth := 25
+	// Use fixed max width
+	maxWidth := 28
 
-	// Create header
+	// Create header with icon
 	var headerStyle lipgloss.Style
 	if dimmed {
 		headerStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("240")).
-			Foreground(lipgloss.Color("0")).
+			Background(lipgloss.Color(ColorBgLight)).
+			Foreground(lipgloss.Color(ColorTextDim)).
 			Bold(false).
-			Width(maxWidth). // Fixed width
+			Width(maxWidth).
 			Align(lipgloss.Center)
 	} else {
 		headerStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("51")). // Bright cyan
-			Foreground(lipgloss.Color("0")).  // Black text
+			Background(lipgloss.Color(ColorPrimary)).
+			Foreground(lipgloss.Color(ColorTextBright)).
 			Bold(true).
-			Width(maxWidth). // Fixed width
+			Width(maxWidth).
 			Align(lipgloss.Center)
 	}
 
-	header := headerStyle.Render(categoryLabel)
+	header := headerStyle.Render("▸ " + categoryLabel + " ◂")
 
-	// Get list view
+	// Create decorative separator
+	separatorStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorBgMedium)).
+		Width(maxWidth)
+
+	if dimmed {
+		separatorStyle = separatorStyle.Foreground(lipgloss.Color(ColorBgLight))
+	} else {
+		separatorStyle = separatorStyle.Foreground(lipgloss.Color(ColorPrimary))
+	}
+
+	separator := separatorStyle.Render(strings.Repeat("─", maxWidth))
+
+	// Get list view and clean it up
 	listView := m.submenuList.View()
+	listView = strings.TrimSpace(listView) // Remove leading/trailing whitespace
+	listLines := strings.Split(listView, "\n")
 
-	// Combine header and list without newline (lipgloss already adds spacing)
-	var combined strings.Builder
-	combined.WriteString(header)
-	combined.WriteString(listView)
+	// Create footer separator (same as header separator)
+	footerSeparator := separatorStyle.Render(strings.Repeat("─", maxWidth))
 
-	// Wrap entire panel with fixed width
+	// Build as array like Main Menu does
+	allLines := []string{header, separator}
+	allLines = append(allLines, listLines...)
+	allLines = append(allLines, footerSeparator)
+
+	// Join with single newlines
+	combined := strings.Join(allLines, "\n")
+
+	// Just wrap with background - NO BORDER, NO PADDING
 	submenuBox := lipgloss.NewStyle().
-		Background(lipgloss.Color("235")).
-		Width(maxWidth).
-		Render(combined.String())
+		Background(lipgloss.Color(ColorBgMedium)).
+		Render(combined)
 
 	return submenuBox
 }
@@ -2519,7 +2855,7 @@ func (m Model) renderLevel3Menu(dimmed bool) string {
 		if field.ItemType == EditableField && field.EditableItem != nil {
 			currentValue := field.EditableItem.Field.GetValue()
 			valueStr := formatValue(currentValue, field.EditableItem.ValueType)
-			line := fmt.Sprintf(" %-20s %s", field.EditableItem.Label+":", valueStr)
+			line := fmt.Sprintf(" ▪ %-18s %s", field.EditableItem.Label+":", valueStr)
 			if len(line) > maxFieldWidth {
 				maxFieldWidth = len(line)
 			}
@@ -2527,29 +2863,44 @@ func (m Model) renderLevel3Menu(dimmed bool) string {
 	}
 
 	// Ensure minimum width
-	if maxFieldWidth < 25 {
-		maxFieldWidth = 25
+	if maxFieldWidth < 28 {
+		maxFieldWidth = 28
 	}
 
 	// Create header style matching Level 2
 	var headerStyle lipgloss.Style
 	if dimmed {
 		headerStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("240")).
-			Foreground(lipgloss.Color("0")).
+			Background(lipgloss.Color(ColorBgLight)).
+			Foreground(lipgloss.Color(ColorTextDim)).
 			Bold(false).
 			Width(maxFieldWidth).
 			Align(lipgloss.Center)
 	} else {
 		headerStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("21")). // Blue for Level 3
-			Foreground(lipgloss.Color("15")). // White text
+			Background(lipgloss.Color(ColorInfo)). // Different color for Level 3
+			Foreground(lipgloss.Color(ColorTextBright)).
 			Bold(true).
 			Width(maxFieldWidth).
 			Align(lipgloss.Center)
 	}
 
-	header := headerStyle.Render(m.modalSectionName)
+	header := headerStyle.Render("▸ " + m.modalSectionName + " ◂")
+
+	// Create separator row
+	var separatorStyle lipgloss.Style
+	if dimmed {
+		separatorStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color(ColorBgMedium)).
+			Foreground(lipgloss.Color(ColorBgLight)).
+			Width(maxFieldWidth)
+	} else {
+		separatorStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color(ColorBgMedium)).
+			Foreground(lipgloss.Color(ColorInfo)).
+			Width(maxFieldWidth)
+	}
+	separator := separatorStyle.Render(strings.Repeat("─", maxFieldWidth))
 
 	// Second pass: render fields with consistent width
 	for i, field := range m.modalFields {
@@ -2557,8 +2908,8 @@ func (m Model) renderLevel3Menu(dimmed bool) string {
 			currentValue := field.EditableItem.Field.GetValue()
 			valueStr := formatValue(currentValue, field.EditableItem.ValueType)
 
-			// Format: " Label: Value" (with leading space for padding)
-			line := fmt.Sprintf(" %-20s %s", field.EditableItem.Label+":", valueStr)
+			// Format with icon
+			line := fmt.Sprintf(" ▪ %-18s %s", field.EditableItem.Label+":", valueStr)
 
 			// Truncate if too long
 			if len(line) > maxFieldWidth {
@@ -2573,21 +2924,21 @@ func (m Model) renderLevel3Menu(dimmed bool) string {
 			var style lipgloss.Style
 			if dimmed {
 				style = lipgloss.NewStyle().
-					Foreground(lipgloss.Color("240")).
-					Background(lipgloss.Color("234")).
+					Foreground(lipgloss.Color(ColorTextDim)).
+					Background(lipgloss.Color(ColorBgMedium)).
 					Width(maxFieldWidth)
 			} else if i == m.modalFieldIndex {
 				// Selected field - full width lightbar
 				style = lipgloss.NewStyle().
-					Foreground(lipgloss.Color("15")).
-					Background(lipgloss.Color("21")). // Blue highlight
+					Foreground(lipgloss.Color(ColorTextBright)).
+					Background(lipgloss.Color(ColorAccent)).
 					Bold(true).
 					Width(maxFieldWidth)
 			} else {
 				// Unselected field
 				style = lipgloss.NewStyle().
-					Foreground(lipgloss.Color("250")).
-					Background(lipgloss.Color("235")).
+					Foreground(lipgloss.Color(ColorTextNormal)).
+					Background(lipgloss.Color(ColorBgMedium)).
 					Width(maxFieldWidth)
 			}
 
@@ -2595,43 +2946,15 @@ func (m Model) renderLevel3Menu(dimmed bool) string {
 		}
 	}
 
-	// Combine header and fields (no extra newline, just like Level 2)
-	var combined strings.Builder
-	combined.WriteString(header)
-	combined.WriteString(strings.Join(fieldLines, "\n"))
+	// Combine header, separator, and fields
+	combined := header + "\n" + separator + "\n" + strings.Join(fieldLines, "\n")
 
-	// Wrap entire panel with fixed width and background (matching Level 2 structure)
+	// Just wrap with background - NO BORDER, NO PADDING
 	modalBox := lipgloss.NewStyle().
-		Background(lipgloss.Color("235")).
-		Width(maxFieldWidth).
-		Render(combined.String())
+		Background(lipgloss.Color(ColorBgMedium)).
+		Render(combined)
 
 	return modalBox
-}
-
-// renderSavePrompt renders the save confirmation dialog
-func (m Model) renderSavePrompt() string {
-	var promptText string
-	if m.modifiedCount > 0 {
-		promptText = fmt.Sprintf("[!]  Save %d change(s) to database?\n\n", m.modifiedCount)
-		promptText += "    [Y] Yes, save changes\n"
-		promptText += "    [N] No, discard changes\n"
-		promptText += "    [Esc] Cancel and continue editing"
-	} else {
-		promptText = "Exit configuration editor?\n\n"
-		promptText += "    [Y] Yes\n"
-		promptText += "    [N] No\n"
-		promptText += "    [Esc] Cancel"
-	}
-
-	promptBox := lipgloss.NewStyle().
-		Background(lipgloss.Color("235")).
-		Padding(1, 3).
-		Align(lipgloss.Center).
-		Width(60).
-		Render(promptText)
-
-	return promptBox
 }
 
 // renderBreadcrumb generates enhanced breadcrumb navigation
@@ -2725,9 +3048,7 @@ func (m Model) renderBreadcrumb() string {
 	}
 
 	breadcrumbText := " " + path.String()
-	if len(breadcrumbText) > m.screenWidth-2 {
-		breadcrumbText = breadcrumbText[:m.screenWidth-5] + "..."
-	}
+
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color("243")).
 		Render(breadcrumbText)
@@ -2822,65 +3143,18 @@ func (m Model) renderUserManagement() string {
 	return userBox
 }
 
-// renderFooter generates enhanced footer with sections
+// renderFooter generates simple footer
 func (m Model) renderFooter() string {
-	var sections []string
+	footerText := "  F1  Help   ESC Exit"
 
-	// Help section based on current mode
-	var helpText string
-	switch m.navMode {
-	case MainMenuNavigation:
-		helpText = "↑↓ | [ENTER] Select | [Q] Quit/Save"
-	case Level2MenuNavigation:
-		helpText = "↑↓ | [ENTER] Select | [ESC] Back"
-	case Level3MenuNavigation:
-		helpText = "↑↓ | [ENTER] Select | [ESC] Back"
-	case Level4ModalNavigation:
-		helpText = "↑↓ | [ENTER] Edit | [ESC] Back"
-	case EditingValue:
-		if m.editingItem != nil && m.editingItem.ValueType == BoolValue {
-			helpText = "[Key]  Y/N:Select | Space/Tab:Toggle | Enter:Save | Esc:Cancel"
-		} else {
-			helpText = "[Key]  Type value | Enter:Save | Esc:Cancel"
-		}
-	case UserManagementMode:
-		helpText = "[ESC] Back to menu [Q] Quit"
-	default:
-		helpText = "[Key]  Q:Quit"
-	}
-
-	helpSection := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("243")).
-		Background(lipgloss.Color("236")).
-		Padding(0, 1).
-		Render(helpText)
-	sections = append(sections, helpSection)
-
-	// Status section showing modified count
-	if m.modifiedCount > 0 {
-		statusText := fmt.Sprintf("[#] %d change(s)", m.modifiedCount)
-		statusSection := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("214")).
-			Background(lipgloss.Color("236")).
-			Padding(0, 1).
-			Bold(true).
-			Render(statusText)
-		sections = append(sections, statusSection)
-	}
-
-	// Join sections
-	separator := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Background(lipgloss.Color("236")).
-		Render("|")
-
-	footerContent := strings.Join(sections, separator)
-
-	return lipgloss.NewStyle().
+	// Style the footer with full width
+	footer := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(ColorTextNormal)).
+		Background(lipgloss.Color("234")).
 		Width(m.screenWidth).
-		Background(lipgloss.Color("236")).
-		Padding(0, 1).
-		Render(footerContent)
+		Render(footerText)
+
+	return footer
 }
 
 // ============================================================================
@@ -2931,6 +3205,57 @@ func formatValue(value interface{}, valueType ValueType) string {
 	default:
 		return fmt.Sprintf("%v", value)
 	}
+}
+
+// renderPersistentHeader renders the top header bar with gradient and style
+func (m Model) renderPersistentHeader() string {
+	// Left side: Application name with gradient-like effect using different shades
+	appName := "ReTRoGRaDe"
+	bbsConfig := " BBS Config"
+
+	leftStyle1 := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color(ColorAccent)).
+		Background(lipgloss.Color(ColorBgDark))
+
+	leftStyle2 := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color(ColorAccentLight)).
+		Background(lipgloss.Color(ColorBgDark))
+
+	leftText := leftStyle1.Render(" "+appName) + leftStyle2.Render(bbsConfig+" ")
+
+	// Right side: Version with decorative elements
+	versionStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(ColorTextDim)).
+		Background(lipgloss.Color(ColorBgDark))
+
+	versionAccent := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(ColorPrimary)).
+		Background(lipgloss.Color(ColorBgDark)).
+		Bold(true)
+
+	rightText := versionStyle.Render(" v") + versionAccent.Render("0.01") + versionStyle.Render(" ")
+
+	// Calculate spacing with texture
+	leftWidth := m.visualWidth(leftText)
+	rightWidth := m.visualWidth(rightText)
+	spacingNeeded := m.screenWidth - leftWidth - rightWidth
+
+	// Create textured spacing
+	spacing := ""
+	if spacingNeeded > 0 {
+		// Use subtle texture pattern
+		textureStyle := lipgloss.NewStyle().
+			Background(lipgloss.Color(ColorBgDark)).
+			Foreground(lipgloss.Color("237")) // Very subtle
+		spacing = textureStyle.Render(strings.Repeat(TextureDot, spacingNeeded))
+	}
+
+	// Combine all parts
+	header := leftText + spacing + rightText
+
+	return header
 }
 
 // ============================================================================
