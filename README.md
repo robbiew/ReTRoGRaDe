@@ -40,46 +40,46 @@ As a hobbyist Go developer, I'm leveraging AI tools like Roo Code to accelerate 
 
 ### Build
 
-```bash
-# Build for current platform
-go build -o retrograde ./cmd/server
+Build for your platform:
 
-# Or use the build script for production binaries
+```bash
+go build -o retrograde ./cmd/server
+```
+
+Or use the build script for optimized binaries:
+
+```bash
 chmod +x build.sh
 ./build.sh
 ```
 
-The build script creates:
-
-- `release/retrograde` / `release/retrograde.exe` - Server binaries for Linux/macOS and Windows
+The script creates `release/retrograde` / `release/retrograde.exe` for Linux/macOS/Windows.
 
 ### First-Time Setup
 
-```bash
-./retrograde
-```
-
-On first run, Retrograde will automatically launch a guided setup wizard to configure:
-
-- Directory paths for data, logs, messages, themes, etc.
-- Database initialization
-- Optional sysop account creation
+1. Run the binary: `./retrograde`
+2. Follow the guided setup wizard to configure paths and initialize the database.
+3. Copy ANSI art files from the repo's `theme/` directory to your configured theme directory.
 
 ### Configure
+
+Launch the configuration editor:
 
 ```bash
 ./retrograde config
 ```
 
-Launch the TUI configuration editor to customize server settings, security options, and BBS configuration.
+Use ESC to exit and save changes.
 
 ### Run Server
+
+Start the server:
 
 ```bash
 ./retrograde
 ```
 
-The server will start on the configured telnet port (default: 2323).
+It runs on the configured telnet port (default: 2323).
 
 ## Configuration
 
@@ -92,11 +92,9 @@ A BBS-style terminal UI is available for editing configuration:
 ./retrograde config
 ```
 
-See [README-config-editor.md](README-config-editor.md) for full configuration editor documentation.
-
 ### Security File Management
 
-The server uses IP whitelist and blacklist files for access control:
+The server uses IP whitelist and blacklist files for access control. These files don't exist, create them if you want to se them:
 
 **Blacklist** (`security/blacklist.txt`):
 
@@ -125,12 +123,11 @@ The server uses IP whitelist and blacklist files for access control:
 
 ### Data Storage
 
-All BBS data is stored in SQLite database (`data/retrograde.db`):
+All BBS data is stored in SQLite database, e.g. default (`data/retrograde.db`):
 
 - **User accounts**: Authentication, profiles, and preferences
 - **Configuration**: Server settings and BBS configuration
 - **Sessions**: Active user sessions and node management
-- **Messages**: JAM message base metadata and indexing
 - **Security**: Audit logs and threat intelligence data
 
 **Security Logs** (`logs/` directory):
@@ -143,7 +140,6 @@ All BBS data is stored in SQLite database (`data/retrograde.db`):
 
 1. **Users**: Connect via telnet to register accounts, login, and access BBS features
 2. **SysOps**: Use the TUI configuration editor to manage users, security settings, and message areas
-3. **Network**: Configure echomail areas for FidoNet-style message networking
 
 ## Project Structure
 
