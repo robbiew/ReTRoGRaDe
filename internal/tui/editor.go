@@ -96,6 +96,7 @@ const (
 	EditingValue                                // Editing a value in modal form
 	UserManagementMode                          // User management interface
 	SecurityLevelsMode                          // Security levels management interface
+	MenuManagementMode                          // Menu management interface
 	SavePrompt                                  // Confirming save on exit
 	SaveChangesPrompt                           // NEW: Prompt to save changes when exiting edit modal
 
@@ -123,6 +124,9 @@ type Model struct {
 	// Security levels management list
 	securityLevelsUI list.Model
 
+	// Menu management list
+	menuListUI list.Model
+
 	// Modal form state
 	modalFields      []SubmenuItem // All fields in the current section
 	modalFieldIndex  int           // Currently selected field in modal
@@ -140,6 +144,9 @@ type Model struct {
 	// Security levels management state
 	securityLevelsList   []database.SecurityLevelRecord // List of security levels for management
 	editingSecurityLevel *database.SecurityLevelRecord  // Currently editing security level
+
+	// Menu management state
+	menuList []database.Menu // List of menus for management
 
 	// User management state
 	editingUser *database.UserRecord // Currently editing user
@@ -367,6 +374,68 @@ type securityLevelListItem struct {
 
 func (i securityLevelListItem) FilterValue() string {
 	return i.securityLevel.Name
+}
+
+// menuListItem implements list.Item interface for menu items
+type menuListItem struct {
+	menu         database.Menu
+	commandCount int
+}
+
+func (i menuListItem) FilterValue() string {
+	return i.menu.Name
+}
+
+// menuDelegate implements list.ItemDelegate for custom menu rendering
+type menuDelegate struct {
+	maxWidth int
+}
+
+func (d menuDelegate) Height() int                             { return 1 }
+func (d menuDelegate) Spacing() int                            { return 0 }
+func (d menuDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
+func (d menuDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
+	item, ok := listItem.(menuListItem)
+	if !ok {
+		return
+	}
+
+	var str string
+	isSelected := index == m.Index()
+
+	// Format: [MenuName] [CommandCount]
+	itemText := fmt.Sprintf(" %s (%d commands)", item.menu.Name, item.commandCount)
+
+	// Truncate if text is too long
+	if len(itemText) > d.maxWidth {
+		itemText = itemText[:d.maxWidth-3] + "..."
+	}
+
+	// Calculate padding to fill to maxWidth
+	padding := ""
+	if len(itemText) < d.maxWidth {
+		padding = strings.Repeat(" ", d.maxWidth-len(itemText))
+	}
+
+	// Render with modern colors
+	if isSelected {
+		// Selected: bright accent color
+		style := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorTextBright)).
+			Background(lipgloss.Color(ColorAccent)).
+			Bold(true).
+			Width(d.maxWidth)
+		str = style.Render(itemText + padding)
+	} else {
+		// Unselected: subtle
+		style := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorTextNormal)).
+			Background(lipgloss.Color(ColorBgMedium)).
+			Width(d.maxWidth)
+		str = style.Render(itemText + padding)
+	}
+
+	fmt.Fprint(w, str)
 }
 
 // securityLevelDelegate implements list.ItemDelegate for custom security level rendering
@@ -1393,6 +1462,11 @@ func buildMenuStructure(cfg *config.Config) MenuBar {
 						Label:    "Security Levels",
 						ItemType: ActionItem,
 					},
+					{
+						ID:       "menu-editor",
+						Label:    "Menus",
+						ItemType: ActionItem,
+					},
 				},
 			},
 			{
@@ -1661,6 +1735,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleUserManagement(msg)
 		case SecurityLevelsMode:
 			return m.handleSecurityLevelsManagement(msg)
+		case MenuManagementMode:
+			return m.handleMenuManagement(msg)
 		case SavePrompt:
 			return m.handleSavePrompt(msg)
 		case SaveChangesPrompt: // ADD THIS
@@ -2141,6 +2217,46 @@ func (m Model) handleLevel2MenuNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 						m.messageTime = time.Now()
 					} else {
 						m.navMode = SecurityLevelsMode
+						m.message = ""
+					}
+				} else if item.submenuItem.ID == "menu-editor" {
+					// Launch menu management interface
+					// Check if database path is configured
+					if m.config.Configuration.Paths.Database == "" {
+						m.message = "Database path not configured. Please set it under Configuration > Paths > Database first."
+						m.messageTime = time.Now()
+						return m, nil
+					}
+
+					// Try to get database connection if not already available
+					if m.db == nil {
+						if existingDB := config.GetDatabase(); existingDB != nil {
+							if sqliteDB, ok := existingDB.(*database.SQLiteDB); ok {
+								m.db = sqliteDB
+								// Ensure menu schema is initialized
+								if err := m.db.InitializeSchema(); err != nil {
+									m.message = fmt.Sprintf("Failed to initialize database schema: %v", err)
+									m.messageTime = time.Now()
+									return m, nil
+								}
+							} else {
+								m.message = "Database connection type mismatch"
+								m.messageTime = time.Now()
+								return m, nil
+							}
+						} else {
+							m.message = "No database connection available"
+							m.messageTime = time.Now()
+							return m, nil
+						}
+					}
+
+					// Load menus
+					if err := m.loadMenus(); err != nil {
+						m.message = fmt.Sprintf("Error loading menus: %v", err)
+						m.messageTime = time.Now()
+					} else {
+						m.navMode = MenuManagementMode
 						m.message = ""
 					}
 				} else {
@@ -2640,7 +2756,7 @@ func (m Model) handleUserManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// Update the list for any other input (like filtering)
 	// Only update if not handled above and not ESC (to prevent quit command)
-	if cmd == nil && msg.String() != "esc" {
+	if msg.String() != "esc" {
 		m.userListUI, cmd = m.userListUI.Update(msg)
 	}
 	return m, cmd
@@ -2822,8 +2938,68 @@ func (m Model) handleSecurityLevelsManagement(msg tea.KeyMsg) (tea.Model, tea.Cm
 
 	// Update the list for any other input (like filtering)
 	// Only update if not handled above and not ESC (to prevent quit command)
-	if cmd == nil && msg.String() != "esc" {
+	if msg.String() != "esc" {
 		m.securityLevelsUI, cmd = m.securityLevelsUI.Update(msg)
+	}
+	return m, cmd
+}
+
+// handleMenuManagement processes input in menu management mode
+func (m Model) handleMenuManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch msg.String() {
+	case "up", "k":
+		// Navigate up in list
+		currentIdx := m.menuListUI.Index()
+		if currentIdx > 0 {
+			m.menuListUI.Select(currentIdx - 1)
+		}
+		return m, nil
+	case "down", "j":
+		// Navigate down in list
+		currentIdx := m.menuListUI.Index()
+		items := m.menuListUI.Items()
+		if currentIdx < len(items)-1 {
+			m.menuListUI.Select(currentIdx + 1)
+		}
+		return m, nil
+	case "home":
+		// Jump to first item
+		m.menuListUI.Select(0)
+		return m, nil
+	case "end":
+		// Jump to last item
+		items := m.menuListUI.Items()
+		if len(items) > 0 {
+			m.menuListUI.Select(len(items) - 1)
+		}
+		return m, nil
+	case "enter":
+		// Select menu - show menu details
+		selectedItem := m.menuListUI.SelectedItem()
+		if selectedItem != nil {
+			menuItem := selectedItem.(menuListItem)
+			// Get command count
+			commands, err := m.db.GetMenuCommands(menuItem.menu.ID)
+			commandCount := 0
+			if err == nil {
+				commandCount = len(commands)
+			}
+			m.message = fmt.Sprintf("Menu '%s': %d commands, prompt: %s", menuItem.menu.Name, commandCount, menuItem.menu.Prompt)
+			m.messageTime = time.Now()
+		}
+		return m, nil
+	case "esc":
+		// Return to Level 2 menu navigation (Editors menu)
+		m.navMode = Level2MenuNavigation
+		m.message = ""
+	}
+
+	// Update the list for any other input (like filtering)
+	// Only update if not handled above and not ESC (to prevent quit command)
+	if msg.String() != "esc" {
+		m.menuListUI, cmd = m.menuListUI.Update(msg)
 	}
 	return m, cmd
 }
@@ -3130,6 +3306,13 @@ func (m Model) View() string {
 	if m.navMode == SecurityLevelsMode {
 		securityLevelsStr := m.renderSecurityLevelsManagement()
 		m.overlayStringCentered(canvas, securityLevelsStr)
+		return m.canvasToString(canvas)
+	}
+
+	// Layer 1.7: Menu Management (full screen mode)
+	if m.navMode == MenuManagementMode {
+		menuManagementStr := m.renderMenuManagement()
+		m.overlayStringCentered(canvas, menuManagementStr)
 		return m.canvasToString(canvas)
 	}
 
@@ -3847,6 +4030,135 @@ func (m *Model) loadSecurityLevels() error {
 	return nil
 }
 
+// loadMenus loads all menus from the database
+func (m *Model) loadMenus() error {
+	if m.db == nil {
+		return fmt.Errorf("database not available")
+	}
+
+	menus, err := m.db.GetAllMenus()
+	if err != nil {
+		return fmt.Errorf("failed to get menus: %w", err)
+	}
+
+	// If no menus exist, seed a default menu
+	if len(menus) == 0 {
+		if err := m.seedDefaultMenu(); err != nil {
+			return fmt.Errorf("failed to seed default menu: %w", err)
+		}
+		// Reload menus after seeding
+		menus, err = m.db.GetAllMenus()
+		if err != nil {
+			return fmt.Errorf("failed to reload menus after seeding: %w", err)
+		}
+	}
+
+	m.menuList = menus
+
+	// Initialize menu list UI
+	var menuItems []list.Item
+	for _, menu := range menus {
+		// Get command count for this menu
+		commands, err := m.db.GetMenuCommands(menu.ID)
+		commandCount := 0
+		if err == nil {
+			commandCount = len(commands)
+		}
+		menuItems = append(menuItems, menuListItem{menu: menu, commandCount: commandCount})
+	}
+
+	// Calculate max width for menu list
+	maxWidth := 40 // For menu info
+
+	menuList := list.New(menuItems, menuDelegate{maxWidth: maxWidth}, maxWidth, 15)
+	menuList.Title = ""
+	menuList.SetShowStatusBar(false)
+	menuList.SetFilteringEnabled(true)
+	menuList.SetShowHelp(false)
+	menuList.SetShowPagination(true)
+
+	// Remove any default list styling/padding
+	menuList.Styles.Title = lipgloss.NewStyle()
+	menuList.Styles.PaginationStyle = lipgloss.NewStyle()
+	menuList.Styles.HelpStyle = lipgloss.NewStyle()
+
+	m.menuListUI = menuList
+
+	return nil
+}
+
+// seedDefaultMenu creates a basic MAIN menu for development
+func (m *Model) seedDefaultMenu() error {
+	// Create MAIN menu
+	menu := &database.Menu{
+		Name:                "MAIN",
+		Titles:              []string{"-= Retrograde BBS =-", "-- Main Menu --"},
+		HelpFile:            "",
+		LongHelpFile:        "",
+		Prompt:              "[@1 - @2]@MTime Left: [@V] (?=Help)@MMain Menu :",
+		ACSRequired:         "",
+		Password:            "",
+		FallbackMenu:        "MAIN",
+		ForcedHelpLevel:     0,
+		GenericColumns:      4,
+		GenericBracketColor: 1,
+		GenericCommandColor: 9,
+		GenericDescColor:    1,
+		Flags:               "C---T-----",
+	}
+
+	menuID, err := m.db.CreateMenu(menu)
+	if err != nil {
+		return fmt.Errorf("failed to create MAIN menu: %w", err)
+	}
+
+	// Create menu commands
+	commands := []database.MenuCommand{
+		{
+			MenuID:           int(menuID),
+			CommandNumber:    1,
+			Keys:             "R",
+			LongDescription:  "(R)ead Mail - Read private Electronic mail",
+			ShortDescription: "(R)ead Mail",
+			ACSRequired:      "",
+			CmdKeys:          "MM",
+			Options:          "",
+			Flags:            "",
+		},
+		{
+			MenuID:           int(menuID),
+			CommandNumber:    2,
+			Keys:             "P",
+			LongDescription:  "(P)ost Message - Post a message",
+			ShortDescription: "(P)ost Message",
+			ACSRequired:      "",
+			CmdKeys:          "MP",
+			Options:          "",
+			Flags:            "",
+		},
+		{
+			MenuID:           int(menuID),
+			CommandNumber:    3,
+			Keys:             "G",
+			LongDescription:  "(G)oodbye - Logout and disconnect",
+			ShortDescription: "(G)oodbye",
+			ACSRequired:      "",
+			CmdKeys:          "G",
+			Options:          "",
+			Flags:            "",
+		},
+	}
+
+	for _, cmd := range commands {
+		_, err := m.db.CreateMenuCommand(&cmd)
+		if err != nil {
+			return fmt.Errorf("failed to create menu command %s: %w", cmd.Keys, err)
+		}
+	}
+
+	return nil
+}
+
 // renderUserManagement renders the user management interface
 func (m Model) renderUserManagement() string {
 	if len(m.userListUI.Items()) == 0 {
@@ -3951,6 +4263,59 @@ func (m Model) renderSecurityLevelsManagement() string {
 		Render(combined)
 
 	return securityLevelsBox
+}
+
+// renderMenuManagement renders the menu management interface
+func (m Model) renderMenuManagement() string {
+	if len(m.menuListUI.Items()) == 0 {
+		emptyMsg := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorTextDim)).
+			Italic(true).
+			Render("No menus found")
+
+		emptyBox := lipgloss.NewStyle().
+			Background(lipgloss.Color(ColorBgMedium)).
+			Padding(2, 4).
+			Render(emptyMsg)
+
+		return emptyBox
+	}
+
+	// Create header with menu count
+	headerStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorPrimary)).
+		Foreground(lipgloss.Color(ColorTextBright)).
+		Bold(true).
+		Width(42).
+		Align(lipgloss.Center)
+
+	header := headerStyle.Render(fmt.Sprintf("▸ Menu Management (%d menus) ◂", len(m.menuList)))
+
+	// Create separator
+	separatorStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorBgMedium)).
+		Foreground(lipgloss.Color(ColorPrimary)).
+		Width(42)
+	separator := separatorStyle.Render(strings.Repeat("─", 42))
+
+	// Get list view
+	listView := m.menuListUI.View()
+	listView = strings.TrimSpace(listView)
+
+	// Create footer separator
+	footerSeparator := separatorStyle.Render(strings.Repeat("─", 42))
+
+	// Build the full content
+	allLines := []string{header, separator, listView, footerSeparator}
+
+	combined := strings.Join(allLines, "\n")
+
+	// Just wrap with background - NO BORDER, NO PADDING
+	menuBox := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorBgMedium)).
+		Render(combined)
+
+	return menuBox
 }
 
 // renderFooter generates simple footer

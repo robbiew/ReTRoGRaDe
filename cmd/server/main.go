@@ -13,6 +13,7 @@ import (
 	"github.com/robbiew/retrograde/internal/config"
 	"github.com/robbiew/retrograde/internal/database"
 	"github.com/robbiew/retrograde/internal/logging"
+	"github.com/robbiew/retrograde/internal/menu"
 	"github.com/robbiew/retrograde/internal/security"
 	"github.com/robbiew/retrograde/internal/telnet"
 	"github.com/robbiew/retrograde/internal/tui"
@@ -34,6 +35,84 @@ func main() {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+func seedDefaultMenu(db database.Database) error {
+	// Check if MAIN menu already exists
+	_, err := db.GetMenuByName("MAIN")
+	if err == nil {
+		// Menu already exists, skip seeding
+		return nil
+	}
+
+	// Create MAIN menu
+	menu := &database.Menu{
+		Name:                "MAIN",
+		Titles:              []string{"-= Retrograde BBS =-", "-- Main Menu --"},
+		HelpFile:            "",
+		LongHelpFile:        "",
+		Prompt:              "[@1 - @2]@MTime Left: [@V] (?=Help)@MMain Menu :",
+		ACSRequired:         "",
+		Password:            "",
+		FallbackMenu:        "MAIN",
+		ForcedHelpLevel:     0,
+		GenericColumns:      4,
+		GenericBracketColor: 1,
+		GenericCommandColor: 9,
+		GenericDescColor:    1,
+		Flags:               "C---T-----",
+	}
+
+	menuID, err := db.CreateMenu(menu)
+	if err != nil {
+		return fmt.Errorf("failed to create MAIN menu: %w", err)
+	}
+
+	// Create menu commands
+	commands := []database.MenuCommand{
+		{
+			MenuID:           int(menuID),
+			CommandNumber:    1,
+			Keys:             "R",
+			LongDescription:  "(R)ead Mail - Read private Electronic mail",
+			ShortDescription: "(R)ead Mail",
+			ACSRequired:      "",
+			CmdKeys:          "MM",
+			Options:          "",
+			Flags:            "",
+		},
+		{
+			MenuID:           int(menuID),
+			CommandNumber:    2,
+			Keys:             "P",
+			LongDescription:  "(P)ost Message - Post a message",
+			ShortDescription: "(P)ost Message",
+			ACSRequired:      "",
+			CmdKeys:          "MP",
+			Options:          "",
+			Flags:            "",
+		},
+		{
+			MenuID:           int(menuID),
+			CommandNumber:    3,
+			Keys:             "G",
+			LongDescription:  "(G)oodbye - Logout and disconnect",
+			ShortDescription: "(G)oodbye",
+			ACSRequired:      "",
+			CmdKeys:          "G",
+			Options:          "",
+			Flags:            "",
+		},
+	}
+
+	for _, cmd := range commands {
+		_, err := db.CreateMenuCommand(&cmd)
+		if err != nil {
+			return fmt.Errorf("failed to create menu command %s: %w", cmd.Keys, err)
+		}
+	}
+
+	return nil
 }
 
 func runGuidedSetup() error {
@@ -99,35 +178,16 @@ func runGuidedSetup() error {
 		return fmt.Errorf("failed to initialize schema: %w", err)
 	}
 
+	// Seed default menu
+	if err := seedDefaultMenu(db); err != nil {
+		return fmt.Errorf("failed to seed default menu: %w", err)
+	}
+
 	// Save config
 	if err := config.SaveConfigToDB(db, cfg, "system"); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
 
-	// Theme files setup instructions
-	fmt.Println("\n" + ui.Ansi.BlueHi + "Theme files:" + ui.Ansi.Reset)
-	fmt.Printf(ui.Ansi.CyanHi+"Copy files from /text to '%s'\n"+ui.Ansi.Reset+"\n", cfg.Configuration.Paths.Themes)
-
-	return nil
-}
-
-func copyDir(src, dst string) error {
-	// Simple copy, assume files
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		srcPath := filepath.Join(src, entry.Name())
-		dstPath := filepath.Join(dst, entry.Name())
-		data, err := os.ReadFile(srcPath)
-		if err != nil {
-			return err
-		}
-		if err := os.WriteFile(dstPath, data, 0644); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -161,6 +221,14 @@ func runConfigEditor() {
 		cfg.Servers.Security.Logs.LogBlockedAttempts = true
 		cfg.Other.Discord.Enabled = false
 		cfg.Other.Discord.Username = "GHOSTnet Bot"
+
+		// Seed default menu for new installations
+		db := config.GetDatabase()
+		if db != nil {
+			if seedErr := seedDefaultMenu(db); seedErr != nil {
+				fmt.Printf("Warning: Failed to seed default menu: %v\n", seedErr)
+			}
+		}
 	}
 
 	if err := tui.RunConfigEditorTUI(cfg); err != nil {
@@ -381,6 +449,25 @@ func mainMenu(io *telnet.TelnetIO, session *config.TelnetSession, cfg *config.Co
 					if nm := logging.GetNodeManager(); nm != nil && session.NodeNumber > 0 {
 						if conn, exists := nm.Connections[session.NodeNumber]; exists {
 							conn.Username = userRecord.Username
+						}
+					}
+
+					// Load and execute start menu
+					db := config.GetDatabase()
+					if db != nil {
+						executor := menu.NewMenuExecutor(db, io)
+						ctx := &menu.ExecutionContext{
+							UserID:   userRecord.ID,
+							Username: userRecord.Username,
+							IO:       io,
+							Session:  session,
+						}
+						startMenu := cfg.Configuration.General.StartMenu
+						if startMenu == "" {
+							startMenu = "MAIN"
+						}
+						if err := executor.ExecuteMenu(startMenu, ctx); err != nil {
+							io.Printf("Menu error: %v\r\n", err)
 						}
 					}
 				}

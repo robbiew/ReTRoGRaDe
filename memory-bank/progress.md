@@ -1,3 +1,4 @@
+[2025-10-08 11:40:42] - Fixed unused field 'editingMenu' in internal/tui/editor.go by removing the unused struct field (U1000)
 # Progress
 
 [2025-10-07 11:40:27] - Fixed unused variable issue in internal/auth/auth.go by removing unused global variable 'db'
@@ -23,3 +24,11 @@
 [2025-10-08 15:25:00] - Completed user management interface implementation in TUI config editor with full CRUD operations
 
 [2025-10-08 15:25:00] - Updated all documentation files to reflect current application state including JAM message base support, SQLite storage, and guided setup
+
+[2025-10-08 18:53:00] - Fixed Config TUI menu command count display issue by modifying menuListItem struct to include commandCount field, updating loadMenus to fetch actual command counts from database, and fixing menuDelegate Render function to use the stored count instead of hardcoded 0
+
+[2025-10-08 18:57:00] - Fixed menu execution to use TelnetIO instead of standard I/O by modifying MenuExecutor to accept TelnetIO, updating all print/scan operations to use TelnetIO methods, and adding IO to ExecutionContext for cmdkey handlers
+
+[2025-10-08 19:04:00] - Fixed menu logout behavior to properly disconnect users instead of returning to pre-login menu when pressing 'G' (goodbye) from menu system
+
+[2025-10-08 19:09:00] - Fixed menu logout behavior to properly disconnect users when pressing 'G' (goodbye) from menu system by modifying handleGoodbye to directly disconnect the session instead of returning to pre-login menu

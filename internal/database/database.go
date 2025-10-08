@@ -32,6 +32,39 @@ type AuthAuditEntry struct {
 	Context   sql.NullString
 }
 
+// Menu represents a menu in the BBS system
+type Menu struct {
+	ID                  int
+	Name                string
+	Titles              []string // JSON
+	HelpFile            string
+	LongHelpFile        string
+	Prompt              string
+	ACSRequired         string
+	Password            string
+	FallbackMenu        string
+	ForcedHelpLevel     int
+	GenericColumns      int
+	GenericBracketColor int
+	GenericCommandColor int
+	GenericDescColor    int
+	Flags               string
+}
+
+// MenuCommand represents a command in a menu
+type MenuCommand struct {
+	ID               int
+	MenuID           int
+	CommandNumber    int
+	Keys             string
+	LongDescription  string
+	ShortDescription string
+	ACSRequired      string
+	CmdKeys          string
+	Options          string
+	Flags            string
+}
+
 // Database interface defines all database operations
 type Database interface {
 	// Configuration operations
@@ -63,6 +96,18 @@ type Database interface {
 	GetAllSecurityLevels() ([]SecurityLevelRecord, error)
 	UpdateSecurityLevel(level *SecurityLevelRecord) error
 	DeleteSecurityLevel(id int64) error
+
+	// Menu operations
+	CreateMenu(menu *Menu) (int64, error)
+	GetMenuByID(id int64) (*Menu, error)
+	GetMenuByName(name string) (*Menu, error)
+	GetAllMenus() ([]Menu, error)
+	UpdateMenu(menu *Menu) error
+	DeleteMenu(id int64) error
+	CreateMenuCommand(cmd *MenuCommand) (int64, error)
+	GetMenuCommands(menuID int) ([]MenuCommand, error)
+	UpdateMenuCommand(cmd *MenuCommand) error
+	DeleteMenuCommand(id int64) error
 
 	// Database management
 	InitializeSchema() error
