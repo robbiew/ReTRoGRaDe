@@ -14,7 +14,7 @@ As a hobbyist Go developer, I'm leveraging AI tools like Roo Code to accelerate 
 
 - Open and transparent development
 - Cross-platform support: Windows, Linux (including Raspberry Pi), macOS
-- Classic BBS experience: Maintain the spirit and look & feel of software like Telegard and Renegade
+- Classic BBS experience: Maintain the spirit and look & feel of software like Telegard, Renegade, Iniquity, ViSiON-X
 
 ### Networking and Messaging
 
