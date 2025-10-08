@@ -8,55 +8,11 @@ This project serves as a platform to deepen Go programming expertise. As an expe
 
 As a hobbyist Go developer, I'm leveraging AI tools like Roo Code to accelerate learning and development. Rather than "vibe coding," I use LLMs strategically to guide implementation, debug issues, and explore patterns that would otherwise take months of trial-and-error in my limited free time. This approach allows me to make meaningful progress while maintaining code quality and understanding.
 
-## BBS Goals
-
-### Core Objectives
+## Core Objectives
 
 - Open and transparent development
 - Cross-platform support: Windows, Linux (including Raspberry Pi), macOS
 - Classic BBS experience: Maintain the spirit and look & feel of software like Telegard, Renegade, Iniquity, ViSiON-X
-
-### Networking and Messaging
-
-- Telnet and SSH servers
-- Message areas supporting Local, FTN echomail, Local Email, Echomail, Netmail, QWK networking, and WWIVnet-style message bases (JAM)
-- Features: Scan for new messages, managed scanned areas, set newscan dates, Full Screen Editor, Full Screen Reader, automated FTN setup, import/export echomail
-
-### Modern Features
-
-- Optional Web APIs
-- Discord notifications
-- ActivityPub integration
-
-### Ease of Use
-
-- Easy installation, running, and maintenance with config editor
-- Editors for: Servers, Security, Users, Security Levels, Menus, Events, Message Bases, File Bases, Door Programs
-
-### Extensibility
-
-- API for building external apps: Web frontends and native mobile apps
-- Launch external programs (doors): Native console apps and DOS-based doors using Dosemu2
-- Internal MCI codes
-- Password reset (SMTP)
-- Web front-end
-
-### Core Menus
-
-- Main, Message, Files, Doors, Private E-mail
-- Node-to-Node Chat
-
-## Features so Far
-
-- **Telnet Server**: Direct telnet access on port 2323 with character-mode negotiation
-- **Security System**: IP filtering, rate limiting, geographic blocking, and threat intelligence
-- **User Authentication**: Account creation, login, and session management with SQLite storage
-- **SQLite Database**: All BBS data stored in SQLite with comprehensive schema
-- **TUI Configuration Editor**: Modern BubbleTea-based terminal interface for server configuration
-- **Guided First-Time Setup**: Interactive setup wizard for initial configuration
-- **ANSI Art Support**: Display of ANSI artwork (SAUCE parsing too)
-- **Session Management**: Automatic timeout handling with sysop exemptions
-- **Node Management**: Multi-user support with configurable node limits
 
 ## Feature Status
 
