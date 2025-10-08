@@ -7,10 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
-	"github.com/charmbracelet/x/term"
 	"github.com/robbiew/retrograde/internal/auth"
 	"github.com/robbiew/retrograde/internal/config"
 	"github.com/robbiew/retrograde/internal/database"
@@ -39,86 +37,46 @@ func fileExists(path string) bool {
 }
 
 func runGuidedSetup() error {
-	// Clear screen for clean setup experience
-	ui.ClearScreen()
-
-	scanner := bufio.NewScanner(os.Stdin)
-	fmt.Println(ui.Ansi.CyanHi + "╔══════════════════════════════════════╗" + ui.Ansi.Reset)
-	fmt.Println(ui.Ansi.CyanHi + "║" + ui.Ansi.WhiteHi + "    Welcome to Retrograde BBS Setup   " + ui.Ansi.CyanHi + "║" + ui.Ansi.Reset)
-	fmt.Println(ui.Ansi.CyanHi + "╚══════════════════════════════════════╝" + ui.Ansi.Reset)
-	fmt.Println()
-	fmt.Print(ui.Ansi.GreenHi + "Use Guided Setup? " + ui.Ansi.YellowHi + "(Y/n): " + ui.Ansi.Reset)
-	scanner.Scan()
-	response := strings.ToUpper(strings.TrimSpace(scanner.Text()))
-	if response == "" {
-		response = "Y" // Default to Yes
+	// Get default root directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = "."
 	}
-	if response != "Y" {
-		fmt.Println("Setup cancelled. Exiting.")
-		os.Exit(0)
+	rootDir := filepath.Join(cwd)
+
+	// Run the TUI form to collect directory paths
+	setupConfig, err := tui.RunGuidedSetupTUI(rootDir)
+	if err != nil {
+		return fmt.Errorf("guided setup failed: %v", err)
 	}
 
-	// Set Paths
-	fmt.Println("\n" + ui.Ansi.BlueHi + "Setting up core paths..." + ui.Ansi.Reset)
+	// Create config from collected data
 	cfg := config.GetDefaultConfig()
+	cfg.Configuration.Paths.Database = filepath.Join(setupConfig.Data, "retrograde.db")
+	cfg.Configuration.Paths.FileBase = setupConfig.Files
+	cfg.Configuration.Paths.Logs = setupConfig.Logs
+	cfg.Configuration.Paths.MessageBase = setupConfig.Msgs
+	cfg.Configuration.Paths.System = setupConfig.Root
+	cfg.Configuration.Paths.Themes = setupConfig.Text
 
+	// Create directories
 	paths := []struct {
 		name string
-		path *string
+		path string
 	}{
-		{"Database", &cfg.Configuration.Paths.Database},
-		{"File Base", &cfg.Configuration.Paths.FileBase},
-		{"Logs", &cfg.Configuration.Paths.Logs},
-		{"Message Base", &cfg.Configuration.Paths.MessageBase},
-		{"System", &cfg.Configuration.Paths.System},
-		{"Themes", &cfg.Configuration.Paths.Themes},
+		{"Database", filepath.Dir(cfg.Configuration.Paths.Database)},
+		{"Files", cfg.Configuration.Paths.FileBase},
+		{"Logs", cfg.Configuration.Paths.Logs},
+		{"Messages", cfg.Configuration.Paths.MessageBase},
+		{"System", cfg.Configuration.Paths.System},
+		{"Text", cfg.Configuration.Paths.Themes},
 	}
 
 	for _, p := range paths {
-		for {
-			fmt.Printf(ui.Ansi.CyanHi + "Path for %s " + ui.Ansi.YellowHi + "[default: '%s']: " + ui.Ansi.Reset, p.name, *p.path)
-			scanner.Scan()
-			input := strings.TrimSpace(scanner.Text())
-			if input != "" {
-				*p.path = input
-			}
-			// Validate path is not empty
-			if *p.path == "" {
-				fmt.Println(ui.Ansi.RedHi + "Path cannot be empty. Please enter a valid path." + ui.Ansi.Reset)
-				continue
-			}
-			break
-		}
-
-		fmt.Printf(ui.Ansi.CyanHi + "Create directory for %s at '%s'? " + ui.Ansi.YellowHi + "(Y/n): " + ui.Ansi.Reset, p.name, *p.path)
-		scanner.Scan()
-		response := strings.ToUpper(strings.TrimSpace(scanner.Text()))
-		if response == "" {
-			response = "Y" // Default to Yes
-		}
-
-		if response == "Y" {
-			if err := os.MkdirAll(*p.path, 0755); err != nil {
-				fmt.Printf(ui.Ansi.RedHi + "Failed to create %s: %v\n" + ui.Ansi.Reset, p.name, err)
-			} else {
-				fmt.Printf(ui.Ansi.GreenHi + "✓ Created %s directory.\n" + ui.Ansi.Reset, p.name)
-			}
+		if err := os.MkdirAll(p.path, 0755); err != nil {
+			fmt.Printf(ui.Ansi.RedHi+"Failed to create %s: %v\n"+ui.Ansi.Reset, p.name, err)
 		} else {
-			// User said No - check if directory exists
-			if !fileExists(*p.path) {
-				fmt.Printf(ui.Ansi.YellowHi + "Warning: Directory '%s' does not exist. You will need to create it manually or the %s feature may not work properly.\n" + ui.Ansi.Reset, *p.path, strings.ToLower(p.name))
-				fmt.Print(ui.Ansi.CyanHi + "Are you sure you want to continue without creating this directory? " + ui.Ansi.YellowHi + "(y/N): " + ui.Ansi.Reset)
-				scanner.Scan()
-				sureResponse := strings.ToUpper(strings.TrimSpace(scanner.Text()))
-				if sureResponse == "" {
-					sureResponse = "N" // Default to No (don't continue)
-				}
-				if sureResponse != "Y" {
-					fmt.Println(ui.Ansi.MagentaHi + "Please reconsider creating the directory." + ui.Ansi.Reset)
-					// Re-prompt for directory creation
-					continue
-				}
-			}
+			fmt.Printf(ui.Ansi.GreenHi+"✓ Created %s directory.\n"+ui.Ansi.Reset, p.name)
 		}
 	}
 
@@ -146,135 +104,9 @@ func runGuidedSetup() error {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
 
-	// Create Sysop Account
-	fmt.Print("\n" + ui.Ansi.BlueHi + "Create Sysop Account? " + ui.Ansi.YellowHi + "(Y/n): " + ui.Ansi.Reset)
-	scanner.Scan()
-	response = strings.ToUpper(strings.TrimSpace(scanner.Text()))
-	if response == "" {
-		response = "Y" // Default to Yes
-	}
-	if response == "Y" {
-		// Username input with validation
-		var username string
-		for {
-			fmt.Print(ui.Ansi.CyanHi + "Username: " + ui.Ansi.Reset)
-			scanner.Scan()
-			username = strings.TrimSpace(scanner.Text())
-			if username == "" {
-				fmt.Println(ui.Ansi.RedHi + "Username cannot be empty." + ui.Ansi.Reset)
-				continue
-			}
-			if len(username) < 3 {
-				fmt.Println(ui.Ansi.RedHi + "Username must be at least 3 characters." + ui.Ansi.Reset)
-				continue
-			}
-			break
-		}
-
-		// Password input with confirmation
-		var password string
-		for {
-			fmt.Print(ui.Ansi.CyanHi + "Password: " + ui.Ansi.Reset)
-			passwordBytes, err := term.ReadPassword(uintptr(syscall.Stdin))
-			if err != nil {
-				fmt.Printf("\n" + ui.Ansi.RedHi + "Error reading password: %v\n" + ui.Ansi.Reset, err)
-				os.Exit(1)
-			}
-			fmt.Println() // Print newline after password input
-			password = strings.TrimSpace(string(passwordBytes))
-			if password == "" {
-				fmt.Println(ui.Ansi.RedHi + "Password cannot be empty." + ui.Ansi.Reset)
-				continue
-			}
-			if len(password) < 6 {
-				fmt.Println(ui.Ansi.RedHi + "Password must be at least 6 characters." + ui.Ansi.Reset)
-				continue
-			}
-
-			fmt.Print(ui.Ansi.CyanHi + "Confirm Password: " + ui.Ansi.Reset)
-			confirmBytes, err := term.ReadPassword(uintptr(syscall.Stdin))
-			if err != nil {
-				fmt.Printf("\n" + ui.Ansi.RedHi + "Error reading password: %v\n" + ui.Ansi.Reset, err)
-				os.Exit(1)
-			}
-			fmt.Println() // Print newline after password input
-			confirmPassword := strings.TrimSpace(string(confirmBytes))
-			if password != confirmPassword {
-				fmt.Println(ui.Ansi.RedHi + "Passwords do not match. Please try again." + ui.Ansi.Reset)
-				continue
-			}
-			break
-		}
-
-		// Real Name input
-		var realName string
-		for {
-			fmt.Print(ui.Ansi.CyanHi + "Real Name: " + ui.Ansi.Reset)
-			scanner.Scan()
-			realName = strings.TrimSpace(scanner.Text())
-			if realName == "" {
-				fmt.Println(ui.Ansi.RedHi + "Real Name cannot be empty." + ui.Ansi.Reset)
-				continue
-			}
-			break
-		}
-
-		// Email input with basic validation
-		var email string
-		for {
-			fmt.Print(ui.Ansi.CyanHi + "Email: " + ui.Ansi.Reset)
-			scanner.Scan()
-			email = strings.TrimSpace(scanner.Text())
-			if email == "" {
-				fmt.Println(ui.Ansi.RedHi + "Email cannot be empty." + ui.Ansi.Reset)
-				continue
-			}
-			if !strings.Contains(email, "@") || !strings.Contains(email, ".") {
-				fmt.Println(ui.Ansi.RedHi + "Please enter a valid email address." + ui.Ansi.Reset)
-				continue
-			}
-			break
-		}
-
-		// Location input
-		var location string
-		for {
-			fmt.Print(ui.Ansi.CyanHi + "Location: " + ui.Ansi.Reset)
-			scanner.Scan()
-			location = strings.TrimSpace(scanner.Text())
-			if location == "" {
-				fmt.Println(ui.Ansi.RedHi + "Location cannot be empty." + ui.Ansi.Reset)
-				continue
-			}
-			break
-		}
-
-		// Set global db
-		config.SetDatabase(db)
-
-		// Initialize auth
-		if err := auth.Init(&cfg.Configuration.Auth, db); err != nil {
-			return fmt.Errorf("failed to initialize auth: %w", err)
-		}
-
-		// Create user details
-		userDetails := map[string]string{
-			"realname": realName,
-			"location": location,
-		}
-
-		// Create account with level 100
-		if err := auth.CreateUser(username, password, email, 100, userDetails); err != nil {
-			return fmt.Errorf("failed to create sysop account: %w", err)
-		}
-		fmt.Println(ui.Ansi.GreenHi + "✓ Sysop Account #1 created!" + ui.Ansi.Reset)
-	}
-
 	// Theme files setup instructions
-	fmt.Printf("\n" + ui.Ansi.BlueHi + "Theme files setup:" + ui.Ansi.Reset + "\n")
-	fmt.Printf(ui.Ansi.CyanHi + "Please copy theme files from the 'theme' directory to '%s'\n", cfg.Configuration.Paths.Themes)
-	fmt.Printf("Example: " + ui.Ansi.YellowHi + "cp theme/* %s/\n" + ui.Ansi.Reset, cfg.Configuration.Paths.Themes)
-	fmt.Printf(ui.Ansi.MagentaHi + "(This step is optional - you can do it later)\n" + ui.Ansi.Reset)
+	fmt.Printf("\n" + ui.Ansi.BlueHi + "Theme files:" + ui.Ansi.Reset + "\n")
+	fmt.Printf(ui.Ansi.CyanHi+"Copy files from /text to '%s'\n", cfg.Configuration.Paths.Themes)
 
 	return nil
 }
@@ -300,8 +132,6 @@ func copyDir(src, dst string) error {
 }
 
 func runConfigEditor() {
-	fmt.Println("Starting configuration editor...")
-
 	cfg, err := config.LoadConfig("")
 	defer config.CloseDatabase()
 
@@ -340,8 +170,6 @@ func runConfigEditor() {
 }
 
 func runConfigEditorFromServer(cfg *config.Config) error {
-	fmt.Println("Starting configuration editor...")
-
 	if err := tui.RunConfigEditorTUI(cfg); err != nil {
 		return fmt.Errorf("error running configuration editor: %w", err)
 	}
@@ -476,7 +304,7 @@ func handleConnection(conn net.Conn, cfg *config.Config, nodeID int) {
 
 	// Create a session for this connection - start as guest
 	session := &config.TelnetSession{
-		Alias:         "Guest",                    // Default for unauthenticated users
+		Alias:         "Guest",                   // Default for unauthenticated users
 		SecurityLevel: config.SecurityLevelGuest, // Guest security level
 		TimeLeft:      60,                        // 60 minutes
 		StartTime:     time.Now(),

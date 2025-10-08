@@ -614,13 +614,17 @@ func formatListValue(values []string) string {
 func getDBPath() string {
 	// For initial database creation, use default location
 	// After config is loaded, this path will be used from the config
-	defaultPath := filepath.Join("data", "retrograde.db")
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = "."
+	}
+	defaultPath := filepath.Join(cwd, "data", "retrograde.db")
 
 	// Ensure the data directory exists
 	dir := filepath.Dir(defaultPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		// If we can't create the default directory, fall back to current directory
-		return "retrograde.db"
+		return filepath.Join(cwd, "retrograde.db")
 	}
 
 	return defaultPath
@@ -660,8 +664,9 @@ func CheckRequiredPathsExist(cfg *Config) bool {
 		cfg.Configuration.Paths.Logs,
 		cfg.Configuration.Paths.MessageBase,
 		cfg.Configuration.Paths.FileBase,
-		cfg.Configuration.Paths.System,
+		// Skip System path as it's always the current directory
 		cfg.Configuration.Paths.Themes,
+		filepath.Dir(cfg.Servers.Security.LocalLists.BlacklistFile), // security directory
 	}
 
 	for _, path := range pathsToCheck {
@@ -681,8 +686,9 @@ func EnsureRequiredPaths(cfg *Config) error {
 		cfg.Configuration.Paths.Logs,
 		cfg.Configuration.Paths.MessageBase,
 		cfg.Configuration.Paths.FileBase,
-		cfg.Configuration.Paths.System,
+		// Skip System path as it's always the current directory
 		cfg.Configuration.Paths.Themes,
+		filepath.Dir(cfg.Servers.Security.LocalLists.BlacklistFile), // security directory
 	}
 
 	for _, path := range pathsToCreate {

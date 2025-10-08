@@ -100,6 +100,20 @@ type UserPreferenceRecord struct {
 	Category        sql.NullString
 }
 
+// SecurityLevelRecord represents a row in the security_levels table.
+type SecurityLevelRecord struct {
+	ID               int64
+	Name             string
+	SecLevel         int
+	MinsPerDay       int
+	TimeoutMins      int
+	CanDeleteOwnMsgs bool
+	CanDeleteMsgs    bool
+	Invisible        bool
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
 // InitializeUserSchema ensures the user-related tables exist.
 const sqliteTimeFormat = time.RFC3339Nano
 
@@ -210,6 +224,18 @@ func (s *SQLiteDB) InitializeUserSchema() error {
 			UNIQUE(user_id, method),
 			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 		)`,
+		`CREATE TABLE IF NOT EXISTS security_levels (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL DEFAULT 'Unknown Name',
+			sec_level INTEGER NOT NULL UNIQUE,
+			mins_per_day INTEGER NOT NULL,
+			timeout_mins INTEGER NOT NULL,
+			can_delete_own_msgs INTEGER NOT NULL DEFAULT 0,
+			can_delete_msgs INTEGER NOT NULL DEFAULT 0,
+			invisible INTEGER NOT NULL DEFAULT 0,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
 	}
 
 	columnMigrations := []struct {
@@ -270,6 +296,50 @@ func (s *SQLiteDB) InitializeUserSchema() error {
 	for _, stmt := range indexStatements {
 		if _, err := tx.Exec(stmt); err != nil {
 			return fmt.Errorf("failed to execute index statement: %w", err)
+		}
+	}
+
+	// Seed default security levels
+	seedStatements := []struct {
+		name             string
+		secLevel         int
+		minsPerDay       int
+		timeoutMins      int
+		canDeleteOwnMsgs bool
+		canDeleteMsgs    bool
+		invisible        bool
+	}{
+		{"New Users", 10, 60, 15, false, false, false},
+		{"SysOps", 100, 0, 0, true, true, false},
+	}
+
+	now := time.Now().Format(sqliteTimeFormat)
+	for _, seed := range seedStatements {
+		// Check if security level already exists
+		var count int
+		err := tx.QueryRow(`SELECT COUNT(*) FROM security_levels WHERE sec_level = ?`, seed.secLevel).Scan(&count)
+		if err != nil {
+			return fmt.Errorf("failed to check existing security level %d: %w", seed.secLevel, err)
+		}
+
+		if count == 0 {
+			// Insert the security level
+			_, err = tx.Exec(`
+				INSERT INTO security_levels (name, sec_level, mins_per_day, timeout_mins, can_delete_own_msgs, can_delete_msgs, invisible, created_at, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				seed.name,
+				seed.secLevel,
+				seed.minsPerDay,
+				seed.timeoutMins,
+				boolToInt(seed.canDeleteOwnMsgs),
+				boolToInt(seed.canDeleteMsgs),
+				boolToInt(seed.invisible),
+				now,
+				now,
+			)
+			if err != nil {
+				return fmt.Errorf("failed to seed security level %d: %w", seed.secLevel, err)
+			}
 		}
 	}
 
@@ -1034,4 +1104,200 @@ func (s *SQLiteDB) GetUserPreferences(userID int64) (map[string]UserPreferenceRe
 func (s *SQLiteDB) DeleteUserPreference(userID int64, key string) error {
 	_, err := s.db.Exec(`DELETE FROM user_preferences WHERE user_id = ? AND preference_key = ?`, userID, key)
 	return err
+}
+
+// SecurityLevelRecord DAL functions
+
+// CreateSecurityLevel creates a new security level record.
+func (s *SQLiteDB) CreateSecurityLevel(level *SecurityLevelRecord) (int64, error) {
+	now := time.Now().Format(sqliteTimeFormat)
+	result, err := s.db.Exec(`
+		INSERT INTO security_levels (name, sec_level, mins_per_day, timeout_mins, can_delete_own_msgs, can_delete_msgs, invisible, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		level.Name,
+		level.SecLevel,
+		level.MinsPerDay,
+		level.TimeoutMins,
+		boolToInt(level.CanDeleteOwnMsgs),
+		boolToInt(level.CanDeleteMsgs),
+		boolToInt(level.Invisible),
+		now,
+		now,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create security level: %w", err)
+	}
+	return result.LastInsertId()
+}
+
+// GetSecurityLevelByID retrieves a security level by ID.
+func (s *SQLiteDB) GetSecurityLevelByID(id int64) (*SecurityLevelRecord, error) {
+	row := s.db.QueryRow(`
+		SELECT id, name, sec_level, mins_per_day, timeout_mins, can_delete_own_msgs, can_delete_msgs, invisible, created_at, updated_at
+		FROM security_levels
+		WHERE id = ?`,
+		id,
+	)
+	var level SecurityLevelRecord
+	var createdStr, updatedStr string
+	var canDeleteOwnMsgs, canDeleteMsgs, invisible int
+
+	if err := row.Scan(
+		&level.ID,
+		&level.Name,
+		&level.SecLevel,
+		&level.MinsPerDay,
+		&level.TimeoutMins,
+		&canDeleteOwnMsgs,
+		&canDeleteMsgs,
+		&invisible,
+		&createdStr,
+		&updatedStr,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get security level: %w", err)
+	}
+
+	level.CanDeleteOwnMsgs = canDeleteOwnMsgs != 0
+	level.CanDeleteMsgs = canDeleteMsgs != 0
+	level.Invisible = invisible != 0
+
+	if created, err := parseSQLiteTime(createdStr); err == nil {
+		level.CreatedAt = created
+	}
+	if updated, err := parseSQLiteTime(updatedStr); err == nil {
+		level.UpdatedAt = updated
+	}
+
+	return &level, nil
+}
+
+// GetSecurityLevelByLevel retrieves a security level by security level number.
+func (s *SQLiteDB) GetSecurityLevelByLevel(secLevel int) (*SecurityLevelRecord, error) {
+	row := s.db.QueryRow(`
+		SELECT id, name, sec_level, mins_per_day, timeout_mins, can_delete_own_msgs, can_delete_msgs, invisible, created_at, updated_at
+		FROM security_levels
+		WHERE sec_level = ?`,
+		secLevel,
+	)
+	var level SecurityLevelRecord
+	var createdStr, updatedStr string
+	var canDeleteOwnMsgs, canDeleteMsgs, invisible int
+
+	if err := row.Scan(
+		&level.ID,
+		&level.Name,
+		&level.SecLevel,
+		&level.MinsPerDay,
+		&level.TimeoutMins,
+		&canDeleteOwnMsgs,
+		&canDeleteMsgs,
+		&invisible,
+		&createdStr,
+		&updatedStr,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get security level: %w", err)
+	}
+
+	level.CanDeleteOwnMsgs = canDeleteOwnMsgs != 0
+	level.CanDeleteMsgs = canDeleteMsgs != 0
+	level.Invisible = invisible != 0
+
+	if created, err := parseSQLiteTime(createdStr); err == nil {
+		level.CreatedAt = created
+	}
+	if updated, err := parseSQLiteTime(updatedStr); err == nil {
+		level.UpdatedAt = updated
+	}
+
+	return &level, nil
+}
+
+// GetAllSecurityLevels retrieves all security levels ordered by sec_level.
+func (s *SQLiteDB) GetAllSecurityLevels() ([]SecurityLevelRecord, error) {
+	rows, err := s.db.Query(`
+		SELECT id, name, sec_level, mins_per_day, timeout_mins, can_delete_own_msgs, can_delete_msgs, invisible, created_at, updated_at
+		FROM security_levels
+		ORDER BY sec_level`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query security levels: %w", err)
+	}
+	defer rows.Close()
+
+	var levels []SecurityLevelRecord
+	for rows.Next() {
+		var level SecurityLevelRecord
+		var createdStr, updatedStr string
+		var canDeleteOwnMsgs, canDeleteMsgs, invisible int
+
+		if err := rows.Scan(
+			&level.ID,
+			&level.Name,
+			&level.SecLevel,
+			&level.MinsPerDay,
+			&level.TimeoutMins,
+			&canDeleteOwnMsgs,
+			&canDeleteMsgs,
+			&invisible,
+			&createdStr,
+			&updatedStr,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan security level: %w", err)
+		}
+
+		level.CanDeleteOwnMsgs = canDeleteOwnMsgs != 0
+		level.CanDeleteMsgs = canDeleteMsgs != 0
+		level.Invisible = invisible != 0
+
+		if created, err := parseSQLiteTime(createdStr); err == nil {
+			level.CreatedAt = created
+		}
+		if updated, err := parseSQLiteTime(updatedStr); err == nil {
+			level.UpdatedAt = updated
+		}
+
+		levels = append(levels, level)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating security levels: %w", err)
+	}
+
+	return levels, nil
+}
+
+// UpdateSecurityLevel updates an existing security level.
+func (s *SQLiteDB) UpdateSecurityLevel(level *SecurityLevelRecord) error {
+	now := time.Now().Format(sqliteTimeFormat)
+	_, err := s.db.Exec(`
+		UPDATE security_levels
+		SET name = ?, mins_per_day = ?, timeout_mins = ?, can_delete_own_msgs = ?, can_delete_msgs = ?, invisible = ?, updated_at = ?
+		WHERE id = ?`,
+		level.Name,
+		level.MinsPerDay,
+		level.TimeoutMins,
+		boolToInt(level.CanDeleteOwnMsgs),
+		boolToInt(level.CanDeleteMsgs),
+		boolToInt(level.Invisible),
+		now,
+		level.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update security level: %w", err)
+	}
+	return nil
+}
+
+// DeleteSecurityLevel deletes a security level by ID.
+func (s *SQLiteDB) DeleteSecurityLevel(id int64) error {
+	_, err := s.db.Exec(`DELETE FROM security_levels WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete security level: %w", err)
+	}
+	return nil
 }

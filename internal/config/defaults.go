@@ -1,21 +1,33 @@
 package config
 
+import (
+	"os"
+	"path/filepath"
+)
+
 // GetDefaultConfig returns a Config struct populated with default values
 // Used when creating a new database for the first time
 func GetDefaultConfig() *Config {
 	cfg := &Config{}
 
-	// Configuration.Paths - Use relative paths that work cross-platform
-	cfg.Configuration.Paths.Database = "data/retrograde.db"
-	cfg.Configuration.Paths.FileBase = "files"
-	cfg.Configuration.Paths.Logs = "logs"
-	cfg.Configuration.Paths.MessageBase = "msgs"
-	cfg.Configuration.Paths.System = "."
-	cfg.Configuration.Paths.Themes = "themes"
+	// Get current working directory for absolute paths
+	cwd, err := os.Getwd()
+	if err != nil {
+		// Fallback to relative paths if we can't get cwd
+		cwd = "."
+	}
+
+	// Configuration.Paths - Use absolute paths to avoid confusion
+	cfg.Configuration.Paths.Database = filepath.Join(cwd, "data")
+	cfg.Configuration.Paths.FileBase = filepath.Join(cwd, "files")
+	cfg.Configuration.Paths.Logs = filepath.Join(cwd, "logs")
+	cfg.Configuration.Paths.MessageBase = filepath.Join(cwd, "msgs")
+	cfg.Configuration.Paths.System = cwd // Current working directory
+	cfg.Configuration.Paths.Themes = filepath.Join(cwd, "text")
 
 	// Configuration.General
 	cfg.Configuration.General.BBSLocation = "Your City, State"
-	cfg.Configuration.General.BBSName = "Retrograde BBS"
+	cfg.Configuration.General.BBSName = "Another Retrograde BBS"
 	cfg.Configuration.General.DefaultTheme = "default"
 	cfg.Configuration.General.StartMenu = "prelogin"
 	cfg.Configuration.General.SysOpName = "SysOp"
@@ -94,9 +106,9 @@ func GetDefaultConfig() *Config {
 
 	// Servers.Security.LocalLists
 	cfg.Servers.Security.LocalLists.BlacklistEnabled = true
-	cfg.Servers.Security.LocalLists.BlacklistFile = "security/blacklist.txt"
+	cfg.Servers.Security.LocalLists.BlacklistFile = filepath.Join(cwd, "security", "blacklist.txt")
 	cfg.Servers.Security.LocalLists.WhitelistEnabled = false
-	cfg.Servers.Security.LocalLists.WhitelistFile = "security/whitelist.txt"
+	cfg.Servers.Security.LocalLists.WhitelistFile = filepath.Join(cwd, "security", "whitelist.txt")
 
 	// Servers.Security.ExternalLists
 	cfg.Servers.Security.ExternalLists.Enabled = true
@@ -116,7 +128,7 @@ func GetDefaultConfig() *Config {
 	// Servers.Security.Logs
 	cfg.Servers.Security.Logs.LogBlockedAttempts = true
 	cfg.Servers.Security.Logs.LogSecurityEvents = true
-	cfg.Servers.Security.Logs.SecurityLogFile = "logs/security.log"
+	cfg.Servers.Security.Logs.SecurityLogFile = filepath.Join(cwd, "logs", "security.log")
 
 	// Other.Discord
 	cfg.Other.Discord.Enabled = false

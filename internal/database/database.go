@@ -74,6 +74,14 @@ type Database interface {
 	GetMFAForUser(userID int64) ([]UserMFARecord, error)
 	DeleteMFAForUser(userID int64, method string) error
 
+	// Security level operations
+	CreateSecurityLevel(level *SecurityLevelRecord) (int64, error)
+	GetSecurityLevelByID(id int64) (*SecurityLevelRecord, error)
+	GetSecurityLevelByLevel(secLevel int) (*SecurityLevelRecord, error)
+	GetAllSecurityLevels() ([]SecurityLevelRecord, error)
+	UpdateSecurityLevel(level *SecurityLevelRecord) error
+	DeleteSecurityLevel(id int64) error
+
 	// Database management
 	InitializeSchema() error
 	Close() error

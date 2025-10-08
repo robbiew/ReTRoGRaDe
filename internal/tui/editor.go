@@ -24,27 +24,28 @@ import (
 // Color palette for modern theme
 const (
 	// Primary colors
-	ColorPrimary     = "39"  // Bright blue
-	ColorPrimaryDark = "33"  // Dark blue
-	ColorAccent      = "170" // Purple/magenta
-	ColorAccentLight = "177" // Light purple
+	ColorPrimary     = "4"  // Blue (was "39")
+	ColorPrimaryDark = "4"  // Blue (was "33")
+	ColorAccent      = "5"  // Magenta (was "170")
+	ColorAccentLight = "13" // Bright Magenta (was "177")
 
 	// Backgrounds
-	ColorBgDark   = "235" // Very dark gray
-	ColorBgMedium = "237" // Medium dark gray
-	ColorBgLight  = "239" // Lighter gray
+	ColorBgGrey   = "8" // Black (unchanged)
+	ColorBgDark   = "0" // Black (unchanged)
+	ColorBgMedium = "0" // Black (was "8")
+	ColorBgLight  = "7" // White (unchanged)
 
 	// Text colors
-	ColorTextBright = "15"  // White
-	ColorTextNormal = "252" // Light gray
-	ColorTextDim    = "243" // Dim gray
-	ColorTextAccent = "213" // Pink
+	ColorTextBright = "15" // Bright White (unchanged)
+	ColorTextNormal = "7"  // White (was "252")
+	ColorTextDim    = "8"  // Bright Black/Gray (was "243")
+	ColorTextAccent = "13" // Bright Magenta (was "213")
 
 	// Status colors
-	ColorSuccess = "42"  // Green
-	ColorWarning = "214" // Orange
-	ColorError   = "196" // Red
-	ColorInfo    = "117" // Sky blue
+	ColorSuccess = "2" // Green (was "42")
+	ColorWarning = "3" // Yellow (was "214")
+	ColorError   = "1" // Red (was "196")
+	ColorInfo    = "6" // Cyan (was "117")
 )
 
 // Background texture patterns
@@ -93,6 +94,7 @@ const (
 	Level4ModalNavigation                       // Level 4: Centered modal for final menus
 	EditingValue                                // Editing a value in modal form
 	UserManagementMode                          // User management interface
+	SecurityLevelsMode                          // Security levels management interface
 	SavePrompt                                  // Confirming save on exit
 	SaveChangesPrompt                           // NEW: Prompt to save changes when exiting edit modal
 
@@ -114,6 +116,12 @@ type Model struct {
 	// Submenu list
 	submenuList list.Model
 
+	// User management list
+	userListUI list.Model
+
+	// Security levels management list
+	securityLevelsUI list.Model
+
 	// Modal form state
 	modalFields      []SubmenuItem // All fields in the current section
 	modalFieldIndex  int           // Currently selected field in modal
@@ -128,6 +136,10 @@ type Model struct {
 	// User management state
 	userList []database.UserRecord // List of users for management
 
+	// Security levels management state
+	securityLevelsList   []database.SecurityLevelRecord // List of security levels for management
+	editingSecurityLevel *database.SecurityLevelRecord  // Currently editing security level
+
 	// UI state
 	screenWidth   int
 	screenHeight  int
@@ -140,6 +152,10 @@ type Model struct {
 
 	savePromptSelection int            // 0 = No, 1 = Yes
 	returnToMode        NavigationMode // Where to return after save prompt
+
+	// Texture configuration
+	texturePatterns []string       // ADD THIS
+	textureStyle    lipgloss.Style // ADD THIS
 }
 
 // MessageType defines the type of status message
@@ -279,6 +295,146 @@ func (d submenuDelegate) Render(w io.Writer, m list.Model, index int, listItem l
 	fmt.Fprint(w, str)
 }
 
+// userListItem implements list.Item interface for user items
+type userListItem struct {
+	user database.UserRecord
+}
+
+func (i userListItem) FilterValue() string {
+	return i.user.Username
+}
+
+// userDelegate implements list.ItemDelegate for custom user rendering
+type userDelegate struct {
+	maxWidth int
+}
+
+func (d userDelegate) Height() int                             { return 1 }
+func (d userDelegate) Spacing() int                            { return 0 }
+func (d userDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
+func (d userDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
+	item, ok := listItem.(userListItem)
+	if !ok {
+		return
+	}
+
+	var str string
+	isSelected := index == m.Index()
+
+	// Get user info
+	levelName := "Unknown"
+	switch item.user.SecurityLevel {
+	case config.SecurityLevelGuest:
+		levelName = "Guest"
+	case config.SecurityLevelRegular:
+		levelName = "Regular"
+	case config.SecurityLevelSysOp:
+		levelName = "SysOp"
+	case config.SecurityLevelAdmin:
+		levelName = "Admin"
+	}
+
+	lastLogin := "Never"
+	if item.user.LastLogin.Valid && item.user.LastLogin.String != "" {
+		lastLogin = item.user.LastLogin.String
+	}
+
+	// Format: [ID] Username (Level) - Last: Login
+	itemText := fmt.Sprintf(" [%d] %s (%s) - Last: %s", item.user.ID, item.user.Username, levelName, lastLogin)
+
+	// Truncate if text is too long
+	if len(itemText) > d.maxWidth {
+		itemText = itemText[:d.maxWidth-3] + "..."
+	}
+
+	// Calculate padding to fill to maxWidth
+	padding := ""
+	if len(itemText) < d.maxWidth {
+		padding = strings.Repeat(" ", d.maxWidth-len(itemText))
+	}
+
+	// Render with modern colors
+	if isSelected {
+		// Selected: bright accent color
+		style := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorTextBright)).
+			Background(lipgloss.Color(ColorAccent)).
+			Bold(true).
+			Width(d.maxWidth)
+		str = style.Render(itemText + padding)
+	} else {
+		// Unselected: subtle
+		style := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorTextNormal)).
+			Background(lipgloss.Color(ColorBgMedium)).
+			Width(d.maxWidth)
+		str = style.Render(itemText + padding)
+	}
+
+	fmt.Fprint(w, str)
+}
+
+// securityLevelListItem implements list.Item interface for security level items
+type securityLevelListItem struct {
+	securityLevel database.SecurityLevelRecord
+}
+
+func (i securityLevelListItem) FilterValue() string {
+	return i.securityLevel.Name
+}
+
+// securityLevelDelegate implements list.ItemDelegate for custom security level rendering
+type securityLevelDelegate struct {
+	maxWidth int
+}
+
+func (d securityLevelDelegate) Height() int                             { return 1 }
+func (d securityLevelDelegate) Spacing() int                            { return 0 }
+func (d securityLevelDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
+func (d securityLevelDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
+	item, ok := listItem.(securityLevelListItem)
+	if !ok {
+		return
+	}
+
+	var str string
+	isSelected := index == m.Index()
+
+	// Format: [SecLevel] [Label]
+	itemText := fmt.Sprintf(" [%d] %s", item.securityLevel.SecLevel, item.securityLevel.Name)
+
+	// Truncate if text is too long
+	if len(itemText) > d.maxWidth {
+		itemText = itemText[:d.maxWidth-3] + "..."
+	}
+
+	// Calculate padding to fill to maxWidth
+	padding := ""
+	if len(itemText) < d.maxWidth {
+		padding = strings.Repeat(" ", d.maxWidth-len(itemText))
+	}
+
+	// Render with modern colors
+	if isSelected {
+		// Selected: bright accent color
+		style := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorTextBright)).
+			Background(lipgloss.Color(ColorAccent)).
+			Bold(true).
+			Width(d.maxWidth)
+		str = style.Render(itemText + padding)
+	} else {
+		// Unselected: subtle
+		style := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorTextNormal)).
+			Background(lipgloss.Color(ColorBgMedium)).
+			Width(d.maxWidth)
+		str = style.Render(itemText + padding)
+	}
+
+	fmt.Fprint(w, str)
+}
+
 // ============================================================================
 // Menu Bar Component
 // ============================================================================
@@ -303,7 +459,7 @@ func (c *MenuBarComponent) Render() string {
 
 	// Join with decorative separator and center in available width
 	separator := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
+		Foreground(lipgloss.Color("8")).
 		Render(" | ")
 
 	return lipgloss.NewStyle().
@@ -318,11 +474,11 @@ func (c *MenuBarComponent) getMenuItemStyle(active bool) lipgloss.Style {
 		return lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("15")). // White text
-			Background(lipgloss.Color("33"))  // Blue background
+			Background(lipgloss.Color("4"))   // Blue background
 	}
 	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("250")). // Gray text
-		Background(lipgloss.Color("235"))  // Dark gray background
+		Foreground(lipgloss.Color("7")). // Gray text
+		Background(lipgloss.Color("8"))  // Dark gray background
 }
 
 // ============================================================================
@@ -1247,6 +1403,11 @@ func buildMenuStructure(cfg *config.Config) MenuBar {
 						ItemType: ActionItem,
 					},
 					{
+						ID:       "security-levels-editor",
+						Label:    "Security Levels",
+						ItemType: ActionItem,
+					},
+					{
 						ID:       "system-editors",
 						Label:    "System Editors",
 						ItemType: SectionHeader,
@@ -1384,7 +1545,6 @@ func buildListItems(category MenuCategory) []list.Item {
 	return items
 }
 
-// InitialModelV2 creates the initial model state for the v2 TUI
 func InitialModelV2(cfg *config.Config) Model {
 	ti := textinput.New()
 	ti.Prompt = "" // Remove prompt to prevent shifting
@@ -1402,7 +1562,7 @@ func InitialModelV2(cfg *config.Config) Model {
 		Foreground(lipgloss.Color("15")).
 		Background(lipgloss.Color("33"))
 	ti.PlaceholderStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
+		Foreground(lipgloss.Color("8")).
 		Background(lipgloss.Color("33"))
 
 	menuBar := buildMenuStructure(cfg)
@@ -1438,16 +1598,24 @@ func InitialModelV2(cfg *config.Config) Model {
 		}
 	}
 
+	// Initialize texture configuration
+	texturePatterns := []string{TexturePattern2, TexturePattern2, TexturePattern2, TexturePattern2}
+	textureStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("8")).
+		Background(lipgloss.Color("0"))
+
 	return Model{
-		config:       cfg,
-		db:           db,
-		navMode:      MainMenuNavigation,
-		activeMenu:   0,
-		menuBar:      menuBar,
-		submenuList:  submenuList,
-		textInput:    ti,
-		screenWidth:  80,
-		screenHeight: 24,
+		config:          cfg,
+		db:              db,
+		navMode:         MainMenuNavigation,
+		activeMenu:      0,
+		menuBar:         menuBar,
+		submenuList:     submenuList,
+		textInput:       ti,
+		screenWidth:     80,
+		screenHeight:    24,
+		texturePatterns: texturePatterns, // ADD THIS
+		textureStyle:    textureStyle,    // ADD THIS
 	}
 }
 
@@ -1513,6 +1681,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleLevel4ModalNavigation(msg)
 		case UserManagementMode:
 			return m.handleUserManagement(msg)
+		case SecurityLevelsMode:
+			return m.handleSecurityLevelsManagement(msg)
 		case SavePrompt:
 			return m.handleSavePrompt(msg)
 		case SaveChangesPrompt: // ADD THIS
@@ -1524,6 +1694,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Update submenu list if in Level 2 menu navigation mode
 	if m.navMode == Level2MenuNavigation {
 		m.submenuList, cmd = m.submenuList.Update(msg)
+		return m, cmd
+	}
+
+	// Update user list if in user management mode
+	if m.navMode == UserManagementMode {
+		m.userListUI, cmd = m.userListUI.Update(msg)
+		return m, cmd
+	}
+
+	// Update security levels list if in security levels management mode
+	if m.navMode == SecurityLevelsMode {
+		m.securityLevelsUI, cmd = m.securityLevelsUI.Update(msg)
 		return m, cmd
 	}
 
@@ -1632,21 +1814,30 @@ func (m Model) handleLevel4ModalNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 		}
 
 		// No unsaved changes, exit normally
-		hasSubSections := false
-		for _, field := range m.modalFields {
-			if field.ItemType == SectionHeader {
-				hasSubSections = true
-				break
-			}
-		}
-
-		if hasSubSections {
-			m.navMode = Level3MenuNavigation
-		} else {
-			m.navMode = Level2MenuNavigation
+		if m.editingSecurityLevel != nil {
+			// Return to security levels list
+			m.navMode = SecurityLevelsMode
 			m.modalFields = nil
 			m.modalFieldIndex = 0
 			m.modalSectionName = ""
+			m.editingSecurityLevel = nil
+		} else {
+			hasSubSections := false
+			for _, field := range m.modalFields {
+				if field.ItemType == SectionHeader {
+					hasSubSections = true
+					break
+				}
+			}
+
+			if hasSubSections {
+				m.navMode = Level3MenuNavigation
+			} else {
+				m.navMode = Level2MenuNavigation
+				m.modalFields = nil
+				m.modalFieldIndex = 0
+				m.modalSectionName = ""
+			}
 		}
 		m.message = ""
 		return m, nil
@@ -1670,13 +1861,37 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		if m.savePromptSelection == 1 {
 			// Yes - Save changes
-			if err := config.SaveConfig(m.config, ""); err != nil {
-				m.message = fmt.Sprintf("Error saving: %v", err)
-				m.messageTime = time.Now()
-				m.messageType = ErrorMessage
-				m.savePrompt = false
-				m.navMode = m.returnToMode
-				return m, nil
+			var err error
+			if m.editingSecurityLevel != nil {
+				// Save security level changes
+				err = m.db.UpdateSecurityLevel(m.editingSecurityLevel)
+				if err != nil {
+					m.message = fmt.Sprintf("Error saving security level: %v", err)
+					m.messageTime = time.Now()
+					m.messageType = ErrorMessage
+					m.savePrompt = false
+					m.navMode = m.returnToMode
+					return m, nil
+				}
+				// Reload security levels list to reflect changes
+				if reloadErr := m.loadSecurityLevels(); reloadErr != nil {
+					m.message = fmt.Sprintf("Error reloading security levels: %v", reloadErr)
+					m.messageTime = time.Now()
+					m.messageType = ErrorMessage
+				}
+				m.editingSecurityLevel = nil // Clear editing state
+			} else {
+				// Save config changes
+				err = config.SaveConfig(m.config, "")
+				if err != nil {
+					m.message = fmt.Sprintf("Error saving: %v", err)
+					m.messageTime = time.Now()
+					m.messageType = ErrorMessage
+					m.savePrompt = false
+					m.editingSecurityLevel = nil
+					m.navMode = m.returnToMode
+					return m, nil
+				}
 			}
 			// DON'T show success message - just reset counter
 			m.modifiedCount = 0 // Reset counter
@@ -1684,6 +1899,7 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Either way, return to previous mode
 		m.savePrompt = false
 		m.navMode = m.returnToMode
+		m.editingSecurityLevel = nil // Clear editing state
 
 		// Clean up modal if returning to Level 2
 		if m.returnToMode == Level2MenuNavigation {
@@ -1703,6 +1919,7 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.modifiedCount = 0
 		}
 		m.savePrompt = false
+		m.editingSecurityLevel = nil
 		m.navMode = m.returnToMode
 		if m.returnToMode == Level2MenuNavigation {
 			m.modalFields = nil
@@ -1713,6 +1930,7 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "n", "N":
 		// Don't save, just return
 		m.savePrompt = false
+		m.editingSecurityLevel = nil
 		m.navMode = m.returnToMode
 		if m.returnToMode == Level2MenuNavigation {
 			m.modalFields = nil
@@ -1723,6 +1941,7 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		// Cancel - return to modal
 		m.savePrompt = false
+		m.editingSecurityLevel = nil
 		m.navMode = Level4ModalNavigation
 	}
 	return m, nil
@@ -1882,6 +2101,46 @@ func (m Model) handleLevel2MenuNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 						m.navMode = UserManagementMode
 						m.message = ""
 					}
+				} else if item.submenuItem.ID == "security-levels-editor" {
+					// Launch security levels management interface
+					// Check if database path is configured
+					if m.config.Configuration.Paths.Database == "" {
+						m.message = "Database path not configured. Please set it under Configuration > Paths > Database first."
+						m.messageTime = time.Now()
+						return m, nil
+					}
+
+					// Try to get database connection if not already available
+					if m.db == nil {
+						if existingDB := config.GetDatabase(); existingDB != nil {
+							if sqliteDB, ok := existingDB.(*database.SQLiteDB); ok {
+								m.db = sqliteDB
+								// Ensure user schema is initialized
+								if err := m.db.InitializeSchema(); err != nil {
+									m.message = fmt.Sprintf("Failed to initialize database schema: %v", err)
+									m.messageTime = time.Now()
+									return m, nil
+								}
+							} else {
+								m.message = "Database connection type mismatch"
+								m.messageTime = time.Now()
+								return m, nil
+							}
+						} else {
+							m.message = "No database connection available"
+							m.messageTime = time.Now()
+							return m, nil
+						}
+					}
+
+					// Load security levels
+					if err := m.loadSecurityLevels(); err != nil {
+						m.message = fmt.Sprintf("Error loading security levels: %v", err)
+						m.messageTime = time.Now()
+					} else {
+						m.navMode = SecurityLevelsMode
+						m.message = ""
+					}
 				} else {
 					m.message = fmt.Sprintf("Action '%s' not implemented yet", item.submenuItem.Label)
 					m.messageTime = time.Now()
@@ -1973,8 +2232,8 @@ func (m Model) handleLevel3MenuNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "esc":
-		// Return to Level 2 menu navigation
-		m.navMode = Level2MenuNavigation
+		// Return to main menu navigation
+		m.navMode = MainMenuNavigation
 		m.message = ""
 		m.modalFields = nil
 		m.modalFieldIndex = 0
@@ -2011,9 +2270,11 @@ func (m Model) handleSavePrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 		} else {
-			// No - Quit without saving
-			m.quitting = true
-			return m, tea.Quit
+			// No - Don't exit, return to main menu
+			m.savePrompt = false
+			m.navMode = MainMenuNavigation
+			m.message = ""
+			return m, nil
 		}
 	case "y", "Y":
 		// Shortcut for Yes
@@ -2026,9 +2287,11 @@ func (m Model) handleSavePrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.quitting = true
 		return m, tea.Quit
 	case "n", "N":
-		// Shortcut for No
-		m.quitting = true
-		return m, tea.Quit
+		// Shortcut for No - don't exit, return to main menu
+		m.savePrompt = false
+		m.navMode = MainMenuNavigation
+		m.message = ""
+		return m, nil
 	case "esc":
 		// Cancel - return to main menu
 		m.savePrompt = false
@@ -2140,13 +2403,239 @@ func (m Model) renderSavePrompt() string {
 
 // handleUserManagement processes input in user management mode
 func (m Model) handleUserManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
 	switch msg.String() {
+	case "up", "k":
+		// Navigate up in list
+		currentIdx := m.userListUI.Index()
+		if currentIdx > 0 {
+			m.userListUI.Select(currentIdx - 1)
+		}
+		return m, nil
+	case "down", "j":
+		// Navigate down in list
+		currentIdx := m.userListUI.Index()
+		items := m.userListUI.Items()
+		if currentIdx < len(items)-1 {
+			m.userListUI.Select(currentIdx + 1)
+		}
+		return m, nil
+	case "home":
+		// Jump to first item
+		m.userListUI.Select(0)
+		return m, nil
+	case "end":
+		// Jump to last item
+		items := m.userListUI.Items()
+		if len(items) > 0 {
+			m.userListUI.Select(len(items) - 1)
+		}
+		return m, nil
+	case "enter":
+		// Select user - could be used for editing user details later
+		selectedItem := m.userListUI.SelectedItem()
+		if selectedItem != nil {
+			user := selectedItem.(userListItem)
+			m.message = fmt.Sprintf("Selected user: %s (ID: %d)", user.user.Username, user.user.ID)
+			m.messageTime = time.Now()
+			m.messageType = InfoMessage
+		}
+		return m, nil
 	case "esc":
-		// Return to Level 2 menu navigation
+		// Return to Level 2 menu navigation (Editors menu)
 		m.navMode = Level2MenuNavigation
 		m.message = ""
 	}
-	return m, nil
+
+	// Update the list for any other input (like filtering)
+	// Only update if not handled above and not ESC (to prevent quit command)
+	if cmd == nil && msg.String() != "esc" {
+		m.userListUI, cmd = m.userListUI.Update(msg)
+	}
+	return m, cmd
+}
+
+// handleSecurityLevelsManagement processes input in security levels management mode
+func (m Model) handleSecurityLevelsManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch msg.String() {
+	case "up", "k":
+		// Navigate up in list
+		currentIdx := m.securityLevelsUI.Index()
+		if currentIdx > 0 {
+			m.securityLevelsUI.Select(currentIdx - 1)
+		}
+		return m, nil
+	case "down", "j":
+		// Navigate down in list
+		currentIdx := m.securityLevelsUI.Index()
+		items := m.securityLevelsUI.Items()
+		if currentIdx < len(items)-1 {
+			m.securityLevelsUI.Select(currentIdx + 1)
+		}
+		return m, nil
+	case "home":
+		// Jump to first item
+		m.securityLevelsUI.Select(0)
+		return m, nil
+	case "end":
+		// Jump to last item
+		items := m.securityLevelsUI.Items()
+		if len(items) > 0 {
+			m.securityLevelsUI.Select(len(items) - 1)
+		}
+		return m, nil
+	case "enter":
+		// Select security level - open edit modal
+		selectedItem := m.securityLevelsUI.SelectedItem()
+		if selectedItem != nil {
+			level := selectedItem.(securityLevelListItem)
+			// Create modal fields for editing security level
+			m.modalFields = []SubmenuItem{
+				{
+					ID:       "security-level-name",
+					Label:    "Name",
+					ItemType: EditableField,
+					EditableItem: &MenuItem{
+						ID:        "security-level-name",
+						Label:     "Name",
+						ValueType: StringValue,
+						Field: ConfigField{
+							GetValue: func() interface{} { return level.securityLevel.Name },
+							SetValue: func(v interface{}) error {
+								level.securityLevel.Name = v.(string)
+								return nil
+							},
+						},
+						HelpText: "Display name for this security level",
+					},
+				},
+				{
+					ID:       "security-level-mins-per-day",
+					Label:    "Minutes per Day",
+					ItemType: EditableField,
+					EditableItem: &MenuItem{
+						ID:        "security-level-mins-per-day",
+						Label:     "Minutes per Day",
+						ValueType: IntValue,
+						Field: ConfigField{
+							GetValue: func() interface{} { return level.securityLevel.MinsPerDay },
+							SetValue: func(v interface{}) error {
+								level.securityLevel.MinsPerDay = v.(int)
+								return nil
+							},
+						},
+						HelpText: "Maximum minutes per day (0 = unlimited)",
+						Validation: func(v interface{}) error {
+							mins := v.(int)
+							if mins < 0 {
+								return fmt.Errorf("minutes per day must be non-negative")
+							}
+							return nil
+						},
+					},
+				},
+				{
+					ID:       "security-level-timeout-mins",
+					Label:    "Timeout Minutes",
+					ItemType: EditableField,
+					EditableItem: &MenuItem{
+						ID:        "security-level-timeout-mins",
+						Label:     "Timeout Minutes",
+						ValueType: IntValue,
+						Field: ConfigField{
+							GetValue: func() interface{} { return level.securityLevel.TimeoutMins },
+							SetValue: func(v interface{}) error {
+								level.securityLevel.TimeoutMins = v.(int)
+								return nil
+							},
+						},
+						HelpText: "Idle timeout in minutes",
+						Validation: func(v interface{}) error {
+							mins := v.(int)
+							if mins < 0 {
+								return fmt.Errorf("timeout minutes must be non-negative")
+							}
+							return nil
+						},
+					},
+				},
+				{
+					ID:       "security-level-can-delete-own-msgs",
+					Label:    "Can Delete Own Messages",
+					ItemType: EditableField,
+					EditableItem: &MenuItem{
+						ID:        "security-level-can-delete-own-msgs",
+						Label:     "Can Delete Own Messages",
+						ValueType: BoolValue,
+						Field: ConfigField{
+							GetValue: func() interface{} { return level.securityLevel.CanDeleteOwnMsgs },
+							SetValue: func(v interface{}) error {
+								level.securityLevel.CanDeleteOwnMsgs = v.(bool)
+								return nil
+							},
+						},
+						HelpText: "Allow users to delete their own messages",
+					},
+				},
+				{
+					ID:       "security-level-can-delete-msgs",
+					Label:    "Can Delete Any Messages",
+					ItemType: EditableField,
+					EditableItem: &MenuItem{
+						ID:        "security-level-can-delete-msgs",
+						Label:     "Can Delete Any Messages",
+						ValueType: BoolValue,
+						Field: ConfigField{
+							GetValue: func() interface{} { return level.securityLevel.CanDeleteMsgs },
+							SetValue: func(v interface{}) error {
+								level.securityLevel.CanDeleteMsgs = v.(bool)
+								return nil
+							},
+						},
+						HelpText: "Allow users to delete any messages",
+					},
+				},
+				{
+					ID:       "security-level-invisible",
+					Label:    "Invisible",
+					ItemType: EditableField,
+					EditableItem: &MenuItem{
+						ID:        "security-level-invisible",
+						Label:     "Invisible",
+						ValueType: BoolValue,
+						Field: ConfigField{
+							GetValue: func() interface{} { return level.securityLevel.Invisible },
+							SetValue: func(v interface{}) error {
+								level.securityLevel.Invisible = v.(bool)
+								return nil
+							},
+						},
+						HelpText: "Hide user from user lists",
+					},
+				},
+			}
+			m.modalFieldIndex = 0
+			m.modalSectionName = fmt.Sprintf("Security Level %d", level.securityLevel.SecLevel)
+			m.editingSecurityLevel = &level.securityLevel // Store reference for saving
+			m.navMode = Level4ModalNavigation
+			m.message = ""
+		}
+		return m, nil
+	case "esc":
+		// Return to Level 2 menu navigation (Editors menu)
+		m.navMode = Level2MenuNavigation
+		m.message = ""
+	}
+
+	// Update the list for any other input (like filtering)
+	// Only update if not handled above and not ESC (to prevent quit command)
+	if cmd == nil && msg.String() != "esc" {
+		m.securityLevelsUI, cmd = m.securityLevelsUI.Update(msg)
+	}
+	return m, cmd
 }
 
 // handleEditingValue processes input while editing a value in the modal
@@ -2299,26 +2788,32 @@ func (m *Model) overlayString(canvas []string, str string, startRow, startCol in
 			// Simple case: replace entire line
 			canvas[row] = line
 		} else {
-			// Complex case: need to preserve left portion and append
+			// Complex case: rebuild line with texture on sides
 			// Get visual width of the line we're adding
 			lineVisualWidth := m.visualWidth(line)
 
-			// Create padding to reach startCol
-			prefix := strings.Repeat(" ", startCol)
-
-			// Clear the rest of the line by padding with spaces
-			totalWidth := startCol + lineVisualWidth
-			suffix := ""
-			if totalWidth < m.screenWidth {
-				suffix = strings.Repeat(" ", m.screenWidth-totalWidth)
+			// Build left texture
+			leftTexture := ""
+			if startCol > 0 {
+				pattern := m.texturePatterns[row%len(m.texturePatterns)]
+				leftTexture = m.textureStyle.Render(strings.Repeat(pattern, startCol))
 			}
 
-			canvas[row] = prefix + line + suffix
+			// Build right texture
+			rightTexture := ""
+			endCol := startCol + lineVisualWidth
+			if endCol < m.screenWidth {
+				remainingWidth := m.screenWidth - endCol
+				pattern := m.texturePatterns[row%len(m.texturePatterns)]
+				rightTexture = m.textureStyle.Render(strings.Repeat(pattern, remainingWidth))
+			}
+
+			// Combine: left texture + content + right texture
+			canvas[row] = leftTexture + line + rightTexture
 		}
 	}
 }
 
-// overlayStringCenteredWithClear - centers and clears the area behind
 func (m *Model) overlayStringCenteredWithClear(canvas []string, str string) {
 	lines := strings.Split(str, "\n")
 	if len(lines) == 0 {
@@ -2343,16 +2838,8 @@ func (m *Model) overlayStringCenteredWithClear(canvas []string, str string) {
 		startCol = 0
 	}
 
-	// Clear the area first (important for modals!)
-	for i := 0; i < len(lines); i++ {
-		row := startRow + i
-		if row >= 0 && row < len(canvas) {
-			// Clear the entire row in the modal area
-			canvas[row] = strings.Repeat(" ", m.screenWidth)
-		}
-	}
-
-	// Now overlay the content
+	// Just overlay directly - the texture is already in the canvas
+	// No need to clear/recreate it
 	m.overlayString(canvas, str, startRow, startCol)
 }
 
@@ -2403,10 +2890,13 @@ func (m *Model) visualWidth(s string) int {
 
 // View renders the complete UI using a layered canvas approach
 func (m Model) View() string {
-	// Create a base canvas (array of strings, one per line)
+	// Create a base canvas with texture pattern
 	canvas := make([]string, m.screenHeight)
+
 	for i := range canvas {
-		canvas[i] = strings.Repeat(" ", m.screenWidth)
+		// Use texture pattern from struct
+		pattern := m.texturePatterns[i%len(m.texturePatterns)]
+		canvas[i] = m.textureStyle.Render(strings.Repeat(pattern, m.screenWidth))
 	}
 
 	// ALWAYS render persistent header at top (row 0)
@@ -2443,6 +2933,13 @@ func (m Model) View() string {
 	if m.navMode == UserManagementMode {
 		userManagementStr := m.renderUserManagement()
 		m.overlayStringCentered(canvas, userManagementStr)
+		return m.canvasToString(canvas)
+	}
+
+	// Layer 1.6: Security Levels Management (full screen mode)
+	if m.navMode == SecurityLevelsMode {
+		securityLevelsStr := m.renderSecurityLevelsManagement()
+		m.overlayStringCentered(canvas, securityLevelsStr)
 		return m.canvasToString(canvas)
 	}
 
@@ -3094,53 +3591,176 @@ func (m *Model) loadUsers() error {
 	}
 
 	m.userList = users
+
+	// Initialize user list UI
+	var userItems []list.Item
+	for _, user := range users {
+		userItems = append(userItems, userListItem{user: user})
+	}
+
+	// Calculate max width for user list
+	maxWidth := 60 // Wider for user info
+
+	userList := list.New(userItems, userDelegate{maxWidth: maxWidth}, maxWidth, 15)
+	userList.Title = ""
+	userList.SetShowStatusBar(false)
+	userList.SetFilteringEnabled(true)
+	userList.SetShowHelp(false)
+	userList.SetShowPagination(true)
+
+	// Remove any default list styling/padding
+	userList.Styles.Title = lipgloss.NewStyle()
+	userList.Styles.PaginationStyle = lipgloss.NewStyle()
+	userList.Styles.HelpStyle = lipgloss.NewStyle()
+
+	m.userListUI = userList
+
+	return nil
+}
+
+// loadSecurityLevels loads all security levels from the database
+func (m *Model) loadSecurityLevels() error {
+	if m.db == nil {
+		return fmt.Errorf("database not available")
+	}
+
+	securityLevels, err := m.db.GetAllSecurityLevels()
+	if err != nil {
+		return fmt.Errorf("failed to get security levels: %w", err)
+	}
+
+	m.securityLevelsList = securityLevels
+
+	// Initialize security levels list UI
+	var securityLevelItems []list.Item
+	for _, level := range securityLevels {
+		securityLevelItems = append(securityLevelItems, securityLevelListItem{securityLevel: level})
+	}
+
+	// Calculate max width for security levels list
+	maxWidth := 70 // Wider for security level info
+
+	securityLevelsList := list.New(securityLevelItems, securityLevelDelegate{maxWidth: maxWidth}, maxWidth, 15)
+	securityLevelsList.Title = ""
+	securityLevelsList.SetShowStatusBar(false)
+	securityLevelsList.SetFilteringEnabled(true)
+	securityLevelsList.SetShowHelp(false)
+	securityLevelsList.SetShowPagination(true)
+
+	// Remove any default list styling/padding
+	securityLevelsList.Styles.Title = lipgloss.NewStyle()
+	securityLevelsList.Styles.PaginationStyle = lipgloss.NewStyle()
+	securityLevelsList.Styles.HelpStyle = lipgloss.NewStyle()
+
+	m.securityLevelsUI = securityLevelsList
+
 	return nil
 }
 
 // renderUserManagement renders the user management interface
 func (m Model) renderUserManagement() string {
-	var content strings.Builder
+	if len(m.userListUI.Items()) == 0 {
+		emptyMsg := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorTextDim)).
+			Italic(true).
+			Render("No users found")
 
-	content.WriteString("User Management - ")
-	content.WriteString(fmt.Sprintf("%d users\n\n", len(m.userList)))
+		emptyBox := lipgloss.NewStyle().
+			Background(lipgloss.Color(ColorBgMedium)).
+			Padding(2, 4).
+			Render(emptyMsg)
 
-	if len(m.userList) == 0 {
-		content.WriteString("No users found.\n\n")
-	} else {
-		content.WriteString("Users:\n")
-		for _, user := range m.userList {
-			// Format: [ID] Username (Level) - Last Login
-			levelName := "Unknown"
-			switch user.SecurityLevel {
-			case config.SecurityLevelGuest:
-				levelName = "Guest"
-			case config.SecurityLevelRegular:
-				levelName = "Regular"
-			case config.SecurityLevelSysOp:
-				levelName = "SysOp"
-			case config.SecurityLevelAdmin:
-				levelName = "Admin"
-			}
-
-			lastLogin := "Never"
-			if user.LastLogin.Valid && user.LastLogin.String != "" {
-				lastLogin = user.LastLogin.String
-			}
-
-			line := fmt.Sprintf("  [%d] %s (%s) - Last: %s\n", user.ID, user.Username, levelName, lastLogin)
-			content.WriteString(line)
-		}
-		content.WriteString("\n")
+		return emptyBox
 	}
 
-	content.WriteString("[ESC] Return to menu")
+	// Create header with user count
+	headerStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorPrimary)).
+		Foreground(lipgloss.Color(ColorTextBright)).
+		Bold(true).
+		Width(62).
+		Align(lipgloss.Center)
 
+	header := headerStyle.Render(fmt.Sprintf("▸ User Management (%d users) ◂", len(m.userList)))
+
+	// Create separator
+	separatorStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorBgMedium)).
+		Foreground(lipgloss.Color(ColorPrimary)).
+		Width(62)
+	separator := separatorStyle.Render(strings.Repeat("─", 62))
+
+	// Get list view
+	listView := m.userListUI.View()
+	listView = strings.TrimSpace(listView)
+
+	// Create footer separator
+	footerSeparator := separatorStyle.Render(strings.Repeat("─", 62))
+
+	// Build the full content
+	allLines := []string{header, separator, listView, footerSeparator}
+
+	combined := strings.Join(allLines, "\n")
+
+	// Just wrap with background - NO BORDER, NO PADDING
 	userBox := lipgloss.NewStyle().
-		Background(lipgloss.Color("235")).
-		Padding(2, 4).
-		Render(content.String())
+		Background(lipgloss.Color(ColorBgMedium)).
+		Render(combined)
 
 	return userBox
+}
+
+// renderSecurityLevelsManagement renders the security levels management interface
+func (m Model) renderSecurityLevelsManagement() string {
+	if len(m.securityLevelsUI.Items()) == 0 {
+		emptyMsg := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorTextDim)).
+			Italic(true).
+			Render("No security levels found")
+
+		emptyBox := lipgloss.NewStyle().
+			Background(lipgloss.Color(ColorBgMedium)).
+			Padding(2, 4).
+			Render(emptyMsg)
+
+		return emptyBox
+	}
+
+	// Create header with security levels count
+	headerStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorPrimary)).
+		Foreground(lipgloss.Color(ColorTextBright)).
+		Bold(true).
+		Width(72).
+		Align(lipgloss.Center)
+
+	header := headerStyle.Render(fmt.Sprintf("▸ Security Levels Management (%d levels) ◂", len(m.securityLevelsList)))
+
+	// Create separator
+	separatorStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorBgMedium)).
+		Foreground(lipgloss.Color(ColorPrimary)).
+		Width(72)
+	separator := separatorStyle.Render(strings.Repeat("─", 72))
+
+	// Get list view
+	listView := m.securityLevelsUI.View()
+	listView = strings.TrimSpace(listView)
+
+	// Create footer separator
+	footerSeparator := separatorStyle.Render(strings.Repeat("─", 72))
+
+	// Build the full content
+	allLines := []string{header, separator, listView, footerSeparator}
+
+	combined := strings.Join(allLines, "\n")
+
+	// Just wrap with background - NO BORDER, NO PADDING
+	securityLevelsBox := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorBgMedium)).
+		Render(combined)
+
+	return securityLevelsBox
 }
 
 // renderFooter generates simple footer
@@ -3150,7 +3770,7 @@ func (m Model) renderFooter() string {
 	// Style the footer with full width
 	footer := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(ColorTextNormal)).
-		Background(lipgloss.Color("234")).
+		Background(lipgloss.Color("8")).
 		Width(m.screenWidth).
 		Render(footerText)
 
@@ -3216,23 +3836,23 @@ func (m Model) renderPersistentHeader() string {
 	leftStyle1 := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color(ColorAccent)).
-		Background(lipgloss.Color(ColorBgDark))
+		Background(lipgloss.Color(ColorBgGrey))
 
 	leftStyle2 := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color(ColorAccentLight)).
-		Background(lipgloss.Color(ColorBgDark))
+		Background(lipgloss.Color(ColorBgGrey))
 
 	leftText := leftStyle1.Render(" "+appName) + leftStyle2.Render(bbsConfig+" ")
 
 	// Right side: Version with decorative elements
 	versionStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(ColorTextDim)).
-		Background(lipgloss.Color(ColorBgDark))
+		Background(lipgloss.Color(ColorBgGrey))
 
 	versionAccent := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(ColorPrimary)).
-		Background(lipgloss.Color(ColorBgDark)).
+		Background(lipgloss.Color(ColorBgGrey)).
 		Bold(true)
 
 	rightText := versionStyle.Render(" v") + versionAccent.Render("0.01") + versionStyle.Render(" ")
@@ -3247,8 +3867,8 @@ func (m Model) renderPersistentHeader() string {
 	if spacingNeeded > 0 {
 		// Use subtle texture pattern
 		textureStyle := lipgloss.NewStyle().
-			Background(lipgloss.Color(ColorBgDark)).
-			Foreground(lipgloss.Color("237")) // Very subtle
+			Background(lipgloss.Color(ColorBgGrey)).
+			Foreground(lipgloss.Color("7")) // Very subtle
 		spacing = textureStyle.Render(strings.Repeat(TextureDot, spacingNeeded))
 	}
 
