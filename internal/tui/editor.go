@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"database/sql"
 	"fmt"
 	"io"
 	"regexp"
@@ -139,6 +140,9 @@ type Model struct {
 	// Security levels management state
 	securityLevelsList   []database.SecurityLevelRecord // List of security levels for management
 	editingSecurityLevel *database.SecurityLevelRecord  // Currently editing security level
+
+	// User management state
+	editingUser *database.UserRecord // Currently editing user
 
 	// UI state
 	screenWidth   int
@@ -321,26 +325,8 @@ func (d userDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 	var str string
 	isSelected := index == m.Index()
 
-	// Get user info
-	levelName := "Unknown"
-	switch item.user.SecurityLevel {
-	case config.SecurityLevelGuest:
-		levelName = "Guest"
-	case config.SecurityLevelRegular:
-		levelName = "Regular"
-	case config.SecurityLevelSysOp:
-		levelName = "SysOp"
-	case config.SecurityLevelAdmin:
-		levelName = "Admin"
-	}
-
-	lastLogin := "Never"
-	if item.user.LastLogin.Valid && item.user.LastLogin.String != "" {
-		lastLogin = item.user.LastLogin.String
-	}
-
-	// Format: [ID] Username (Level) - Last: Login
-	itemText := fmt.Sprintf(" [%d] %s (%s) - Last: %s", item.user.ID, item.user.Username, levelName, lastLogin)
+	// Format: [UserName] [SecLevel] [UserID] - tab separated for alignment
+	itemText := fmt.Sprintf(" %s\t%d\t%d", item.user.Username, item.user.SecurityLevel, item.user.ID)
 
 	// Truncate if text is too long
 	if len(itemText) > d.maxWidth {
@@ -1821,6 +1807,7 @@ func (m Model) handleLevel4ModalNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 			m.modalFieldIndex = 0
 			m.modalSectionName = ""
 			m.editingSecurityLevel = nil
+			m.editingUser = nil
 		} else {
 			hasSubSections := false
 			for _, field := range m.modalFields {
@@ -1880,6 +1867,24 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.messageType = ErrorMessage
 				}
 				m.editingSecurityLevel = nil // Clear editing state
+			} else if m.editingUser != nil {
+				// Save user changes
+				err = m.db.UpdateUser(m.editingUser)
+				if err != nil {
+					m.message = fmt.Sprintf("Error saving user: %v", err)
+					m.messageTime = time.Now()
+					m.messageType = ErrorMessage
+					m.savePrompt = false
+					m.navMode = m.returnToMode
+					return m, nil
+				}
+				// Reload users list to reflect changes
+				if reloadErr := m.loadUsers(); reloadErr != nil {
+					m.message = fmt.Sprintf("Error reloading users: %v", reloadErr)
+					m.messageTime = time.Now()
+					m.messageType = ErrorMessage
+				}
+				m.editingUser = nil // Clear editing state
 			} else {
 				// Save config changes
 				err = config.SaveConfig(m.config, "")
@@ -1889,6 +1894,7 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.messageType = ErrorMessage
 					m.savePrompt = false
 					m.editingSecurityLevel = nil
+					m.editingUser = nil
 					m.navMode = m.returnToMode
 					return m, nil
 				}
@@ -1900,6 +1906,7 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.savePrompt = false
 		m.navMode = m.returnToMode
 		m.editingSecurityLevel = nil // Clear editing state
+		m.editingUser = nil          // Clear editing state
 
 		// Clean up modal if returning to Level 2
 		if m.returnToMode == Level2MenuNavigation {
@@ -1920,6 +1927,7 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.savePrompt = false
 		m.editingSecurityLevel = nil
+		m.editingUser = nil
 		m.navMode = m.returnToMode
 		if m.returnToMode == Level2MenuNavigation {
 			m.modalFields = nil
@@ -1931,6 +1939,7 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Don't save, just return
 		m.savePrompt = false
 		m.editingSecurityLevel = nil
+		m.editingUser = nil
 		m.navMode = m.returnToMode
 		if m.returnToMode == Level2MenuNavigation {
 			m.modalFields = nil
@@ -1942,6 +1951,7 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Cancel - return to modal
 		m.savePrompt = false
 		m.editingSecurityLevel = nil
+		m.editingUser = nil
 		m.navMode = Level4ModalNavigation
 	}
 	return m, nil
@@ -2433,13 +2443,201 @@ func (m Model) handleUserManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "enter":
-		// Select user - could be used for editing user details later
+		// Select user - open edit modal
 		selectedItem := m.userListUI.SelectedItem()
 		if selectedItem != nil {
 			user := selectedItem.(userListItem)
-			m.message = fmt.Sprintf("Selected user: %s (ID: %d)", user.user.Username, user.user.ID)
-			m.messageTime = time.Now()
-			m.messageType = InfoMessage
+			// Create modal fields for editing user
+			m.modalFields = []SubmenuItem{
+				{
+					ID:       "user-username",
+					Label:    "Username",
+					ItemType: EditableField,
+					EditableItem: &MenuItem{
+						ID:        "user-username",
+						Label:     "Username",
+						ValueType: StringValue,
+						Field: ConfigField{
+							GetValue: func() interface{} { return user.user.Username },
+							SetValue: func(v interface{}) error {
+								user.user.Username = v.(string)
+								return nil
+							},
+						},
+						HelpText: "User login name",
+					},
+				},
+				{
+					ID:       "user-first-name",
+					Label:    "First Name",
+					ItemType: EditableField,
+					EditableItem: &MenuItem{
+						ID:        "user-first-name",
+						Label:     "First Name",
+						ValueType: StringValue,
+						Field: ConfigField{
+							GetValue: func() interface{} {
+								if user.user.FirstName.Valid {
+									return user.user.FirstName.String
+								}
+								return ""
+							},
+							SetValue: func(v interface{}) error {
+								s := v.(string)
+								if s == "" {
+									user.user.FirstName = sql.NullString{Valid: false}
+								} else {
+									user.user.FirstName = sql.NullString{String: s, Valid: true}
+								}
+								return nil
+							},
+						},
+						HelpText: "User's first name (optional)",
+					},
+				},
+				{
+					ID:       "user-last-name",
+					Label:    "Last Name",
+					ItemType: EditableField,
+					EditableItem: &MenuItem{
+						ID:        "user-last-name",
+						Label:     "Last Name",
+						ValueType: StringValue,
+						Field: ConfigField{
+							GetValue: func() interface{} {
+								if user.user.LastName.Valid {
+									return user.user.LastName.String
+								}
+								return ""
+							},
+							SetValue: func(v interface{}) error {
+								s := v.(string)
+								if s == "" {
+									user.user.LastName = sql.NullString{Valid: false}
+								} else {
+									user.user.LastName = sql.NullString{String: s, Valid: true}
+								}
+								return nil
+							},
+						},
+						HelpText: "User's last name (optional)",
+					},
+				},
+				{
+					ID:       "user-security-level",
+					Label:    "Security Level",
+					ItemType: EditableField,
+					EditableItem: &MenuItem{
+						ID:        "user-security-level",
+						Label:     "Security Level",
+						ValueType: IntValue,
+						Field: ConfigField{
+							GetValue: func() interface{} { return user.user.SecurityLevel },
+							SetValue: func(v interface{}) error {
+								user.user.SecurityLevel = v.(int)
+								return nil
+							},
+						},
+						HelpText: "User's security level (0-255)",
+						Validation: func(v interface{}) error {
+							level := v.(int)
+							if level < 0 || level > 255 {
+								return fmt.Errorf("security level must be between 0 and 255")
+							}
+							return nil
+						},
+					},
+				},
+				{
+					ID:       "user-email",
+					Label:    "Email",
+					ItemType: EditableField,
+					EditableItem: &MenuItem{
+						ID:        "user-email",
+						Label:     "Email",
+						ValueType: StringValue,
+						Field: ConfigField{
+							GetValue: func() interface{} {
+								if user.user.Email.Valid {
+									return user.user.Email.String
+								}
+								return ""
+							},
+							SetValue: func(v interface{}) error {
+								s := v.(string)
+								if s == "" {
+									user.user.Email = sql.NullString{Valid: false}
+								} else {
+									user.user.Email = sql.NullString{String: s, Valid: true}
+								}
+								return nil
+							},
+						},
+						HelpText: "User's email address (optional)",
+					},
+				},
+				{
+					ID:       "user-country",
+					Label:    "Country",
+					ItemType: EditableField,
+					EditableItem: &MenuItem{
+						ID:        "user-country",
+						Label:     "Country",
+						ValueType: StringValue,
+						Field: ConfigField{
+							GetValue: func() interface{} {
+								if user.user.Country.Valid {
+									return user.user.Country.String
+								}
+								return ""
+							},
+							SetValue: func(v interface{}) error {
+								s := v.(string)
+								if s == "" {
+									user.user.Country = sql.NullString{Valid: false}
+								} else {
+									user.user.Country = sql.NullString{String: s, Valid: true}
+								}
+								return nil
+							},
+						},
+						HelpText: "User's country (optional)",
+					},
+				},
+				{
+					ID:       "user-locations",
+					Label:    "Locations",
+					ItemType: EditableField,
+					EditableItem: &MenuItem{
+						ID:        "user-locations",
+						Label:     "Locations",
+						ValueType: StringValue,
+						Field: ConfigField{
+							GetValue: func() interface{} {
+								if user.user.Locations.Valid {
+									return user.user.Locations.String
+								}
+								return ""
+							},
+							SetValue: func(v interface{}) error {
+								s := v.(string)
+								if s == "" {
+									user.user.Locations = sql.NullString{Valid: false}
+								} else {
+									user.user.Locations = sql.NullString{String: s, Valid: true}
+								}
+								return nil
+							},
+						},
+						HelpText: "User's locations (optional)",
+					},
+				},
+			}
+			m.modalFieldIndex = 0
+			m.modalSectionName = fmt.Sprintf("Edit User: %s (%d)", user.user.Username, user.user.ID)
+			m.editingUser = &user.user // Store reference for saving
+			m.navMode = Level4ModalNavigation
+			m.message = ""
 		}
 		return m, nil
 	case "esc":
