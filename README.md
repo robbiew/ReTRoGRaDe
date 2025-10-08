@@ -1,10 +1,12 @@
 # Retrograde BBS
 
-Retrograde is a retro-style Bulletin Board System (BBS) written in Go. This project is experimental and a work in progress. It is not recommended for production use unless you are contributing to development.
+Retrograde is a retro-style Bulletin Board System (BBS) implemented in Go. This project is experimental and actively under development. It is not recommended for production use unless you are contributing to its development. Please note that this is not a complete BBS implementation, but rather the initial foundation for one.
 
 ## Learning Goals
 
 This project serves as a platform to deepen Go programming expertise. As an experienced BBS sysop and user, I bring knowledge of legacy and modern BBS architectures, while exploring new concepts in development.
+
+### AI Trigger warning
 
 As a hobbyist Go developer, I'm leveraging AI tools like Roo Code to accelerate learning and development. Rather than "vibe coding," I use LLMs strategically to guide implementation, debug issues, and explore patterns that would otherwise take months of trial-and-error in my limited free time. This approach allows me to make meaningful progress while maintaining code quality and understanding.
 
