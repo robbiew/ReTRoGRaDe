@@ -173,7 +173,7 @@ func TestUpdatePasswordResetsState(t *testing.T) {
 	}
 }
 
-func TestAuthAuditAndMFAOperations(t *testing.T) {
+func TestAuthAuditOperations(t *testing.T) {
 	db := setupTestSQLiteDB(t)
 	defer db.Close()
 
@@ -198,93 +198,5 @@ func TestAuthAuditAndMFAOperations(t *testing.T) {
 	}
 	if auditCount != 1 {
 		t.Fatalf("expected 1 auth audit row, got %d", auditCount)
-	}
-
-	now := time.Now().UTC()
-	record := &UserMFARecord{
-		UserID:      userID,
-		Method:      "totp",
-		Secret:      NullString("secret"),
-		Config:      NullString(`{"digits":6}`),
-		IsEnabled:   true,
-		CreatedAt:   now,
-		LastUsedAt:  sql.NullTime{},
-		BackupCodes: NullString("code1,code2"),
-		DisplayName: NullString("Authenticator App"),
-	}
-	if err := db.UpsertUserMFA(record); err != nil {
-		t.Fatalf("UpsertUserMFA insert returned error: %v", err)
-	}
-
-	mfas, err := db.GetMFAForUser(userID)
-	if err != nil {
-		t.Fatalf("GetMFAForUser returned error: %v", err)
-	}
-	if len(mfas) != 1 {
-		t.Fatalf("expected 1 MFA record, got %d", len(mfas))
-	}
-	if !mfas[0].IsEnabled {
-		t.Fatalf("expected MFA enabled")
-	}
-	if mfas[0].Secret.String != "secret" {
-		t.Fatalf("expected secret 'secret', got %q", mfas[0].Secret.String)
-	}
-
-	record.Secret = NullString("newsecret")
-	record.Config = NullString(`{"digits":8}`)
-	record.IsEnabled = false
-	record.LastUsedAt = sql.NullTime{Time: now.Add(time.Minute), Valid: true}
-	if err := db.UpsertUserMFA(record); err != nil {
-		t.Fatalf("UpsertUserMFA update returned error: %v", err)
-	}
-
-	mfas, err = db.GetMFAForUser(userID)
-	if err != nil {
-		t.Fatalf("GetMFAForUser after update returned error: %v", err)
-	}
-	if len(mfas) != 1 {
-		t.Fatalf("expected 1 MFA record after update, got %d", len(mfas))
-	}
-	if mfas[0].IsEnabled {
-		t.Fatalf("expected MFA disabled after update")
-	}
-	if mfas[0].Secret.String != "newsecret" {
-		t.Fatalf("expected updated secret, got %q", mfas[0].Secret.String)
-	}
-	if !mfas[0].LastUsedAt.Valid {
-		t.Fatalf("expected last_used_at to be set")
-	}
-
-	// Insert another method to exercise delete flows.
-	altRecord := &UserMFARecord{
-		UserID:    userID,
-		Method:    "backup",
-		IsEnabled: true,
-		CreatedAt: now,
-	}
-	if err := db.UpsertUserMFA(altRecord); err != nil {
-		t.Fatalf("failed to insert alternate MFA method: %v", err)
-	}
-
-	if err := db.DeleteMFAForUser(userID, "totp"); err != nil {
-		t.Fatalf("DeleteMFAForUser specific method returned error: %v", err)
-	}
-	mfas, err = db.GetMFAForUser(userID)
-	if err != nil {
-		t.Fatalf("GetMFAForUser after delete returned error: %v", err)
-	}
-	if len(mfas) != 1 || mfas[0].Method != "backup" {
-		t.Fatalf("expected only backup method remaining, got %#v", mfas)
-	}
-
-	if err := db.DeleteMFAForUser(userID, ""); err != nil {
-		t.Fatalf("DeleteMFAForUser all methods returned error: %v", err)
-	}
-	mfas, err = db.GetMFAForUser(userID)
-	if err != nil {
-		t.Fatalf("GetMFAForUser after clearing returned error: %v", err)
-	}
-	if len(mfas) != 0 {
-		t.Fatalf("expected all MFA methods deleted, got %d", len(mfas))
 	}
 }

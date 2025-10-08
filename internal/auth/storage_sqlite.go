@@ -136,7 +136,6 @@ func (s *sqliteStorage) DeleteUser(userID int64) error {
 		`DELETE FROM user_applications WHERE user_id = ?`,
 		`DELETE FROM user_subscriptions WHERE user_id = ?`,
 		`DELETE FROM user_lastread WHERE user_id = ?`,
-		`DELETE FROM user_mfa WHERE user_id = ?`,
 		`DELETE FROM auth_audit WHERE user_id = ?`,
 		`DELETE FROM users WHERE id = ?`,
 	}
@@ -218,63 +217,6 @@ func (s *sqliteStorage) UpsertUserDetail(userID int64, attrib, value string) err
 
 	if err := s.db.UpsertUserDetail(userID, attrib, strings.TrimSpace(value)); err != nil {
 		return fmt.Errorf("auth: upsert user detail failed: %w", err)
-	}
-	return nil
-}
-
-func (s *sqliteStorage) UpsertMFA(record MFARecord) error {
-	dbRecord := database.UserMFARecord{
-		UserID:      record.UserID,
-		Method:      strings.TrimSpace(record.Method),
-		Secret:      database.NullString(record.Secret),
-		Config:      database.NullString(record.Config),
-		IsEnabled:   record.IsEnabled,
-		BackupCodes: database.NullString(strings.Join(record.BackupCodes, ",")),
-		DisplayName: database.NullString(record.DisplayName),
-	}
-	dbRecord.CreatedAt = record.CreatedAt
-	dbRecord.UpdatedAt = record.UpdatedAt
-	if record.LastUsedAt != nil {
-		dbRecord.LastUsedAt = sql.NullTime{Time: record.LastUsedAt.UTC(), Valid: true}
-	}
-
-	if err := s.db.UpsertUserMFA(&dbRecord); err != nil {
-		return fmt.Errorf("auth: upsert mfa failed: %w", err)
-	}
-	return nil
-}
-
-func (s *sqliteStorage) ListMFA(userID int64) ([]MFARecord, error) {
-	dbRecords, err := s.db.GetMFAForUser(userID)
-	if err != nil {
-		return nil, fmt.Errorf("auth: list mfa failed: %w", err)
-	}
-
-	mfas := make([]MFARecord, 0, len(dbRecords))
-	for _, rec := range dbRecords {
-		mfa := MFARecord{
-			UserID:      rec.UserID,
-			Method:      rec.Method,
-			Secret:      rec.Secret.String,
-			Config:      rec.Config.String,
-			DisplayName: rec.DisplayName.String,
-			BackupCodes: splitCSV(rec.BackupCodes.String),
-			IsEnabled:   rec.IsEnabled,
-			CreatedAt:   rec.CreatedAt,
-			UpdatedAt:   rec.UpdatedAt,
-		}
-		if rec.LastUsedAt.Valid {
-			lu := rec.LastUsedAt.Time
-			mfa.LastUsedAt = &lu
-		}
-		mfas = append(mfas, mfa)
-	}
-	return mfas, nil
-}
-
-func (s *sqliteStorage) DeleteMFA(userID int64, method string) error {
-	if err := s.db.DeleteMFAForUser(userID, strings.TrimSpace(method)); err != nil {
-		return fmt.Errorf("auth: delete mfa failed: %w", err)
 	}
 	return nil
 }

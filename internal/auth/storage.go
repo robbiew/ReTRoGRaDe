@@ -37,15 +37,6 @@ type Storage interface {
 	// UpsertUserDetail stores or updates a user detail field.
 	UpsertUserDetail(userID int64, attrib, value string) error
 
-	// UpsertMFA creates or updates a multi-factor enrollment.
-	UpsertMFA(record MFARecord) error
-
-	// ListMFA returns all MFA enrollments for the user.
-	ListMFA(userID int64) ([]MFARecord, error)
-
-	// DeleteMFA removes a specific MFA enrollment (or all when method is empty).
-	DeleteMFA(userID int64, method string) error
-
 	// DeleteApplication removes the application for the user.
 	DeleteApplication(userID int64) error
 }
@@ -89,18 +80,4 @@ type UserRecord struct {
 	Email          string
 	FailedAttempts int
 	LockedUntil    *time.Time
-}
-
-// MFARecord mirrors a stored MFA enrollment.
-type MFARecord struct {
-	UserID      int64
-	Method      string
-	Secret      string
-	Config      string
-	DisplayName string
-	BackupCodes []string
-	IsEnabled   bool
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	LastUsedAt  *time.Time
 }

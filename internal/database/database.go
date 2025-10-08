@@ -32,21 +32,6 @@ type AuthAuditEntry struct {
 	Context   sql.NullString
 }
 
-// UserMFARecord represents a multi-factor authentication enrollment.
-type UserMFARecord struct {
-	ID          int64
-	UserID      int64
-	Method      string
-	Secret      sql.NullString
-	Config      sql.NullString
-	IsEnabled   bool
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	LastUsedAt  sql.NullTime
-	BackupCodes sql.NullString
-	DisplayName sql.NullString
-}
-
 // Database interface defines all database operations
 type Database interface {
 	// Configuration operations
@@ -70,9 +55,6 @@ type Database interface {
 	ResetFailedAttempts(userID int64, now time.Time) error
 	UpdatePassword(userID int64, hash, algo, salt string, now time.Time) error
 	InsertAuthAudit(entry *AuthAuditEntry) error
-	UpsertUserMFA(record *UserMFARecord) error
-	GetMFAForUser(userID int64) ([]UserMFARecord, error)
-	DeleteMFAForUser(userID int64, method string) error
 
 	// Security level operations
 	CreateSecurityLevel(level *SecurityLevelRecord) (int64, error)

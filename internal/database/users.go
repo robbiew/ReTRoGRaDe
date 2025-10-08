@@ -209,21 +209,6 @@ func (s *SQLiteDB) InitializeUserSchema() error {
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 		)`,
-		`CREATE TABLE IF NOT EXISTS user_mfa (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			user_id INTEGER NOT NULL,
-			method TEXT NOT NULL,
-			secret TEXT,
-			config TEXT,
-			is_enabled INTEGER NOT NULL DEFAULT 1,
-			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			last_used_at TEXT,
-			backup_codes TEXT,
-			display_name TEXT,
-			UNIQUE(user_id, method),
-			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-		)`,
 		`CREATE TABLE IF NOT EXISTS security_levels (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			name TEXT NOT NULL DEFAULT 'Unknown Name',
@@ -286,7 +271,6 @@ func (s *SQLiteDB) InitializeUserSchema() error {
 		`CREATE INDEX IF NOT EXISTS idx_auth_audit_user ON auth_audit(user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_auth_audit_created ON auth_audit(created_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_auth_audit_event ON auth_audit(event_type)`,
-		`CREATE INDEX IF NOT EXISTS idx_user_mfa_user ON user_mfa(user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_bbs_sessions_user ON bbs_sessions(user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_bbs_sessions_node ON bbs_sessions(node_number)`,
 		`CREATE INDEX IF NOT EXISTS idx_bbs_sessions_status ON bbs_sessions(status)`,
@@ -696,124 +680,6 @@ func (s *SQLiteDB) InsertAuthAudit(entry *AuthAuditEntry) error {
 		entry.Context,
 		created.Format(sqliteTimeFormat),
 	)
-	return err
-}
-
-// UpsertUserMFA creates or updates an MFA record for a user.
-func (s *SQLiteDB) UpsertUserMFA(record *UserMFARecord) error {
-	if record == nil {
-		return fmt.Errorf("user MFA record is nil")
-	}
-
-	now := time.Now().Format(sqliteTimeFormat)
-
-	var createdValue interface{}
-	if !record.CreatedAt.IsZero() {
-		createdValue = record.CreatedAt.Format(sqliteTimeFormat)
-	}
-
-	lastUsedValue := nullOrStringFromNullTime(record.LastUsedAt)
-
-	_, err := s.db.Exec(`
-		INSERT INTO user_mfa (
-			user_id, method, secret, config, is_enabled, created_at, updated_at, last_used_at, backup_codes, display_name
-		) VALUES (?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), ?, ?, ?, ?)
-		ON CONFLICT(user_id, method) DO UPDATE SET
-			secret = excluded.secret,
-			config = excluded.config,
-			is_enabled = excluded.is_enabled,
-			updated_at = excluded.updated_at,
-			last_used_at = excluded.last_used_at,
-			backup_codes = excluded.backup_codes,
-			display_name = excluded.display_name`,
-		record.UserID,
-		record.Method,
-		record.Secret,
-		record.Config,
-		boolToInt(record.IsEnabled),
-		createdValue,
-		now,
-		lastUsedValue,
-		record.BackupCodes,
-		record.DisplayName,
-	)
-	return err
-}
-
-// GetMFAForUser returns MFA entries for the specified user.
-func (s *SQLiteDB) GetMFAForUser(userID int64) ([]UserMFARecord, error) {
-	rows, err := s.db.Query(`
-		SELECT id, user_id, method, secret, config, is_enabled, created_at, updated_at, last_used_at, backup_codes, display_name
-		FROM user_mfa
-		WHERE user_id = ?
-		ORDER BY method`, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var records []UserMFARecord
-	for rows.Next() {
-		var rec UserMFARecord
-		var isEnabled int
-		var createdStr, updatedStr string
-		var lastUsedStr sql.NullString
-
-		if err := rows.Scan(
-			&rec.ID,
-			&rec.UserID,
-			&rec.Method,
-			&rec.Secret,
-			&rec.Config,
-			&isEnabled,
-			&createdStr,
-			&updatedStr,
-			&lastUsedStr,
-			&rec.BackupCodes,
-			&rec.DisplayName,
-		); err != nil {
-			return nil, err
-		}
-
-		created, err := parseSQLiteTime(createdStr)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse created_at for MFA record %d: %w", rec.ID, err)
-		}
-		rec.CreatedAt = created
-
-		updated, err := parseSQLiteTime(updatedStr)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse updated_at for MFA record %d: %w", rec.ID, err)
-		}
-		rec.UpdatedAt = updated
-
-		if lastUsedStr.Valid {
-			if parsed, err := parseSQLiteTime(lastUsedStr.String); err == nil {
-				rec.LastUsedAt = sql.NullTime{Time: parsed, Valid: true}
-			} else {
-				return nil, fmt.Errorf("failed to parse last_used_at for MFA record %d: %w", rec.ID, err)
-			}
-		} else {
-			rec.LastUsedAt = sql.NullTime{}
-		}
-
-		rec.IsEnabled = isEnabled != 0
-		records = append(records, rec)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return records, nil
-}
-
-// DeleteMFAForUser removes MFA entries for a user. If method is empty, all methods are removed.
-func (s *SQLiteDB) DeleteMFAForUser(userID int64, method string) error {
-	if method == "" {
-		_, err := s.db.Exec(`DELETE FROM user_mfa WHERE user_id = ?`, userID)
-		return err
-	}
-	_, err := s.db.Exec(`DELETE FROM user_mfa WHERE user_id = ? AND method = ?`, userID, method)
 	return err
 }
 

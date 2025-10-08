@@ -105,8 +105,8 @@ func runGuidedSetup() error {
 	}
 
 	// Theme files setup instructions
-	fmt.Printf("\n" + ui.Ansi.BlueHi + "Theme files:" + ui.Ansi.Reset + "\n")
-	fmt.Printf(ui.Ansi.CyanHi+"Copy files from /text to '%s'\n", cfg.Configuration.Paths.Themes)
+	fmt.Println("\n" + ui.Ansi.BlueHi + "Theme files:" + ui.Ansi.Reset)
+	fmt.Printf(ui.Ansi.CyanHi+"Copy files from /text to '%s'\n"+ui.Ansi.Reset+"\n", cfg.Configuration.Paths.Themes)
 
 	return nil
 }

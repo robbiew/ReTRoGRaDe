@@ -1,4 +1,3 @@
-
 # GHOSTnet Authentication & Connection Flow
 
 ## Overview
@@ -19,42 +18,42 @@ graph TD
     A[TCP Connection Attempt] --> B{Security Check Layer}
     B -->|Blocked| C[Connection Rejected<br/>Generic Error Message]
     B -->|Allowed| D[Connection Accepted<br/>Clear Security Message]
-    
+
     D --> E[Node Assignment]
     E --> F[Telnet Options Negotiation]
     F --> G[Session Created as Guest]
     G --> H[Main Menu Display]
-    
+
     H --> I{User Action}
-    
+
     I -->|Login L| J[Login Process]
     I -->|Register R| K[Registration Process]
     I -->|Other Options| H
     I -->|Quit Q| Z[Disconnect]
-    
+
     J -->|Success| L[Update Session<br/>User Authenticated]
     J -->|Failure| M{Max Attempts?}
     M -->|Yes| N[Blacklist IP<br/>Force Disconnect]
     M -->|No| J
     J -->|Cancelled ESC| H
-    
+
     K -->|Success| L
     K -->|Failure| H
     K -->|Cancelled ESC| H
-    
+
     L --> O[Return to Main Menu<br/>Authenticated State]
     O --> P[Post-Login Features Available]
-    
+
     P -.->|Future| Q[Logon Sequence*<br/>Welcome Screens]
     Q -.-> R[Main Menu]
-    
+
     style B fill:#ff6b6b
     style C fill:#ff6b6b
     style N fill:#ff6b6b
     style Q fill:#95e1d3,stroke-dasharray: 5 5
 ```
 
-*Note: Logon sequence (welcome screens) is a planned future enhancement
+\*Note: Logon sequence (welcome screens) is a planned future enhancement
 
 ---
 
@@ -225,7 +224,7 @@ Background goroutine monitors session activity:
 - Label: "Password: "
 - Position: Column 2, Row 11
 - Max Length: 20 characters
-- Display: Asterisks (*) for each character
+- Display: Asterisks (\*) for each character
 - Input Method: Character-by-character with masking
 
 **Validation:**
@@ -248,7 +247,7 @@ Background goroutine monitors session activity:
 
 #### Step 2: Load User Data
 
-- Read SQLite user db user record
+- Query SQLite database for user record
 - Parse into [`User`](auth.go:15) struct
 
 #### Step 3: Verify Password
@@ -343,9 +342,11 @@ Background goroutine monitors session activity:
 **Validation Rules:**
 
 1. **Empty Check:** Username cannot be empty
+
    - Error: "Username cannot be empty." (2 seconds)
 
 2. **Minimum Length:** Must be at least 3 characters
+
    - Error: "Username must be at least 3 characters." (2 seconds)
    - Logged as: `REGISTER_FAILED: username too short`
 
@@ -368,6 +369,7 @@ Background goroutine monitors session activity:
 **Validation Rules:**
 
 1. **Empty Check:** Password cannot be empty
+
    - Error: "Password cannot be empty." (2 seconds)
 
 2. **Minimum Length:** Must be at least 4 characters
@@ -380,7 +382,7 @@ Background goroutine monitors session activity:
 
 **Field Specifications:**
 
-- Label: "   Email: " (3 spaces for alignment)
+- Label: " Email: " (3 spaces for alignment)
 - Position: Column 2, Row 12
 - Max Length: 30 characters
 - **Optional:** Can be left empty
@@ -640,18 +642,15 @@ Config TUI
 
 ### 8.3 User Storage System
 
-**Directory Structure:**
+**Database Tables:**
 
-```text
-users/
-├── admin.json
-├── testuser.json
-└── ...
-```
+- `users` - Primary user account table
+- `user_details` - Extensible user attributes
+- `user_preferences` - User-specific settings
+- `auth_audit` - Authentication audit trail
 
-**File Format:** JSON with user data
-**Naming:** Sanitized, lowercase username
-**Access Pattern:** Direct file I/O (no database)
+**Storage:** SQLite database with comprehensive schema
+**Access Pattern:** SQL queries with connection pooling
 
 ### 8.4 Node Management System
 

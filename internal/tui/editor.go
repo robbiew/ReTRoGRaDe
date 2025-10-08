@@ -1393,14 +1393,6 @@ func buildMenuStructure(cfg *config.Config) MenuBar {
 						Label:    "Security Levels",
 						ItemType: ActionItem,
 					},
-					{
-						ID:       "system-editors",
-						Label:    "System Editors",
-						ItemType: SectionHeader,
-						SubItems: []SubmenuItem{
-							// TODO: Phase 2 - Add editor submenu items
-						},
-					},
 				},
 			},
 			{
@@ -3558,8 +3550,8 @@ func (m Model) renderLevel3Menu(dimmed bool) string {
 	}
 
 	// Ensure minimum width
-	if maxFieldWidth < 28 {
-		maxFieldWidth = 28
+	if maxFieldWidth < 20 {
+		maxFieldWidth = 20
 	}
 
 	// Create header style matching Level 2
@@ -3797,7 +3789,7 @@ func (m *Model) loadUsers() error {
 	}
 
 	// Calculate max width for user list
-	maxWidth := 60 // Wider for user info
+	maxWidth := 40 // Narrower for user info
 
 	userList := list.New(userItems, userDelegate{maxWidth: maxWidth}, maxWidth, 15)
 	userList.Title = ""
@@ -3836,7 +3828,7 @@ func (m *Model) loadSecurityLevels() error {
 	}
 
 	// Calculate max width for security levels list
-	maxWidth := 70 // Wider for security level info
+	maxWidth := 50 // Narrower for security level info
 
 	securityLevelsList := list.New(securityLevelItems, securityLevelDelegate{maxWidth: maxWidth}, maxWidth, 15)
 	securityLevelsList.Title = ""
@@ -3876,7 +3868,7 @@ func (m Model) renderUserManagement() string {
 		Background(lipgloss.Color(ColorPrimary)).
 		Foreground(lipgloss.Color(ColorTextBright)).
 		Bold(true).
-		Width(62).
+		Width(42).
 		Align(lipgloss.Center)
 
 	header := headerStyle.Render(fmt.Sprintf("▸ User Management (%d users) ◂", len(m.userList)))
@@ -3885,15 +3877,15 @@ func (m Model) renderUserManagement() string {
 	separatorStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color(ColorBgMedium)).
 		Foreground(lipgloss.Color(ColorPrimary)).
-		Width(62)
-	separator := separatorStyle.Render(strings.Repeat("─", 62))
+		Width(42)
+	separator := separatorStyle.Render(strings.Repeat("─", 42))
 
 	// Get list view
 	listView := m.userListUI.View()
 	listView = strings.TrimSpace(listView)
 
 	// Create footer separator
-	footerSeparator := separatorStyle.Render(strings.Repeat("─", 62))
+	footerSeparator := separatorStyle.Render(strings.Repeat("─", 42))
 
 	// Build the full content
 	allLines := []string{header, separator, listView, footerSeparator}
@@ -3929,7 +3921,7 @@ func (m Model) renderSecurityLevelsManagement() string {
 		Background(lipgloss.Color(ColorPrimary)).
 		Foreground(lipgloss.Color(ColorTextBright)).
 		Bold(true).
-		Width(72).
+		Width(52).
 		Align(lipgloss.Center)
 
 	header := headerStyle.Render(fmt.Sprintf("▸ Security Levels Management (%d levels) ◂", len(m.securityLevelsList)))
@@ -3938,15 +3930,15 @@ func (m Model) renderSecurityLevelsManagement() string {
 	separatorStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color(ColorBgMedium)).
 		Foreground(lipgloss.Color(ColorPrimary)).
-		Width(72)
-	separator := separatorStyle.Render(strings.Repeat("─", 72))
+		Width(52)
+	separator := separatorStyle.Render(strings.Repeat("─", 52))
 
 	// Get list view
 	listView := m.securityLevelsUI.View()
 	listView = strings.TrimSpace(listView)
 
 	// Create footer separator
-	footerSeparator := separatorStyle.Render(strings.Repeat("─", 72))
+	footerSeparator := separatorStyle.Render(strings.Repeat("─", 52))
 
 	// Build the full content
 	allLines := []string{header, separator, listView, footerSeparator}

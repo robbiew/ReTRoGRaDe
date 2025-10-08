@@ -12,7 +12,7 @@ Retrograde Application Server is a telnet-based Bulletin Board System (BBS).
 
 - **Telnet Server**: Custom telnet server on port 2323 with character-mode negotiation
 - **Session Management**: User authentication and security level management
-- **SQLite Data Storage**: BBS Configuration and User data stored in SQLite with helper functions
+- **SQLite Database**: All BBS data stored in SQLite with comprehensive schema including users, sessions, configuration, and audit logs
 - **ANSI Art Support**: Display of ANSI artwork for enhanced user experience
 - **TUI Configuration Editor**: Modern BubbleTea-based terminal interface for server configuration
 - **Configurable Menus and Prompts**: Sysops can define menus and commands
@@ -22,34 +22,33 @@ Retrograde Application Server is a telnet-based Bulletin Board System (BBS).
 
 ## Current Development Priorities
 
-### User Security Levels & Management
+### Message Base Implementation
 
 **Status**: In Progress - High Priority
 
-The next phase focuses on implementing a comprehensive user security and management system:
+The next phase focuses on completing the JAM message base implementation and user interface:
 
-#### Security Levels
+#### Message Areas
 
-- **Regular User**: Level 10 - Standard user permissions
-- **SysOp**: Level 100 - Full administrative access
-- **Framework**: Extensible security level system (0-255 range)
+- **Local Messages**: User-to-user messaging within the BBS
+- **Echomail Areas**: FidoNet-style public conferences with SEEN-BY/PATH routing
+- **Netmail**: Private point-to-point messaging between FidoNet nodes
 
-#### User Management Tool
+#### Message Base Features
 
-- **Location**: Configuration Editor → Editors → Users
-- **Features**:
-  - User listing with lightbar selection (Name, Level, UID)
-  - User editing (handle, real name, location, email, call dates)
-  - Security level management
-  - Account status controls (active/inactive, locked/unlocked)
+- **JAM Format**: Full implementation of JAM message base specification
+- **Message Reading**: Threaded message reading with quote support
+- **Message Posting**: Rich text composition with automatic formatting
+- **Area Management**: Configurable message areas and moderation
+- **Network Support**: Echomail import/export with FidoNet compatibility
 
 #### Implementation Plan
 
-1. Define security level constants in configuration
-2. Create user management interface in TUI editor
-3. Implement user listing with database queries
-4. Add user editing functionality
-5. Integrate with existing authentication system
+1. Complete JAM message base library implementation
+2. Build message reading and posting UI
+3. Implement echomail routing and networking
+4. Add message base configuration in TUI editor
+5. Integrate with existing user authentication system
 
 ## Architecture Overview
 
@@ -57,7 +56,7 @@ The next phase focuses on implementing a comprehensive user security and managem
 - **Telnet Protocol**: Direct telnet connections with custom input/output handling
 - **Modular Design**: Separated concerns across multiple files
 
-## Target Users  
+## Target Users
 
 - BBS enthusiasts accessing applications via telnet clients
 

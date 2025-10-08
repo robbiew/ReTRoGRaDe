@@ -225,33 +225,6 @@ Comprehensive authentication audit trail.
 - `idx_auth_audit_created` on auth_audit(created_at)
 - `idx_auth_audit_event` on auth_audit(event_type)
 
-### 11. user_mfa
-
-Multi-factor authentication settings.
-
-**Columns:**
-
-- `id` (INTEGER PRIMARY KEY AUTOINCREMENT)
-- `user_id` (INTEGER NOT NULL)
-- `method` (TEXT NOT NULL)
-- `secret` (TEXT)
-- `config` (TEXT)
-- `is_enabled` (INTEGER NOT NULL DEFAULT 1)
-- `created_at` (TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)
-- `updated_at` (TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)
-- `last_used_at` (TEXT)
-- `backup_codes` (TEXT)
-- `display_name` (TEXT)
-
-**Constraints:**
-
-- UNIQUE(user_id, method)
-- FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-
-**Indexes:**
-
-- `idx_user_mfa_user` on user_mfa(user_id)
-
 ## Indexing Strategy
 
 ### Implemented Indexes
@@ -264,7 +237,6 @@ Multi-factor authentication settings.
 - `idx_auth_audit_user` on auth_audit(user_id)
 - `idx_auth_audit_created` on auth_audit(created_at)
 - `idx_auth_audit_event` on auth_audit(event_type)
-- `idx_user_mfa_user` on user_mfa(user_id)
 
 ### Recommended Additional Indexes
 
@@ -283,7 +255,6 @@ Multi-factor authentication settings.
 - Password hashing with configurable algorithms
 - Account lockout after failed attempts
 - Comprehensive audit logging
-- Multi-factor authentication support
 
 ### Session Management
 
