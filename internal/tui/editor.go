@@ -2039,14 +2039,12 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 			}
-			// DON'T show success message - just reset counter
+			// Reset counter after successful save
 			m.modifiedCount = 0
 		} else {
 			// No - Discard changes
 			if m.editingMenu != nil {
-				// Restore original menu and commands
-				m.editingMenu = m.originalMenu
-				m.menuCommandsList = m.originalMenuCommands
+				// Restore original menu and commands (not needed, we're discarding)
 				m.menuModified = false
 				m.editingMenu = nil
 				m.originalMenu = nil
@@ -2054,6 +2052,8 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.originalMenuCommands = nil
 				m.menuDataFields = nil
 			}
+			// CRITICAL: Reset modifiedCount when discarding changes
+			m.modifiedCount = 0
 		}
 
 		// Either way, return to previous mode
