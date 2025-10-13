@@ -23,7 +23,7 @@ func GetDefaultConfig() *Config {
 	cfg.Configuration.Paths.Logs = filepath.Join(cwd, "logs")
 	cfg.Configuration.Paths.MessageBase = filepath.Join(cwd, "msgs")
 	cfg.Configuration.Paths.System = cwd // Current working directory
-	cfg.Configuration.Paths.Themes = filepath.Join(cwd, "text")
+	cfg.Configuration.Paths.Themes = filepath.Join(cwd, "theme")
 
 	// Configuration.General
 	cfg.Configuration.General.BBSLocation = "Your City, State"

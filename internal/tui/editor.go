@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -14,8 +15,14 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"bytes"
+	"unicode/utf8"
+
+	"github.com/mattn/go-isatty"
 	"github.com/robbiew/retrograde/internal/config"
 	"github.com/robbiew/retrograde/internal/database"
+	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/transform"
 )
 
 // ============================================================================
@@ -25,64 +32,46 @@ import (
 // Color palette for modern theme
 const (
 	// Primary colors
-	ColorPrimary     = "4"  // Blue (was "39")
-	ColorPrimaryDark = "4"  // Blue (was "33")
-	ColorAccent      = "5"  // Magenta (was "170")
-	ColorAccentLight = "13" // Bright Magenta (was "177")
+	ColorPrimary     = "4"  // Blue
+	ColorPrimaryDark = "4"  // Blue
+	ColorAccent      = "5"  // Magenta
+	ColorAccentLight = "13" // Bright Magenta
 
 	// Backgrounds
-	ColorBgGrey   = "8" // Black (unchanged)
-	ColorBgDark   = "0" // Black (unchanged)
-	ColorBgMedium = "0" // Black (was "8")
-	ColorBgLight  = "7" // White (unchanged)
+	ColorBgGrey   = "8" // Black
+	ColorBgDark   = "0" // Black
+	ColorBgMedium = "0" // Black
+	ColorBgLight  = "7" // White
 
 	// Text colors
-	ColorTextBright = "15" // Bright White (unchanged)
-	ColorTextNormal = "7"  // White (was "252")
-	ColorTextDim    = "8"  // Bright Black/Gray (was "243")
-	ColorTextAccent = "13" // Bright Magenta (was "213")
+	ColorTextBright = "15" // Bright White
+	ColorTextNormal = "7"  // White
+	ColorTextDim    = "8"  // Bright Black/Gray
+	ColorTextAccent = "13" // Bright Magenta
 
 	// Status colors
-	ColorSuccess = "2" // Green (was "42")
-	ColorWarning = "3" // Yellow (was "214")
-	ColorError   = "1" // Red (was "196")
-	ColorInfo    = "6" // Cyan (was "117")
+	ColorSuccess = "2" // Green
+	ColorWarning = "3" // Yellow
+	ColorError   = "1" // Red
+	ColorInfo    = "6" // Cyan
 )
-
-// Background texture patterns
-var (
-	TexturePattern1 = "░" // Light shade
-	TexturePattern2 = "▒" // Medium shade
-	TexturePattern3 = "▓" // Dark shade
-	TextureDot      = "·"
-	TextureBox      = "▪"
-)
-
-// ============================================================================
-// Core Data Structures & Menu Bar
-// ============================================================================
 
 // ============================================================================
 // UI Layout Constants
 // ============================================================================
 
 const (
-	// Level 2 menu positioning (upper-left)
-	Level2StartRow = 2
-	Level2StartCol = 2
-
-	// Level 3 menu positioning (cascading from Level 2)
-	Level3StartRow = 4
-	Level3StartCol = 25
-
-	// Alternatively, for bottom-right anchoring:
-	// Set these to negative values to anchor from bottom-right
-	// Level3AnchorBottom will position from bottom of screen
-	// Level3AnchorRight will position from right of screen
 	Level3AnchorBottom = true // Set to true to anchor to bottom
 	Level3AnchorRight  = true // Set to true to anchor to right
 	Level3BottomOffset = 3    // Rows from bottom (for footer/breadcrumb space)
 	Level3RightOffset  = 2    // Columns from right edge
+
+	// When enabled, the main menu is positioned relative to bottom/right
+	// of the screen using the offsets below. When disabled, it is centered.
+	MainAnchorBottom = true
+	MainAnchorRight  = true
+	MainBottomOffset = 2
+	MainRightOffset  = 1
 )
 
 // NavigationMode represents the current UI state
@@ -172,10 +161,6 @@ type Model struct {
 	savePromptSelection int            // 0 = No, 1 = Yes
 	returnToMode        NavigationMode // Where to return after save prompt
 
-	// Texture configuration
-	texturePatterns []string
-	textureStyle    lipgloss.Style
-
 	// Menu editing state
 	editingMenu          *database.Menu        // Currently editing menu
 	editingMenuCommand   *database.MenuCommand // Currently editing menu command
@@ -187,6 +172,9 @@ type Model struct {
 	originalMenu         *database.Menu         // Original menu before editing
 	originalMenuCommands []database.MenuCommand // Original commands before editing
 	menuModified         bool                   // Track if menu has been modified
+
+	// ANSI art (CP437) rendering state
+	ansiArtLines []string // pre-split, padded lines (expected 80x25)
 }
 
 // MessageType defines the type of status message
@@ -292,8 +280,10 @@ func (d submenuDelegate) Render(w io.Writer, m list.Model, index int, listItem l
 	isSelected := index == m.Index()
 
 	// Get item text with icon
-	itemText := " ▪ " + item.submenuItem.Label
+	itemText := " ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âª " + item.submenuItem.Label
 
+	// Replace any problematic glyphs with ASCII-safe icon
+	itemText = " * " + item.submenuItem.Label
 	// Truncate if text is too long
 	if len(itemText) > d.maxWidth {
 		itemText = itemText[:d.maxWidth-3] + "..."
@@ -1670,31 +1660,31 @@ func InitialModelV2(cfg *config.Config) Model {
 		}
 	}
 
-	// Initialize texture configuration
-	texturePatterns := []string{TexturePattern2, TexturePattern2, TexturePattern2, TexturePattern2}
-	textureStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("8")).
-		Background(lipgloss.Color("0"))
-
-	return Model{
-		config:          cfg,
-		db:              db,
-		navMode:         MainMenuNavigation,
-		activeMenu:      0,
-		menuBar:         menuBar,
-		submenuList:     submenuList,
-		textInput:       ti,
-		screenWidth:     80,
-		screenHeight:    24,
-		texturePatterns: texturePatterns, // ADD THIS
-		textureStyle:    textureStyle,    // ADD THIS
-		currentMenuTab:  0,               // Default to Menu Data tab
+	m := Model{
+		config:         cfg,
+		db:             db,
+		navMode:        MainMenuNavigation,
+		activeMenu:     0,
+		menuBar:        menuBar,
+		submenuList:    submenuList,
+		textInput:      ti,
+		screenWidth:    80,
+		screenHeight:   24,
+		currentMenuTab: 0, // Default to Menu Data tab
 	}
+
+	// Try to load a default ANSI art if present (CP437 encoded)
+	// This is optional ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â failures are ignored.
+	_ = m.LoadANSIArtCP437("theme/config.ans")
+
+	return m
 }
 
 // Init implements tea.Model
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(tea.ClearScreen, tea.EnterAltScreen)
+	// Alt screen is enabled via tea.WithAltScreen in RunConfigEditorTUI.
+	// Avoid duplicating screen/raw mode transitions on Windows.
+	return nil
 }
 
 // ============================================================================
@@ -2498,7 +2488,7 @@ func (m Model) renderSavePrompt() string {
 	if m.navMode == SaveChangesPrompt {
 		if m.editingMenu != nil {
 			// Saving menu changes
-			header = headerStyle.Render("▸ Save Menu Changes? ◂")
+			header = headerStyle.Render("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¸ Save Menu Changes? ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡")
 			if m.menuModified {
 				promptMsg = "Save changes to menu and commands?"
 			} else {
@@ -2506,16 +2496,16 @@ func (m Model) renderSavePrompt() string {
 			}
 		} else {
 			// Saving other changes (user, security level, etc)
-			header = headerStyle.Render(fmt.Sprintf("▸ Save Changes? (%d) ◂", m.modifiedCount))
+			header = headerStyle.Render(fmt.Sprintf("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¸ Save Changes? (%d) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡", m.modifiedCount))
 			promptMsg = "Save changes before exiting?"
 		}
 	} else {
 		// Exiting application
 		if m.modifiedCount > 0 {
-			header = headerStyle.Render(fmt.Sprintf("▸ Exit Config? (%d changes) ◂", m.modifiedCount))
+			header = headerStyle.Render(fmt.Sprintf("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¸ Exit Config? (%d changes) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡", m.modifiedCount))
 			promptMsg = "You have unsaved changes. Save before exiting?"
 		} else {
-			header = headerStyle.Render("▸ Exit Config? ◂")
+			header = headerStyle.Render("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¸ Exit Config? ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡")
 			promptMsg = "Exit configuration editor?"
 		}
 	}
@@ -2526,7 +2516,7 @@ func (m Model) renderSavePrompt() string {
 		Foreground(lipgloss.Color(ColorPrimary)).
 		Width(modalWidth)
 
-	separator := separatorStyle.Render(strings.Repeat("─", modalWidth))
+	separator := separatorStyle.Render(strings.Repeat("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬", modalWidth))
 
 	promptStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(ColorTextNormal)).
@@ -2576,10 +2566,22 @@ func (m Model) renderSavePrompt() string {
 		Render(yesOption + noOption)
 
 	// Create footer separator
-	footerSeparator := separatorStyle.Render(strings.Repeat("─", modalWidth))
+	// footer separator defined below with correct width variable
 
-	// Build the modal
-	allLines := []string{header, separator, promptLine, optionsLine, footerSeparator}
+	// ASCII-safe header and separators
+	headerASCII := headerStyle.Render("[ Exit Config? ]")
+	if m.modifiedCount > 0 {
+		headerASCII = headerStyle.Render(fmt.Sprintf("[ Exit Config? (%d changes) ]", m.modifiedCount))
+	}
+	separatorASCII := separatorStyle.Render(strings.Repeat("-", modalWidth))
+	footerSeparatorASCII := separatorStyle.Render(strings.Repeat("-", modalWidth))
+	// Avoid unused original vars
+	_ = header
+	_ = separator
+	// no footerSeparator in this variant
+
+	// Build the modal (ASCII-safe)
+	allLines := []string{headerASCII, separatorASCII, promptLine, optionsLine, footerSeparatorASCII}
 	combined := strings.Join(allLines, "\n")
 
 	// Wrap with background
@@ -3002,7 +3004,7 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "f1":
 		// Show help
-		m.message = "Help: ↑↓ Navigate | ENTER Edit | TAB Switch | I Insert | D Delete | ESC Back"
+		m.message = "Help: ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“ Navigate | ENTER Edit | TAB Switch | I Insert | D Delete | ESC Back"
 		m.messageTime = time.Now()
 		m.messageType = InfoMessage
 		return m, nil
@@ -3748,33 +3750,130 @@ func (m *Model) overlayString(canvas []string, str string, startRow, startCol in
 		}
 
 		if startCol <= 0 {
-			// Simple case: replace entire line
+			// Replace entire line and pad to full screen width to avoid
+			// bleed from prior content on that row.
+			pad := m.screenWidth - m.visualWidth(line)
+			if pad > 0 {
+				line = line + strings.Repeat(" ", pad)
+			}
 			canvas[row] = line
-		} else {
-			// Complex case: rebuild line with texture on sides
-			// Get visual width of the line we're adding
-			lineVisualWidth := m.visualWidth(line)
-
-			// Build left texture
-			leftTexture := ""
-			if startCol > 0 {
-				pattern := m.texturePatterns[row%len(m.texturePatterns)]
-				leftTexture = m.textureStyle.Render(strings.Repeat(pattern, startCol))
-			}
-
-			// Build right texture
-			rightTexture := ""
-			endCol := startCol + lineVisualWidth
-			if endCol < m.screenWidth {
-				remainingWidth := m.screenWidth - endCol
-				pattern := m.texturePatterns[row%len(m.texturePatterns)]
-				rightTexture = m.textureStyle.Render(strings.Repeat(pattern, remainingWidth))
-			}
-
-			// Combine: left texture + content + right texture
-			canvas[row] = leftTexture + line + rightTexture
+			continue
 		}
+
+		// Overlay only the content region, preserving existing left/right
+		lineVisualWidth := m.visualWidth(line)
+		left, _, right := splitByVisibleColumns(canvas[row], startCol, startCol+lineVisualWidth)
+		canvas[row] = left + line + right
 	}
+}
+
+// overlayArtBlock writes an art block with explicit left/right texture so
+// styles donÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢t bleed into or out of the art content.
+func (m *Model) overlayArtBlock(canvas []string, lines []string, startRow, startCol, artWidth int) {
+	// Ensure each line respects artWidth; then overlay, preserving existing
+	// left/right portions of the canvas.
+	fixed := make([]string, len(lines))
+	for i, line := range lines {
+		if w := m.visualWidth(line); w > artWidth {
+			line = trimToVisibleWidth(line, artWidth)
+		}
+		fixed[i] = line
+	}
+	m.overlayString(canvas, strings.Join(fixed, "\n"), startRow, startCol)
+}
+
+// trimToVisibleWidth returns a prefix of s with at most target columns, keeping SGR.
+func trimToVisibleWidth(s string, target int) string {
+	if target <= 0 {
+		return ""
+	}
+	var b strings.Builder
+	vis := 0
+	for i := 0; i < len(s) && vis < target; {
+		if s[i] == '\x1b' {
+			j := i + 1
+			if j < len(s) && s[j] == '[' {
+				j++
+				for j < len(s) {
+					if s[j] >= '@' && s[j] <= '~' { // final byte
+						j++
+						break
+					}
+					j++
+				}
+				b.WriteString(s[i:j])
+				i = j
+				continue
+			}
+		}
+		_, sz := utf8.DecodeRuneInString(s[i:])
+		if sz <= 0 {
+			sz = 1
+		}
+		b.WriteString(s[i : i+sz])
+		i += sz
+		vis++
+	}
+	return b.String()
+}
+
+// splitByVisibleColumns splits a string into left/mid/right by visible column
+// positions [start,end). ANSI SGR sequences are treated as zero-width and kept
+// in their respective segments. If indexes are out of range, they are clamped.
+func splitByVisibleColumns(s string, start, end int) (string, string, string) {
+	if start < 0 {
+		start = 0
+	}
+	if end < start {
+		end = start
+	}
+
+	var leftBuf, midBuf, rightBuf strings.Builder
+	vis := 0
+	i := 0
+	for i < len(s) {
+		// Handle ANSI SGR sequences: \x1b[ ... m
+		if s[i] == '\x1b' {
+			j := i + 1
+			if j < len(s) && s[j] == '[' {
+				j++
+				for j < len(s) {
+					if s[j] == 'm' {
+						j++
+						break
+					}
+					j++
+				}
+			}
+			// Append the entire escape sequence to whichever segment we're in
+			if vis < start {
+				leftBuf.WriteString(s[i:j])
+			} else if vis < end {
+				midBuf.WriteString(s[i:j])
+			} else {
+				rightBuf.WriteString(s[i:j])
+			}
+			i = j
+			continue
+		}
+
+		// Decode one rune
+		_, size := utf8.DecodeRuneInString(s[i:])
+
+		// Append rune to proper segment
+		if vis < start {
+			leftBuf.WriteString(s[i : i+size])
+		} else if vis < end {
+			midBuf.WriteString(s[i : i+size])
+		} else {
+			rightBuf.WriteString(s[i : i+size])
+		}
+
+		vis++
+		i += size
+	}
+
+	return leftBuf.String(), midBuf.String(), rightBuf.String()
 }
 
 func (m *Model) overlayStringCenteredWithClear(canvas []string, str string) {
@@ -3801,9 +3900,76 @@ func (m *Model) overlayStringCenteredWithClear(canvas []string, str string) {
 		startCol = 0
 	}
 
-	// Just overlay directly - the texture is already in the canvas
-	// No need to clear/recreate it
+	// Clear a 1-cell border around the modal to provide crisp visual
+	// separation from any ANSI background. This clears one row/column
+	// outside the modal content on all sides.
+	border := 1
+	// Strong clear: wipe full screen width across the vertical span covering
+	// modal + 1-row border to eliminate any ANSI bleed on the sides.
+	totalHeight := len(lines) + 2*border
+	m.clearRect(canvas, startRow-border, 0, m.screenWidth, totalHeight)
+	// Additionally clear a couple full-width rows just below the modal to
+	// avoid any background bleed immediately under the box.
+	m.clearRect(canvas, startRow+len(lines), 0, m.screenWidth, 3)
+
+	// Overlay content
 	m.overlayString(canvas, str, startRow, startCol)
+}
+
+// overlayStringWithBorderClear clears a 1-cell border around the content box
+// and then overlays the string at the given row/col. Useful for menus/lists
+// drawn over an ANSI background.
+// overlayStringWithBorderClear clears a 1-cell border around the content box
+// then overlays the content. For finer control, use overlayStringWithClearBorder.
+func (m *Model) overlayStringWithBorderClear(canvas []string, str string, startRow, startCol int) {
+	m.overlayStringWithClearBorder(canvas, str, startRow, startCol, 1)
+}
+
+// overlayStringWithClearBorder clears a configurable border of spaces around
+// the content area before drawing. This helps ensure crisp edges over ANSI art.
+func (m *Model) overlayStringWithClearBorder(canvas []string, str string, startRow, startCol, border int) {
+	lines := strings.Split(str, "\n")
+	if len(lines) == 0 {
+		return
+	}
+	maxWidth := 0
+	for _, line := range lines {
+		if w := m.visualWidth(line); w > maxWidth {
+			maxWidth = w
+		}
+	}
+	if border < 0 {
+		border = 0
+	}
+	m.clearRect(canvas, startRow-border, startCol-border, maxWidth+2*border, len(lines)+2*border)
+	m.overlayString(canvas, str, startRow, startCol)
+}
+
+// clearRect fills a rectangular region with plain spaces to neutralize background
+func (m *Model) clearRect(canvas []string, startRow, startCol, width, height int) {
+	for r := 0; r < height; r++ {
+		row := startRow + r
+		if row < 0 || row >= len(canvas) {
+			continue
+		}
+		// Build line with spaces in [startCol, startCol+width)
+		left, _, right := splitByVisibleColumns(canvas[row], startCol, startCol+width)
+		mid := strings.Repeat(" ", max(0, min(width, m.screenWidth-startCol)))
+		canvas[row] = left + mid + right
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // overlayStringCentered places a string in the center of the canvas
@@ -3848,6 +4014,289 @@ func (m *Model) visualWidth(s string) int {
 }
 
 // ============================================================================
+// ANSI Art Loading (CP437 -> UTF-8)
+// ============================================================================
+
+// LoadANSIArtCP437 loads an ANSI art file (CP437-encoded) and stores
+// it as padded lines on the model for rendering under the menus.
+// Lines are padded to 80 columns by visible width; no truncation is performed.
+func (m *Model) LoadANSIArtCP437(path string) error {
+	// Read raw bytes
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	// Decode CP437 -> UTF-8
+	rdr := transform.NewReader(bytes.NewReader(data), charmap.CodePage437.NewDecoder())
+	decoded, err := io.ReadAll(rdr)
+	if err != nil {
+		return err
+	}
+
+	// Normalize newlines
+	s := strings.ReplaceAll(string(decoded), "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	// Rasterize ANSI (supports SGR colors and basic cursor ops) to 80x25
+	m.ansiArtLines = rasterizeANSIToLines(s, 80, 25)
+	return nil
+}
+
+// rasterizeANSIToLines interprets a subset of ANSI (SGR colors, CSI H, J, K)
+// and produces a fixed-size array of lines containing only text and SGR.
+func rasterizeANSIToLines(s string, width, height int) []string {
+	type style struct {
+		fg, bg int
+		bold   bool
+	}
+	// 39/49 mean default
+	cur := style{fg: 39, bg: 49, bold: false}
+	// canvas
+	type cell struct {
+		ch rune
+		st style
+	}
+	canvas := make([][]cell, height)
+	for y := 0; y < height; y++ {
+		canvas[y] = make([]cell, width)
+		for x := 0; x < width; x++ {
+			canvas[y][x] = cell{' ', cur}
+		}
+	}
+	x, y := 0, 0
+
+	writeRune := func(r rune) {
+		if r == '\n' {
+			y++
+			x = 0
+			return
+		}
+		if r == '\r' {
+			x = 0
+			return
+		}
+		if y < 0 || y >= height {
+			return
+		}
+		if x < 0 {
+			x = 0
+		}
+		if x >= width {
+			// wrap
+			y++
+			x = 0
+			if y >= height {
+				return
+			}
+		}
+		canvas[y][x] = cell{r, cur}
+		x++
+	}
+
+	// helpers
+	resetStyle := func() { cur = style{fg: 39, bg: 49, bold: false} }
+	setSGR := func(params []int) {
+		if len(params) == 0 {
+			resetStyle()
+			return
+		}
+		for _, p := range params {
+			switch {
+			case p == 0:
+				resetStyle()
+			case p == 1:
+				cur.bold = true
+			case p == 22:
+				cur.bold = false
+			case p == 39:
+				cur.fg = 39
+			case p == 49:
+				cur.bg = 49
+			case 30 <= p && p <= 37:
+				cur.fg = p
+			case 90 <= p && p <= 97:
+				cur.fg = p
+			case 40 <= p && p <= 47:
+				cur.bg = p
+			case 100 <= p && p <= 107:
+				cur.bg = p
+			}
+		}
+	}
+
+	clearScreen := func(mode int) {
+		// mode: 2 = entire screen; 0/1 not used here
+		if mode == 2 {
+			for yy := 0; yy < height; yy++ {
+				for xx := 0; xx < width; xx++ {
+					canvas[yy][xx] = cell{' ', cur}
+				}
+			}
+			x, y = 0, 0
+		}
+	}
+
+	clearEOL := func() {
+		if y >= 0 && y < height {
+			for xx := x; xx < width; xx++ {
+				canvas[y][xx] = cell{' ', cur}
+			}
+		}
+	}
+
+	// parse input
+	for i := 0; i < len(s); {
+		if s[i] != '\x1b' {
+			r, sz := utf8.DecodeRuneInString(s[i:])
+			if r == utf8.RuneError && sz == 1 {
+				// treat as raw byte
+				writeRune(rune(s[i]))
+				i++
+				continue
+			}
+			writeRune(r)
+			i += sz
+			continue
+		}
+		// ESC
+		j := i + 1
+		if j < len(s) && s[j] == '[' { // CSI
+			j++
+			// collect parameter bytes until final
+			start := j
+			for j < len(s) && !(s[j] >= '@' && s[j] <= '~') {
+				j++
+			}
+			if j >= len(s) {
+				break
+			}
+			final := s[j]
+			paramsStr := s[start:j]
+			j++
+
+			// parse params
+			var params []int
+			if len(paramsStr) > 0 {
+				parts := strings.Split(paramsStr, ";")
+				for _, part := range parts {
+					if part == "" {
+						params = append(params, 0)
+						continue
+					}
+					// ignore '?'
+					part = strings.TrimPrefix(part, "?")
+					if n, err := strconv.Atoi(part); err == nil {
+						params = append(params, n)
+					}
+				}
+			}
+
+			switch final {
+			case 'm':
+				setSGR(params)
+			case 'H', 'f':
+				// cursor position: row;col (1-based)
+				rr, cc := 1, 1
+				if len(params) >= 1 {
+					rr = params[0]
+				}
+				if len(params) >= 2 {
+					cc = params[1]
+				}
+				if rr < 1 {
+					rr = 1
+				}
+				if cc < 1 {
+					cc = 1
+				}
+				y = rr - 1
+				x = cc - 1
+			case 'J':
+				mode := 0
+				if len(params) >= 1 {
+					mode = params[0]
+				}
+				clearScreen(mode)
+			case 'K':
+				clearEOL()
+			default:
+				// ignore other CSI sequences
+			}
+			i = j
+			continue
+		}
+		// other ESC sequences ignored
+		i = j
+	}
+
+	// Build output lines with minimal SGR sequences
+	lines := make([]string, height)
+	resetSGR := "\x1b[0m"
+	for yy := 0; yy < height; yy++ {
+		var b strings.Builder
+		// start reset to avoid bleed
+		b.WriteString(resetSGR)
+		// current emitted style
+		out := style{fg: 39, bg: 49, bold: false}
+
+		emitSGR := func(st style) {
+			var params []string
+			params = append(params, "0")
+			if st.bold {
+				params = append(params, "1")
+			}
+			if st.fg != 39 {
+				params = append(params, strconv.Itoa(st.fg))
+			}
+			if st.bg != 49 {
+				params = append(params, strconv.Itoa(st.bg))
+			}
+			b.WriteString("\x1b[" + strings.Join(params, ";") + "m")
+			out = st
+		}
+
+		for xx := 0; xx < width; xx++ {
+			c := canvas[yy][xx]
+			if c.st != out {
+				emitSGR(c.st)
+			}
+			b.WriteRune(c.ch)
+		}
+		b.WriteString(resetSGR)
+		lines[yy] = b.String()
+	}
+	return lines
+}
+
+// SetANSIArtUTF8 sets art from a UTF-8 string. Lines are padded to 80 columns
+// by visible width; no truncation is performed.
+func (m *Model) SetANSIArtUTF8(s string) {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	rawLines := strings.Split(s, "\n")
+
+	ansiPattern := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	const targetWidth = 80
+	const maxLines = 25
+	lines := make([]string, 0, maxLines)
+	for _, line := range rawLines {
+		vis := ansiPattern.ReplaceAllString(line, "")
+		visWidth := len([]rune(vis))
+		if visWidth < targetWidth {
+			line = line + strings.Repeat(" ", targetWidth-visWidth)
+		}
+		lines = append(lines, line)
+		if len(lines) >= maxLines {
+			break
+		}
+	}
+	for len(lines) < maxLines {
+		lines = append(lines, strings.Repeat(" ", targetWidth))
+	}
+	m.ansiArtLines = lines
+}
+
+// ============================================================================
 // View Rendering with Layered Approach
 // ============================================================================
 
@@ -3857,14 +4306,24 @@ func (m Model) View() string {
 	canvas := make([]string, m.screenHeight)
 
 	for i := range canvas {
-		// Use texture pattern from struct
-		pattern := m.texturePatterns[i%len(m.texturePatterns)]
-		canvas[i] = m.textureStyle.Render(strings.Repeat(pattern, m.screenWidth))
+		// Plain background (no box/pattern fill); ANSI art will overlay
+		canvas[i] = strings.Repeat(" ", m.screenWidth)
 	}
 
 	// ALWAYS render persistent header at top (row 0)
 	persistentHeader := m.renderPersistentHeader()
 	m.overlayString(canvas, persistentHeader, 0, 0)
+
+	// Render ANSI art background only on the main menu
+	if m.navMode == MainMenuNavigation && len(m.ansiArtLines) > 0 {
+		artWidth := 80
+		startRow := 2 // just under the persistent header
+		startCol := 0
+		if m.screenWidth > artWidth {
+			startCol = (m.screenWidth - artWidth) / 2
+		}
+		m.overlayArtBlock(canvas, m.ansiArtLines, startRow, startCol, artWidth)
+	}
 
 	// Save prompt overlay - highest priority
 	if m.savePrompt {
@@ -3886,23 +4345,53 @@ func (m Model) View() string {
 	// Determine if we should render as modal
 	showAsModal := m.shouldRenderAsModal()
 
-	// Layer 1: Main Menu (only shown when in MainMenuNavigation mode, centered)
+	// Layer 1: Main Menu (only shown when in MainMenuNavigation mode)
 	if m.navMode == MainMenuNavigation {
 		mainMenuStr := m.renderMainMenu()
-		m.overlayStringCentered(canvas, mainMenuStr)
+
+		// If main-menu anchor flags are enabled, position bottom/right using offsets; otherwise center
+		if MainAnchorBottom || MainAnchorRight {
+			lines := strings.Split(mainMenuStr, "\n")
+			height := len(lines)
+			width := 0
+			for _, line := range lines {
+				if w := m.visualWidth(line); w > width {
+					width = w
+				}
+			}
+
+			row := (m.screenHeight - height) / 2
+			col := (m.screenWidth - width) / 2
+
+			if MainAnchorBottom {
+				row = m.screenHeight - height - MainBottomOffset
+			}
+			if MainAnchorRight {
+				col = m.screenWidth - width - MainRightOffset
+			}
+			if row < 2 {
+				row = 2 // keep clear of the header
+			}
+			if col < 0 {
+				col = 0
+			}
+			m.overlayStringWithBorderClear(canvas, mainMenuStr, row, col)
+		} else {
+			m.overlayStringCenteredWithClear(canvas, mainMenuStr)
+		}
 	}
 
 	// Layer 1.5: User Management (full screen mode)
 	if m.navMode == UserManagementMode {
 		userManagementStr := m.renderUserManagement()
-		m.overlayStringCentered(canvas, userManagementStr)
+		m.overlayStringCenteredWithClear(canvas, userManagementStr)
 		return m.canvasToString(canvas)
 	}
 
 	// Layer 1.6: Security Levels Management (full screen mode)
 	if m.navMode == SecurityLevelsMode {
 		securityLevelsStr := m.renderSecurityLevelsManagement()
-		m.overlayStringCentered(canvas, securityLevelsStr)
+		m.overlayStringCenteredWithClear(canvas, securityLevelsStr)
 		return m.canvasToString(canvas)
 	}
 
@@ -3969,44 +4458,17 @@ func (m Model) View() string {
 		return m.canvasToString(canvas)
 	}
 
-	// Layer 2: Submenu (visible from Level2 onwards, but not if showing modal)
+	// Layer 2: Submenu (centered when visible and not showing modal)
 	if m.navMode >= Level2MenuNavigation && !showAsModal && m.navMode != MenuEditCommandMode {
 		isDimmed := m.navMode > Level2MenuNavigation
 		level2Str := m.renderLevel2Menu(isDimmed)
-		// Start at row 2 to leave space for persistent header
-		m.overlayString(canvas, level2Str, 2, Level2StartCol)
+		m.overlayStringCenteredWithClear(canvas, level2Str)
 	}
 
-	// Layer 3: Field list (visible from Level3 onwards, but only if NOT showing as modal)
+	// Layer 3: Field list (centered when visible and not showing modal)
 	if m.navMode == Level3MenuNavigation && !showAsModal && m.navMode != MenuEditCommandMode {
-		// This means Level 3 has sub-sections to navigate
 		level3Str := m.renderLevel3Menu(false)
-
-		// Calculate bottom-right position
-		lines := strings.Split(level3Str, "\n")
-		height := len(lines)
-
-		// Get width of the menu
-		width := 0
-		for _, line := range lines {
-			lineWidth := m.visualWidth(line)
-			if lineWidth > width {
-				width = lineWidth
-			}
-		}
-
-		// Position at bottom-right with offsets
-		row := m.screenHeight - height - 4
-		col := m.screenWidth - width - 2
-
-		if row < 0 {
-			row = 0
-		}
-		if col < 0 {
-			col = 0
-		}
-
-		m.overlayString(canvas, level3Str, row, col)
+		m.overlayStringCenteredWithClear(canvas, level3Str)
 	}
 
 	// Modal: Show when we have editable fields (Level 3 with fields, or Level 4)
@@ -4179,7 +4641,7 @@ func (m Model) renderMainMenu() string {
 		Width(menuWidth).
 		Align(lipgloss.Center)
 
-	header := headerStyle.Render("⚡ Main Menu ⚡")
+	header := headerStyle.Render("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ Main Menu ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡")
 
 	// Create decorative separator with pattern
 	separatorStyle := lipgloss.NewStyle().
@@ -4187,13 +4649,15 @@ func (m Model) renderMainMenu() string {
 		Foreground(lipgloss.Color(ColorBgLight)).
 		Width(menuWidth).
 		Align(lipgloss.Center)
-	separator := separatorStyle.Render(strings.Repeat("─", menuWidth))
+	separator := separatorStyle.Render(strings.Repeat("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬", menuWidth))
 
 	// Render menu items with left justification
 	for i, category := range m.menuBar.Items {
 		// Add icon prefix like other menus
-		itemText := " ▪ " + category.Label
+		itemText := " ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âª " + category.Label
 
+		// Replace icon with ASCII-safe bullet
+		itemText = " * " + category.Label
 		// Calculate padding to fill to menuWidth
 		padding := ""
 		if len(itemText) < menuWidth {
@@ -4221,14 +4685,23 @@ func (m Model) renderMainMenu() string {
 	}
 
 	// Create footer separator
-	footerSeparator := separatorStyle.Render(strings.Repeat("─", menuWidth))
+	// footer separator not required here; defined in corresponding block with correct width
 
 	// Build the full menu
-	allLines := []string{header, separator}
+	// Use safe ASCII header/separator to avoid missing glyphs on Windows consoles
+	headerSafe := headerStyle.Render("[ Main Menu ]")
+	separatorSafe := separatorStyle.Render(strings.Repeat("-", menuWidth))
+	footerSeparatorSafe := separatorStyle.Render(strings.Repeat("-", menuWidth))
+	allLines := []string{headerSafe, separatorSafe}
 	allLines = append(allLines, menuItems...)
-	allLines = append(allLines, footerSeparator)
+	allLines = append(allLines, footerSeparatorSafe)
 
 	menuContent := strings.Join(allLines, "\n")
+
+	// Keep original header/separator variables referenced so they are not unused
+	_ = header
+	_ = separator
+	// no footerSeparator in this variant
 
 	// Just wrap with background - NO BORDER, NO PADDING
 	menuBox := lipgloss.NewStyle().
@@ -4255,14 +4728,19 @@ func (m Model) renderModalForm() string {
 		Width(modalWidth).
 		Align(lipgloss.Center)
 
-	header := headerStyle.Render("▸ " + m.modalSectionName + " ◂")
+	header := headerStyle.Render("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¸ " + m.modalSectionName + " ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡")
+	// ASCII-safe header
+	header = headerStyle.Render("[ " + m.modalSectionName + " ]")
 
 	// Create separator row
 	separatorStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color(ColorBgMedium)).
 		Foreground(lipgloss.Color(ColorAccent)).
 		Width(modalWidth)
-	separator := separatorStyle.Render(strings.Repeat("─", modalWidth))
+	separator := separatorStyle.Render(strings.Repeat("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬", modalWidth))
+
+	// ASCII-safe separator line
+	separator = separatorStyle.Render(strings.Repeat("-", modalWidth))
 
 	// Check if we're actively editing
 	isEditing := m.navMode == EditingValue
@@ -4368,11 +4846,12 @@ func (m Model) renderModalForm() string {
 	}
 
 	// Create footer separator
-	footerSeparator := separatorStyle.Render(strings.Repeat("─", modalWidth))
+	// footer separator handled in list composition below
 
-	// Build the full content
+	// Build the full content with bottom ASCII separator
 	allLines := []string{header, separator}
 	allLines = append(allLines, fieldLines...)
+	footerSeparator := separatorStyle.Render(strings.Repeat("-", modalWidth))
 	allLines = append(allLines, footerSeparator)
 
 	combined := strings.Join(allLines, "\n")
@@ -4432,7 +4911,7 @@ func (m Model) renderLevel2Menu(dimmed bool) string {
 			Align(lipgloss.Center)
 	}
 
-	header := headerStyle.Render("▸ " + categoryLabel + " ◂")
+	header := headerStyle.Render("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¸ " + categoryLabel + " ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡")
 
 	// Create decorative separator
 	separatorStyle := lipgloss.NewStyle().
@@ -4445,7 +4924,7 @@ func (m Model) renderLevel2Menu(dimmed bool) string {
 		separatorStyle = separatorStyle.Foreground(lipgloss.Color(ColorPrimary))
 	}
 
-	separator := separatorStyle.Render(strings.Repeat("─", maxWidth))
+	separator := separatorStyle.Render(strings.Repeat("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬", maxWidth))
 
 	// Get list view and clean it up
 	listView := m.submenuList.View()
@@ -4453,12 +4932,18 @@ func (m Model) renderLevel2Menu(dimmed bool) string {
 	listLines := strings.Split(listView, "\n")
 
 	// Create footer separator (same as header separator)
-	footerSeparator := separatorStyle.Render(strings.Repeat("─", maxWidth))
+	// footer separator will be computed below
 
-	// Build as array like Main Menu does
-	allLines := []string{header, separator}
+	// Build as array like Main Menu does (ASCII-safe)
+	headerASCII := headerStyle.Render("[ " + categoryLabel + " ]")
+	separatorASCII := separatorStyle.Render(strings.Repeat("-", maxWidth))
+	// Avoid unused original vars
+	_ = header
+	_ = separator
+	allLines := []string{headerASCII, separatorASCII}
 	allLines = append(allLines, listLines...)
-	allLines = append(allLines, footerSeparator)
+	footerSepASCII := separatorStyle.Render(strings.Repeat("-", maxWidth))
+	allLines = append(allLines, footerSepASCII)
 
 	// Join with single newlines
 	combined := strings.Join(allLines, "\n")
@@ -4486,7 +4971,7 @@ func (m Model) renderLevel3Menu(dimmed bool) string {
 		if field.ItemType == EditableField && field.EditableItem != nil {
 			currentValue := field.EditableItem.Field.GetValue()
 			valueStr := formatValue(currentValue, field.EditableItem.ValueType)
-			line := fmt.Sprintf(" ▪ %-18s %s", field.EditableItem.Label+":", valueStr)
+			line := fmt.Sprintf(" ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âª %-18s %s", field.EditableItem.Label+":", valueStr)
 			if len(line) > maxFieldWidth {
 				maxFieldWidth = len(line)
 			}
@@ -4516,7 +5001,7 @@ func (m Model) renderLevel3Menu(dimmed bool) string {
 			Align(lipgloss.Center)
 	}
 
-	header := headerStyle.Render("▸ " + m.modalSectionName + " ◂")
+	header := headerStyle.Render("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¸ " + m.modalSectionName + " ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡")
 
 	// Create separator row
 	var separatorStyle lipgloss.Style
@@ -4531,7 +5016,7 @@ func (m Model) renderLevel3Menu(dimmed bool) string {
 			Foreground(lipgloss.Color(ColorInfo)).
 			Width(maxFieldWidth)
 	}
-	separator := separatorStyle.Render(strings.Repeat("─", maxFieldWidth))
+	separator := separatorStyle.Render(strings.Repeat("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬", maxFieldWidth))
 
 	// Second pass: render fields with consistent width
 	for i, field := range m.modalFields {
@@ -4540,7 +5025,7 @@ func (m Model) renderLevel3Menu(dimmed bool) string {
 			valueStr := formatValue(currentValue, field.EditableItem.ValueType)
 
 			// Format with icon
-			line := fmt.Sprintf(" ▪ %-18s %s", field.EditableItem.Label+":", valueStr)
+			line := fmt.Sprintf(" ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âª %-18s %s", field.EditableItem.Label+":", valueStr)
 
 			// Truncate if too long
 			if len(line) > maxFieldWidth {
@@ -4577,8 +5062,13 @@ func (m Model) renderLevel3Menu(dimmed bool) string {
 		}
 	}
 
-	// Combine header, separator, and fields
-	combined := header + "\n" + separator + "\n" + strings.Join(fieldLines, "\n")
+	// Combine header, separator, and fields (ASCII-safe)
+	// Avoid unused original vars
+	_ = header
+	_ = separator
+	headerASCII := headerStyle.Render("[ " + m.modalSectionName + " ]")
+	separatorASCII := separatorStyle.Render(strings.Repeat("-", maxFieldWidth))
+	combined := headerASCII + "\n" + separatorASCII + "\n" + strings.Join(fieldLines, "\n")
 
 	// Just wrap with background - NO BORDER, NO PADDING
 	modalBox := lipgloss.NewStyle().
@@ -4959,24 +5449,31 @@ func (m Model) renderUserManagement() string {
 		Width(42).
 		Align(lipgloss.Center)
 
-	header := headerStyle.Render(fmt.Sprintf("▸ User Management (%d users) ◂", len(m.userList)))
+	header := headerStyle.Render(fmt.Sprintf("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¸ User Management (%d users) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡", len(m.userList)))
 
 	// Create separator
 	separatorStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color(ColorBgMedium)).
 		Foreground(lipgloss.Color(ColorPrimary)).
 		Width(42)
-	separator := separatorStyle.Render(strings.Repeat("─", 42))
+	separator := separatorStyle.Render(strings.Repeat("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬", 42))
 
 	// Get list view
 	listView := m.userListUI.View()
 	listView = strings.TrimSpace(listView)
 
 	// Create footer separator
-	footerSeparator := separatorStyle.Render(strings.Repeat("─", 42))
+	footerSeparator := separatorStyle.Render(strings.Repeat("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬", 42))
 
+	// ASCII-safe header and separators
+	headerASCII := headerStyle.Render(fmt.Sprintf("[ User Management (%d users) ]", len(m.userList)))
+	separatorASCII := separatorStyle.Render(strings.Repeat("-", 42))
+	_ = header
+	_ = separator
+	_ = footerSeparator
+	footerSeparatorASCII := separatorStyle.Render(strings.Repeat("-", 42))
 	// Build the full content
-	allLines := []string{header, separator, listView, footerSeparator}
+	allLines := []string{headerASCII, separatorASCII, listView, footerSeparatorASCII}
 
 	combined := strings.Join(allLines, "\n")
 
@@ -5012,24 +5509,31 @@ func (m Model) renderSecurityLevelsManagement() string {
 		Width(52).
 		Align(lipgloss.Center)
 
-	header := headerStyle.Render(fmt.Sprintf("▸ Security Levels Management (%d levels) ◂", len(m.securityLevelsList)))
+	header := headerStyle.Render(fmt.Sprintf("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¸ Security Levels Management (%d levels) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡", len(m.securityLevelsList)))
 
 	// Create separator
 	separatorStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color(ColorBgMedium)).
 		Foreground(lipgloss.Color(ColorPrimary)).
 		Width(52)
-	separator := separatorStyle.Render(strings.Repeat("─", 52))
+	separator := separatorStyle.Render(strings.Repeat("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬", 52))
 
 	// Get list view
 	listView := m.securityLevelsUI.View()
 	listView = strings.TrimSpace(listView)
 
 	// Create footer separator
-	footerSeparator := separatorStyle.Render(strings.Repeat("─", 52))
+	footerSeparator := separatorStyle.Render(strings.Repeat("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬", 52))
 
+	// ASCII-safe header and separators
+	headerASCII := headerStyle.Render(fmt.Sprintf("[ Security Levels Management (%d levels) ]", len(m.securityLevelsList)))
+	separatorASCII := separatorStyle.Render(strings.Repeat("-", 52))
+	_ = header
+	_ = separator
+	_ = footerSeparator
+	footerSeparatorASCII := separatorStyle.Render(strings.Repeat("-", 52))
 	// Build the full content
-	allLines := []string{header, separator, listView, footerSeparator}
+	allLines := []string{headerASCII, separatorASCII, listView, footerSeparatorASCII}
 
 	combined := strings.Join(allLines, "\n")
 
@@ -5065,24 +5569,31 @@ func (m Model) renderMenuManagement() string {
 		Width(42).
 		Align(lipgloss.Center)
 
-	header := headerStyle.Render(fmt.Sprintf("▸ Menu Management (%d menus) ◂", len(m.menuList)))
+	header := headerStyle.Render(fmt.Sprintf("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¸ Menu Management (%d menus) ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡", len(m.menuList)))
 
 	// Create separator
 	separatorStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color(ColorBgMedium)).
 		Foreground(lipgloss.Color(ColorPrimary)).
 		Width(42)
-	separator := separatorStyle.Render(strings.Repeat("─", 42))
+	separator := separatorStyle.Render(strings.Repeat("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬", 42))
 
 	// Get list view
 	listView := m.menuListUI.View()
 	listView = strings.TrimSpace(listView)
 
 	// Create footer separator
-	footerSeparator := separatorStyle.Render(strings.Repeat("─", 42))
+	footerSeparator := separatorStyle.Render(strings.Repeat("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬", 42))
 
+	// ASCII-safe header and separators
+	headerASCII := headerStyle.Render(fmt.Sprintf("[ Menu Management (%d menus) ]", len(m.menuList)))
+	separatorASCII := separatorStyle.Render(strings.Repeat("-", 42))
+	_ = header
+	_ = separator
+	_ = footerSeparator
+	footerSeparatorASCII := separatorStyle.Render(strings.Repeat("-", 42))
 	// Build the full content
-	allLines := []string{header, separator, listView, footerSeparator}
+	allLines := []string{headerASCII, separatorASCII, listView, footerSeparatorASCII}
 
 	combined := strings.Join(allLines, "\n")
 
@@ -5120,7 +5631,7 @@ func (m Model) renderMenuModify() string {
 		Width(width).
 		Align(lipgloss.Center)
 
-	header := headerStyle.Render(fmt.Sprintf("▸ Modify Menu: %s ◂", m.editingMenu.Name))
+	header := headerStyle.Render(fmt.Sprintf("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¸ Modify Menu: %s ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡", m.editingMenu.Name))
 
 	// Create tab bar
 	tabNames := []string{"Menu Data", "Menu Commands"}
@@ -5147,7 +5658,7 @@ func (m Model) renderMenuModify() string {
 
 	tabSeparator := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(ColorBgLight)).
-		Render(" │ ")
+		Render(" | ")
 
 	tabsLine := strings.Join(tabParts, tabSeparator)
 
@@ -5165,7 +5676,8 @@ func (m Model) renderMenuModify() string {
 		Background(lipgloss.Color(ColorBgMedium)).
 		Foreground(lipgloss.Color(ColorPrimary)).
 		Width(width)
-	separator := separatorStyle.Render(strings.Repeat("─", width))
+		// ASCII-safe separators
+	separatorASCII := separatorStyle.Render(strings.Repeat("-", width))
 
 	var contentLines []string
 
@@ -5178,11 +5690,13 @@ func (m Model) renderMenuModify() string {
 		contentLines = m.renderCommandList(width)
 	}
 
-	footerSeparator := separatorStyle.Render(strings.Repeat("─", width))
+	footerSeparatorASCII := separatorStyle.Render(strings.Repeat("-", width))
 
-	allLines := []string{header, tabBar, separator}
+	_ = header
+	headerASCII := headerStyle.Render(fmt.Sprintf("[ Modify Menu: %s ]", m.editingMenu.Name))
+	allLines := []string{headerASCII, tabBar, separatorASCII}
 	allLines = append(allLines, contentLines...)
-	allLines = append(allLines, footerSeparator)
+	allLines = append(allLines, footerSeparatorASCII)
 
 	combined := strings.Join(allLines, "\n")
 
@@ -5783,56 +6297,51 @@ func (m Model) renderMenuEditCommand() string {
 
 // Update renderFooter to show correct footer when editing in MenuModifyMode
 func (m Model) renderFooter() string {
-	var footerText string
+    var footerText string
 
-	switch m.navMode {
-	case MainMenuNavigation:
-		footerText = "  ↑↓ Navigate   ENTER Select   ESC Exit"
-	case Level2MenuNavigation:
-		footerText = "  ↑↓ Navigate   ENTER Select   ESC Back"
-	case Level3MenuNavigation:
-		footerText = "  ↑↓ Navigate   ENTER Edit   ESC Back"
-	case Level4ModalNavigation:
-		footerText = "  ↑↓ Navigate   ENTER Edit   ESC Back"
-	case EditingValue:
-		// Check if editing in menu modify mode
-		if m.editingMenu != nil {
-			footerText = "  ENTER Save   ESC Cancel"
-		} else {
-			footerText = "  ENTER Save   ESC Cancel"
-		}
-	case UserManagementMode:
-		footerText = "  ↑↓ Navigate   ENTER Edit   ESC Back"
-	case SecurityLevelsMode:
-		footerText = "  ↑↓ Navigate   ENTER Edit   ESC Back"
-	case MenuManagementMode:
-		footerText = "  ↑↓ Navigate   ENTER/M Modify   I Insert   D Delete   ESC Back"
-	case MenuModifyMode:
-		if m.currentMenuTab == 0 {
-			footerText = "  ↑↓ Navigate   ENTER Edit   TAB Switch   ESC Back"
-		} else {
-			footerText = "  ↑↓ Navigate   ENTER Edit   I Insert   D Delete   TAB Switch   ESC Back"
-		}
-	case MenuEditDataMode:
-		footerText = "  ↑↓ Navigate   ENTER Edit   ESC Back"
-	case MenuEditCommandMode:
-		footerText = "  ↑↓ Navigate   ENTER Edit   ESC Back to Commands"
-	case SavePrompt:
-		footerText = "  Y Yes   N No   ESC Cancel"
-	case SaveChangesPrompt:
-		footerText = "  Y Yes   N No   ESC Cancel"
-	default:
-		footerText = "  F1 Help   ESC Exit"
-	}
+    switch m.navMode {
+    case MainMenuNavigation:
+        footerText = "  Up/Down Navigate   ENTER Select   ESC Exit"
+    case Level2MenuNavigation:
+        footerText = "  Up/Down Navigate   ENTER Select   ESC Back"
+    case Level3MenuNavigation:
+        footerText = "  Up/Down Navigate   ENTER Edit   ESC Back"
+    case Level4ModalNavigation:
+        footerText = "  Up/Down Navigate   ENTER Edit   ESC Back"
+    case EditingValue:
+        footerText = "  ENTER Save   ESC Cancel"
+    case UserManagementMode:
+        footerText = "  Up/Down Navigate   ENTER Edit   ESC Back"
+    case SecurityLevelsMode:
+        footerText = "  Up/Down Navigate   ENTER Edit   ESC Back"
+    case MenuManagementMode:
+        footerText = "  Up/Down Navigate   ENTER/M Modify   I Insert   D Delete   ESC Back"
+    case MenuModifyMode:
+        if m.currentMenuTab == 0 {
+            footerText = "  Up/Down Navigate   ENTER Edit   TAB Switch   ESC Back"
+        } else {
+            footerText = "  Up/Down Navigate   ENTER Edit   I Insert   D Delete   TAB Switch   ESC Back"
+        }
+    case MenuEditDataMode:
+        footerText = "  Up/Down Navigate   ENTER Edit   ESC Back"
+    case MenuEditCommandMode:
+        footerText = "  Up/Down Navigate   ENTER Edit   ESC Back to Commands"
+    case SavePrompt:
+        footerText = "  Y Yes   N No   ESC Cancel"
+    case SaveChangesPrompt:
+        footerText = "  Y Yes   N No   ESC Cancel"
+    default:
+        footerText = "  F1 Help   ESC Exit"
+    }
 
-	// Style the footer with full width
-	footer := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(ColorTextNormal)).
-		Background(lipgloss.Color("8")).
-		Width(m.screenWidth).
-		Render(footerText)
+    // Style the footer with full width
+    footer := lipgloss.NewStyle().
+        Foreground(lipgloss.Color(ColorTextNormal)).
+        Background(lipgloss.Color("8")).
+        Width(m.screenWidth).
+        Render(footerText)
 
-	return footer
+    return footer
 }
 
 // ============================================================================
@@ -5885,27 +6394,12 @@ func formatValue(value interface{}, valueType ValueType) string {
 	}
 }
 
-// renderPersistentHeader renders the top header bar with gradient and style
+// renderPersistentHeader renders the top header bar
 func (m Model) renderPersistentHeader() string {
-	// Left side: Application name with gradient-like effect using different shades
-	appName := "ReTRoGRaDe"
-	bbsConfig := " BBS Config"
-
-	leftStyle1 := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(ColorAccent)).
-		Background(lipgloss.Color(ColorBgGrey))
-
-	leftStyle2 := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(ColorAccentLight)).
-		Background(lipgloss.Color(ColorBgGrey))
-
-	leftText := leftStyle1.Render(" "+appName) + leftStyle2.Render(bbsConfig+" ")
 
 	// Right side: Version with decorative elements
 	versionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(ColorTextDim)).
+		Foreground(lipgloss.Color(ColorPrimary)).
 		Background(lipgloss.Color(ColorBgGrey))
 
 	versionAccent := lipgloss.NewStyle().
@@ -5916,22 +6410,17 @@ func (m Model) renderPersistentHeader() string {
 	rightText := versionStyle.Render(" v") + versionAccent.Render("0.01") + versionStyle.Render(" ")
 
 	// Calculate spacing with texture
-	leftWidth := m.visualWidth(leftText)
 	rightWidth := m.visualWidth(rightText)
-	spacingNeeded := m.screenWidth - leftWidth - rightWidth
+	spacingNeeded := m.screenWidth - rightWidth
 
-	// Create textured spacing
+	// Plain spacing (no texture)
 	spacing := ""
 	if spacingNeeded > 0 {
-		// Use subtle texture pattern
-		textureStyle := lipgloss.NewStyle().
-			Background(lipgloss.Color(ColorBgGrey)).
-			Foreground(lipgloss.Color("7")) // Very subtle
-		spacing = textureStyle.Render(strings.Repeat(TextureDot, spacingNeeded))
+		spacing = strings.Repeat(" ", spacingNeeded)
 	}
 
 	// Combine all parts
-	header := leftText + spacing + rightText
+	header := spacing + rightText
 
 	return header
 }
@@ -5942,7 +6431,17 @@ func (m Model) renderPersistentHeader() string {
 
 // RunConfigEditorTUI starts the configuration editor TUI
 func RunConfigEditorTUI(cfg *config.Config) error {
-	p := tea.NewProgram(InitialModelV2(cfg), tea.WithAltScreen())
+	m := InitialModelV2(cfg)
+
+	// Use alt screen only when running on an interactive TTY to avoid
+	// Windows "making raw" errors when stdin/stdout are not consoles.
+	var p *tea.Program
+	if isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stdout.Fd()) {
+		p = tea.NewProgram(m, tea.WithAltScreen())
+	} else {
+		p = tea.NewProgram(m)
+	}
+
 	_, err := p.Run()
 	return err
 }

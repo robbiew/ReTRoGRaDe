@@ -23,7 +23,7 @@ import (
 func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
-		case "config", "edit":
+		case "config", "edit", "-config", "--config", "/config":
 			runConfigEditor()
 			return
 		}
@@ -186,7 +186,7 @@ func runGuidedSetup() error {
 	cfg.Configuration.Paths.Logs = setupConfig.Logs
 	cfg.Configuration.Paths.MessageBase = setupConfig.Msgs
 	cfg.Configuration.Paths.System = setupConfig.Root
-	cfg.Configuration.Paths.Themes = setupConfig.Text
+	cfg.Configuration.Paths.Themes = setupConfig.Theme
 
 	// Create directories
 	paths := []struct {

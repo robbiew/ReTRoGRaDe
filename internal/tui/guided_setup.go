@@ -53,7 +53,7 @@ type ConfigData struct {
 	Files       string
 	Msgs        string
 	Logs        string
-	Text        string
+	Theme       string
 	CreateSysop bool
 	SysopData   *SysopData
 }
@@ -85,7 +85,7 @@ func InitialGuidedSetupModel(rootDir string) GuidedSetupModel {
 		{Label: "Files", Value: rootDir + "/files", ReadOnly: false},
 		{Label: "Msgs", Value: rootDir + "/msgs", ReadOnly: false},
 		{Label: "Logs", Value: rootDir + "/logs", ReadOnly: false},
-		{Label: "Text", Value: rootDir + "/text", ReadOnly: false},
+		{Label: "Theme", Value: rootDir + "/theme", ReadOnly: false},
 	}
 
 	return GuidedSetupModel{
@@ -142,7 +142,7 @@ func (m GuidedSetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.config.Files = m.fields[2].Value
 				m.config.Msgs = m.fields[3].Value
 				m.config.Logs = m.fields[4].Value
-				m.config.Text = m.fields[5].Value
+				m.config.Theme = m.fields[5].Value
 
 				// Return completion message
 				return m, tea.Quit
