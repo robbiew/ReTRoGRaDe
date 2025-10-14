@@ -202,8 +202,6 @@ func mapValueToConfig(cfg *Config, v database.ConfigValue) {
 			cfg.Configuration.General.StartMenu = value
 		case "SysOp_Name":
 			cfg.Configuration.General.SysOpName = value
-		case "SysOp_Timeout_Exempt":
-			cfg.Configuration.General.SysOpTimeoutExempt = parseBoolValue(value)
 		case "System_Password":
 			cfg.Configuration.General.SystemPassword = value
 		case "Timeout_Minutes":
@@ -413,7 +411,6 @@ func configToValues(cfg *Config) []database.ConfigValue {
 		database.ConfigValue{Section: "Configuration.General", Key: "Default_Theme", Value: cfg.Configuration.General.DefaultTheme, ValueType: "string"},
 		database.ConfigValue{Section: "Configuration.General", Key: "Start_Menu", Value: cfg.Configuration.General.StartMenu, ValueType: "string"},
 		database.ConfigValue{Section: "Configuration.General", Key: "SysOp_Name", Value: cfg.Configuration.General.SysOpName, ValueType: "string"},
-		database.ConfigValue{Section: "Configuration.General", Key: "SysOp_Timeout_Exempt", Value: formatBoolValue(cfg.Configuration.General.SysOpTimeoutExempt), ValueType: "bool"},
 		database.ConfigValue{Section: "Configuration.General", Key: "System_Password", Value: cfg.Configuration.General.SystemPassword, ValueType: "string"},
 		database.ConfigValue{Section: "Configuration.General", Key: "Timeout_Minutes", Value: strconv.Itoa(cfg.Configuration.General.TimeoutMinutes), ValueType: "int"},
 	)

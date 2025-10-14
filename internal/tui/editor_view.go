@@ -411,7 +411,7 @@ func (m Model) renderModalForm() string {
 	}
 
 	// Calculate modal width first
-	modalWidth := 58 // Slightly wider for modern look
+	modalWidth := 70 // Slightly wider for modern look
 
 	// Create header style
 	headerStyle := lipgloss.NewStyle().
@@ -457,9 +457,9 @@ func (m Model) renderModalForm() string {
 					currentBool := currentValue.(bool)
 					var fieldDisplay string
 					if currentBool {
-						fieldDisplay = fmt.Sprintf(" %-25s [Y] Yes  [ ] No", field.EditableItem.Label+":")
+						fieldDisplay = fmt.Sprintf(" %-19s [Y] Yes  [ ] No", field.EditableItem.Label+":")
 					} else {
-						fieldDisplay = fmt.Sprintf(" %-25s [ ] Yes  [N] No", field.EditableItem.Label+":")
+						fieldDisplay = fmt.Sprintf(" %-19s [ ] Yes  [N] No", field.EditableItem.Label+":")
 					}
 
 					fullRowStyle := lipgloss.NewStyle().
@@ -470,7 +470,7 @@ func (m Model) renderModalForm() string {
 					fieldLines = append(fieldLines, fullRowStyle.Render(fieldDisplay))
 				} else {
 					// Text input field - inline editing
-					label := fmt.Sprintf(" %-25s", field.EditableItem.Label+":")
+					label := fmt.Sprintf(" %-19s", field.EditableItem.Label+":")
 
 					fullRowStyle := lipgloss.NewStyle().
 						Background(lipgloss.Color(ColorAccent)).
@@ -483,10 +483,10 @@ func (m Model) renderModalForm() string {
 				}
 			} else if isSelected && !isEditing {
 				// SELECTION MODE: Split highlighting
-				labelText := fmt.Sprintf(" %-25s", field.EditableItem.Label+":")
+				labelText := fmt.Sprintf(" %-19s", field.EditableItem.Label+":")
 				valueText := " " + currentValueStr
 
-				availableValueSpace := modalWidth - 26
+				availableValueSpace := modalWidth - 20
 				if len(valueText) > availableValueSpace {
 					valueText = valueText[:availableValueSpace-3] + "..."
 				}
@@ -495,12 +495,12 @@ func (m Model) renderModalForm() string {
 					Background(lipgloss.Color(ColorAccent)).
 					Foreground(lipgloss.Color(ColorTextBright)).
 					Bold(true).
-					Width(26)
+					Width(20)
 
 				valueStyle := lipgloss.NewStyle().
 					Background(lipgloss.Color(ColorBgMedium)).
 					Foreground(lipgloss.Color(ColorTextNormal)).
-					Width(modalWidth - 26)
+					Width(modalWidth - 20)
 
 				label := labelStyle.Render(labelText)
 				value := valueStyle.Render(valueText)
@@ -508,7 +508,7 @@ func (m Model) renderModalForm() string {
 				fieldLines = append(fieldLines, label+value)
 			} else {
 				// UNSELECTED: Normal display
-				fieldDisplay := fmt.Sprintf(" %-25s %s", field.EditableItem.Label+":", currentValueStr)
+				fieldDisplay := fmt.Sprintf(" %-19s %s", field.EditableItem.Label+":", currentValueStr)
 
 				if len(fieldDisplay) > modalWidth-1 {
 					fieldDisplay = fieldDisplay[:modalWidth-4] + "..."

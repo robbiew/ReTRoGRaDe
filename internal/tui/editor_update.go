@@ -1644,11 +1644,11 @@ func (m Model) handleSecurityLevelsManagement(msg tea.KeyMsg) (tea.Model, tea.Cm
 				},
 				{
 					ID:       "security-level-can-delete-own-msgs",
-					Label:    "Can Delete Own Messages",
+					Label:    "Delete Own Msgs",
 					ItemType: EditableField,
 					EditableItem: &MenuItem{
 						ID:        "security-level-can-delete-own-msgs",
-						Label:     "Can Delete Own Messages",
+						Label:     "Delete Own Msgs",
 						ValueType: BoolValue,
 						Field: ConfigField{
 							GetValue: func() interface{} { return level.securityLevel.CanDeleteOwnMsgs },
@@ -1662,11 +1662,11 @@ func (m Model) handleSecurityLevelsManagement(msg tea.KeyMsg) (tea.Model, tea.Cm
 				},
 				{
 					ID:       "security-level-can-delete-msgs",
-					Label:    "Can Delete Any Messages",
+					Label:    "Delete Any Msgs",
 					ItemType: EditableField,
 					EditableItem: &MenuItem{
 						ID:        "security-level-can-delete-msgs",
-						Label:     "Can Delete Any Messages",
+						Label:     "Delete Any Msgs",
 						ValueType: BoolValue,
 						Field: ConfigField{
 							GetValue: func() interface{} { return level.securityLevel.CanDeleteMsgs },

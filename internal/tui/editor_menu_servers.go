@@ -49,7 +49,7 @@ func serversMenu(cfg *config.Config) MenuCategory {
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "servers.general.max_connections_per_ip",
-							Label:     "Max Connections per IP",
+							Label:     "Max Connections",
 							ValueType: IntValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return cfg.Servers.GeneralSettings.MaxConnectionsPerIP },
@@ -120,11 +120,11 @@ func serversMenu(cfg *config.Config) MenuCategory {
 				SubItems: []SubmenuItem{
 					{
 						ID:       "rate-limit-enabled",
-						Label:    "Rate Limiting Enabled",
+						Label:    "Rate Limiting",
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "servers.security.rate_limits.enabled",
-							Label:     "Rate Limiting Enabled",
+							Label:     "Rate Limiting",
 							ValueType: BoolValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return cfg.Servers.Security.RateLimits.Enabled },
@@ -242,11 +242,11 @@ func serversMenu(cfg *config.Config) MenuCategory {
 				SubItems: []SubmenuItem{
 					{
 						ID:       "external-block-enabled",
-						Label:    "External Block Enabled",
+						Label:    "External Block",
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "servers.security.external_lists.enabled",
-							Label:     "External Block Enabled",
+							Label:     "External Block",
 							ValueType: BoolValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return cfg.Servers.Security.ExternalLists.Enabled },
@@ -398,11 +398,11 @@ func serversMenu(cfg *config.Config) MenuCategory {
 					},
 					{
 						ID:       "threat-intel-enabled",
-						Label:    "Threat Intel Enabled",
+						Label:    "Threat Intel",
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "servers.security.geo_block.threat_intel",
-							Label:     "Threat Intel Enabled",
+							Label:     "Threat Intel",
 							ValueType: BoolValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return cfg.Servers.Security.GeoBlock.ThreatIntelEnabled },
@@ -416,11 +416,11 @@ func serversMenu(cfg *config.Config) MenuCategory {
 					},
 					{
 						ID:       "blocklist-update-hours",
-						Label:    "Blocklist Update Hours",
+						Label:    "Blocklist Hours",
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "servers.security.geo_block.update_hours",
-							Label:     "Blocklist Update Hours",
+							Label:     "Blocklist Hours",
 							ValueType: IntValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return cfg.Servers.Security.GeoBlock.BlocklistUpdateHours },
@@ -441,11 +441,11 @@ func serversMenu(cfg *config.Config) MenuCategory {
 				SubItems: []SubmenuItem{
 					{
 						ID:       "log-security-events",
-						Label:    "Log Security Events",
+						Label:    "Log Events",
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "servers.security.logs.log_events",
-							Label:     "Log Security Events",
+							Label:     "Log Events",
 							ValueType: BoolValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return cfg.Servers.Security.Logs.LogSecurityEvents },
@@ -459,11 +459,11 @@ func serversMenu(cfg *config.Config) MenuCategory {
 					},
 					{
 						ID:       "log-blocked-attempts",
-						Label:    "Log Blocked Attempts",
+						Label:    "Log Blocked",
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "servers.security.logs.log_blocked",
-							Label:     "Log Blocked Attempts",
+							Label:     "Log Blocked",
 							ValueType: BoolValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return cfg.Servers.Security.Logs.LogBlockedAttempts },
@@ -477,11 +477,11 @@ func serversMenu(cfg *config.Config) MenuCategory {
 					},
 					{
 						ID:       "security-log-file",
-						Label:    "Security Log File",
+						Label:    "Log File",
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "servers.security.logs.log_file",
-							Label:     "Security Log File",
+							Label:     "Log File",
 							ValueType: PathValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return cfg.Servers.Security.Logs.SecurityLogFile },

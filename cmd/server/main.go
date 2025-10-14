@@ -6,7 +6,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/robbiew/retrograde/internal/auth"
@@ -559,13 +558,6 @@ func negotiateTelnetOptions(writer *bufio.Writer) {
 
 // monitorSessionTimeout monitors a session for inactivity and handles disconnection
 func monitorSessionTimeout(io *telnet.TelnetIO, session *config.TelnetSession, cfg *config.Config) {
-	// Check if user is sysop and exempt from timeout
-	isExempt := func() bool {
-		if !cfg.Configuration.General.SysOpTimeoutExempt {
-			return false
-		}
-		return strings.EqualFold(session.Alias, cfg.Configuration.General.SysOpName)
-	}
 
 	warningShown := false
 	timeoutDuration := time.Duration(cfg.Configuration.General.TimeoutMinutes) * time.Minute
@@ -573,11 +565,6 @@ func monitorSessionTimeout(io *telnet.TelnetIO, session *config.TelnetSession, c
 
 	for session.Connected {
 		time.Sleep(10 * time.Second) // Check every 10 seconds
-
-		// Skip timeout for sysop if configured
-		if isExempt() {
-			continue
-		}
 
 		timeSinceActivity := time.Since(session.LastActivity)
 

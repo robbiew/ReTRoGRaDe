@@ -32,7 +32,6 @@ func GetDefaultConfig() *Config {
 	cfg.Configuration.General.DefaultTheme = "default"
 	cfg.Configuration.General.StartMenu = "MAIN"
 	cfg.Configuration.General.SysOpName = "SysOp"
-	cfg.Configuration.General.SysOpTimeoutExempt = true
 	cfg.Configuration.General.SystemPassword = "CHANGEME"
 	cfg.Configuration.General.TimeoutMinutes = 3
 

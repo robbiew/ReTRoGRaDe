@@ -35,11 +35,11 @@ func otherMenu(cfg *config.Config) MenuCategory {
 					},
 					{
 						ID:       "discord-webhook-url",
-						Label:    "Discord Webhook URL",
+						Label:    "Discord Webhook",
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "other.discord.webhook_url",
-							Label:     "Discord Webhook URL",
+							Label:     "Discord Webhook",
 							ValueType: StringValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return cfg.Other.Discord.WebhookURL },

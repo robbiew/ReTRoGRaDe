@@ -188,24 +188,6 @@ func configurationMenu(cfg *config.Config) MenuCategory {
 						},
 					},
 					{
-						ID:       "sysop-timeout-exempt",
-						Label:    "SysOp Timeout Exempt",
-						ItemType: EditableField,
-						EditableItem: &MenuItem{
-							ID:        "config.general.sysop_timeout_exempt",
-							Label:     "SysOp Timeout Exempt",
-							ValueType: BoolValue,
-							Field: ConfigField{
-								GetValue: func() interface{} { return cfg.Configuration.General.SysOpTimeoutExempt },
-								SetValue: func(v interface{}) error {
-									cfg.Configuration.General.SysOpTimeoutExempt = v.(bool)
-									return nil
-								},
-							},
-							HelpText: "Exempt sysop from idle timeout",
-						},
-					},
-					{
 						ID:       "system-password",
 						Label:    "System Password",
 						ItemType: EditableField,
@@ -354,11 +336,11 @@ func configurationMenu(cfg *config.Config) MenuCategory {
 				SubItems: []SubmenuItem{
 					{
 						ID:       "auth-max-failed-attempts",
-						Label:    "Max Failed Attempts",
+						Label:    "Failed Logins",
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "config.auth.max_failed_attempts",
-							Label:     "Max Failed Attempts",
+							Label:     "Failed Logins",
 							ValueType: IntValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return cfg.Configuration.Auth.MaxFailedAttempts },
@@ -372,11 +354,11 @@ func configurationMenu(cfg *config.Config) MenuCategory {
 					},
 					{
 						ID:       "auth-account-lock-minutes",
-						Label:    "Account Lock Minutes",
+						Label:    "Lock Minutes",
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "config.auth.account_lock_minutes",
-							Label:     "Account Lock Minutes",
+							Label:     "Lock Minutes",
 							ValueType: IntValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return cfg.Configuration.Auth.AccountLockMinutes },

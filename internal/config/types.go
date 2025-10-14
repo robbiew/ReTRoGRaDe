@@ -43,14 +43,13 @@ type PathsConfig struct {
 
 // GeneralConfig holds general BBS settings
 type GeneralConfig struct {
-	BBSLocation        string
-	BBSName            string
-	DefaultTheme       string
-	StartMenu          string
-	SysOpName          string
-	SysOpTimeoutExempt bool
-	SystemPassword     string
-	TimeoutMinutes     int
+	BBSLocation    string
+	BBSName        string
+	DefaultTheme   string
+	StartMenu      string
+	SysOpName      string
+	SystemPassword string
+	TimeoutMinutes int
 }
 
 type RegistrationFieldConfig struct {
