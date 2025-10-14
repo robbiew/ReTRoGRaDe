@@ -45,11 +45,11 @@ func serversMenu(cfg *config.Config) MenuCategory {
 					},
 					{
 						ID:       "max-connections-per-ip",
-						Label:    "Max Connections/IP",
+						Label:    "Max Connections Per IP",
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "servers.general.max_connections_per_ip",
-							Label:     "Max Connections",
+							Label:     "Max Connect",
 							ValueType: IntValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return cfg.Servers.GeneralSettings.MaxConnectionsPerIP },
@@ -142,7 +142,7 @@ func serversMenu(cfg *config.Config) MenuCategory {
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "servers.security.rate_limits.window_minutes",
-							Label:     "Window Minutes",
+							Label:     "Window Mins",
 							ValueType: IntValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return cfg.Servers.Security.RateLimits.WindowMinutes },
@@ -163,11 +163,11 @@ func serversMenu(cfg *config.Config) MenuCategory {
 				SubItems: []SubmenuItem{
 					{
 						ID:       "blacklist-enabled",
-						Label:    "Blacklist Enabled",
+						Label:    "Blacklist",
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "servers.security.local_lists.blacklist_enabled",
-							Label:     "Blacklist Enabled",
+							Label:     "Blacklist",
 							ValueType: BoolValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return cfg.Servers.Security.LocalLists.BlacklistEnabled },
@@ -199,11 +199,11 @@ func serversMenu(cfg *config.Config) MenuCategory {
 					},
 					{
 						ID:       "whitelist-enabled",
-						Label:    "Whitelist Enabled",
+						Label:    "Whitelist",
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "servers.security.local_lists.whitelist_enabled",
-							Label:     "Whitelist Enabled",
+							Label:     "Whitelist",
 							ValueType: BoolValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return cfg.Servers.Security.LocalLists.WhitelistEnabled },
@@ -294,11 +294,11 @@ func serversMenu(cfg *config.Config) MenuCategory {
 				SubItems: []SubmenuItem{
 					{
 						ID:       "geo-block-enabled",
-						Label:    "Geo Block Enabled",
+						Label:    "Geo Block",
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "servers.security.geo_block.enabled",
-							Label:     "Geo Block Enabled",
+							Label:     "Geo Block",
 							ValueType: BoolValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return cfg.Servers.Security.GeoBlock.GeoBlockEnabled },
@@ -316,7 +316,7 @@ func serversMenu(cfg *config.Config) MenuCategory {
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "servers.security.geo_block.blocked_countries",
-							Label:     "Blocked Countries",
+							Label:     "Blocked",
 							ValueType: ListValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return strings.Join(cfg.Servers.Security.GeoBlock.BlockedCountries, ", ") },
@@ -341,7 +341,7 @@ func serversMenu(cfg *config.Config) MenuCategory {
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "servers.security.geo_block.allowed_countries",
-							Label:     "Allowed Countries",
+							Label:     "Allowed",
 							ValueType: ListValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return strings.Join(cfg.Servers.Security.GeoBlock.AllowedCountries, ", ") },
@@ -366,7 +366,7 @@ func serversMenu(cfg *config.Config) MenuCategory {
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "servers.security.geo_block.api_provider",
-							Label:     "Geo API Provider",
+							Label:     "API Provider",
 							ValueType: StringValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return cfg.Servers.Security.GeoBlock.GeoAPIProvider },
@@ -384,7 +384,7 @@ func serversMenu(cfg *config.Config) MenuCategory {
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "servers.security.geo_block.api_key",
-							Label:     "Geo API Key",
+							Label:     "API Key",
 							ValueType: StringValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return cfg.Servers.Security.GeoBlock.GeoAPIKey },
@@ -420,7 +420,7 @@ func serversMenu(cfg *config.Config) MenuCategory {
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "servers.security.geo_block.update_hours",
-							Label:     "Blocklist Hours",
+							Label:     "Block Hours",
 							ValueType: IntValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return cfg.Servers.Security.GeoBlock.BlocklistUpdateHours },

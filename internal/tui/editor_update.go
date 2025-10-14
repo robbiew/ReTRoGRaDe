@@ -13,6 +13,16 @@ import (
 )
 
 // ============================================================================
+// Helper Functions
+// ============================================================================
+
+// setTextInputValueWithCursor sets the text input value and positions cursor at the end
+func (m *Model) setTextInputValueWithCursor(value string) {
+	m.textInput.SetValue(value)
+	m.textInput.SetCursor(len(value))
+}
+
+// ============================================================================
 // Update Logic
 // ============================================================================
 
@@ -140,7 +150,7 @@ func (m Model) handleLevel4ModalNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 			} else {
 				// Set current value as text
 				currentValue := m.editingItem.Field.GetValue()
-				m.textInput.SetValue(formatValue(currentValue, m.editingItem.ValueType))
+				m.setTextInputValueWithCursor(formatValue(currentValue, m.editingItem.ValueType))
 
 				// Set placeholder, char limit and width based on type
 				switch m.editingItem.ValueType {
@@ -155,20 +165,30 @@ func (m Model) handleLevel4ModalNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 				case PathValue:
 					m.textInput.Placeholder = "Enter path"
 					m.textInput.CharLimit = 200
-					m.textInput.Width = 25 // Fixed width for scrolling
+					m.textInput.Width = 53 // Fixed width for scrolling
 				case ListValue:
 					m.textInput.Placeholder = "comma,separated,values"
 					m.textInput.CharLimit = 200
-					m.textInput.Width = 25 // Fixed width for scrolling
+					m.textInput.Width = 53 // Fixed width for scrolling
 				default: // StringValue
 					m.textInput.Placeholder = "Enter value"
 					m.textInput.CharLimit = 200
-					m.textInput.Width = 25 // Fixed width for scrolling
+					m.textInput.Width = 53 // Fixed width for scrolling
 				}
 			}
 
 			m.textInput.Focus()
 			m.navMode = EditingValue
+			m.textInput.TextStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorTextBright)).
+				Background(lipgloss.Color(ColorPrimary))
+			m.textInput.Cursor.Style = lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorTextBright))
+			m.textInput.PromptStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color(ColorPrimary))
+			m.textInput.PlaceholderStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorTextDim)).
+				Background(lipgloss.Color(ColorPrimary))
 			m.message = ""
 		}
 		return m, nil
@@ -693,7 +713,7 @@ func (m Model) handleLevel3MenuNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			} else {
 				// Set current value as text
 				currentValue := m.editingItem.Field.GetValue()
-				m.textInput.SetValue(formatValue(currentValue, m.editingItem.ValueType))
+				m.setTextInputValueWithCursor(formatValue(currentValue, m.editingItem.ValueType))
 
 				// Set placeholder, char limit and width based on type
 				switch m.editingItem.ValueType {
@@ -708,19 +728,30 @@ func (m Model) handleLevel3MenuNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				case PathValue:
 					m.textInput.Placeholder = "Enter path"
 					m.textInput.CharLimit = 200
-					m.textInput.Width = 25 // Fixed width for scrolling
+					m.textInput.Width = 49 // Fixed width for scrolling
 				case ListValue:
 					m.textInput.Placeholder = "comma,separated,values"
 					m.textInput.CharLimit = 200
-					m.textInput.Width = 25 // Fixed width for scrolling
+					m.textInput.Width = 49 // Fixed width for scrolling
 				default: // StringValue
 					m.textInput.Placeholder = "Enter value"
 					m.textInput.CharLimit = 200
-					m.textInput.Width = 25 // Fixed width for scrolling
+					m.textInput.Width = 49 // Fixed width for scrolling
 				}
 			}
 
 			m.textInput.Focus()
+			// Add this in each place where you enter EditingValue mode:
+			m.textInput.TextStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorTextBright)).
+				Background(lipgloss.Color(ColorPrimary))
+			m.textInput.Cursor.Style = lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorTextBright))
+			m.textInput.PromptStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color(ColorPrimary))
+			m.textInput.PlaceholderStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorTextDim)).
+				Background(lipgloss.Color(ColorPrimary))
 			m.navMode = Level4ModalNavigation
 			m.message = ""
 		}
@@ -1245,7 +1276,7 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 						m.textInput.SetValue("")
 					} else {
 						currentValue := m.editingItem.Field.GetValue()
-						m.textInput.SetValue(formatValue(currentValue, m.editingItem.ValueType))
+						m.setTextInputValueWithCursor(formatValue(currentValue, m.editingItem.ValueType))
 
 						// Set placeholder and limits based on type
 						switch m.editingItem.ValueType {
@@ -1256,16 +1287,29 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 						case ListValue:
 							m.textInput.Placeholder = "comma,separated,values"
 							m.textInput.CharLimit = 200
-							m.textInput.Width = 25
+							m.textInput.Width = 50 // Fixed width for scrolling
 						default: // StringValue
 							m.textInput.Placeholder = "Enter value"
 							m.textInput.CharLimit = 200
-							m.textInput.Width = 25
+							m.textInput.Width = 50
 						}
 					}
 
 					m.textInput.Focus()
 					m.navMode = EditingValue
+					m.textInput.CursorEnd() // Move cursor to end
+					m.textInput.Focus()     // Ensure it's focused
+					// Add this in each place where you enter EditingValue mode:
+					m.textInput.TextStyle = lipgloss.NewStyle().
+						Foreground(lipgloss.Color(ColorTextBright)).
+						Background(lipgloss.Color(ColorPrimary))
+					m.textInput.Cursor.Style = lipgloss.NewStyle().
+						Foreground(lipgloss.Color(ColorTextBright))
+					m.textInput.PromptStyle = lipgloss.NewStyle().
+						Background(lipgloss.Color(ColorPrimary))
+					m.textInput.PlaceholderStyle = lipgloss.NewStyle().
+						Foreground(lipgloss.Color(ColorTextDim)).
+						Background(lipgloss.Color(ColorPrimary))
 					m.message = ""
 				}
 			}
@@ -1418,7 +1462,7 @@ func (m Model) handleMenuEditData(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.textInput.SetValue("")
 			} else {
 				currentValue := m.editingItem.Field.GetValue()
-				m.textInput.SetValue(formatValue(currentValue, m.editingItem.ValueType))
+				m.setTextInputValueWithCursor(formatValue(currentValue, m.editingItem.ValueType))
 
 				// Set placeholder and limits based on type
 				switch m.editingItem.ValueType {
@@ -1429,15 +1473,28 @@ func (m Model) handleMenuEditData(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				case ListValue:
 					m.textInput.Placeholder = "comma,separated,values"
 					m.textInput.CharLimit = 200
-					m.textInput.Width = 25
+					m.textInput.Width = 49 // Fixed width for scrolling
 				default: // StringValue
 					m.textInput.Placeholder = "Enter value"
 					m.textInput.CharLimit = 200
-					m.textInput.Width = 25
+					m.textInput.Width = 49 // Fixed width for scrolling
 				}
 			}
 
 			m.textInput.Focus()
+			m.textInput.CursorEnd() // Move cursor to end
+			m.textInput.Focus()     // Ensure it's focused
+			// Add this in each place where you enter EditingValue mode:
+			m.textInput.TextStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorTextBright)).
+				Background(lipgloss.Color(ColorPrimary))
+			m.textInput.Cursor.Style = lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorTextBright))
+			m.textInput.PromptStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color(ColorPrimary))
+			m.textInput.PlaceholderStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorTextDim)).
+				Background(lipgloss.Color(ColorPrimary))
 			m.navMode = EditingValue
 			m.message = ""
 		}
@@ -1494,7 +1551,7 @@ func (m Model) handleMenuEditCommand(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.textInput.SetValue("")
 			} else {
 				currentValue := m.editingItem.Field.GetValue()
-				m.textInput.SetValue(formatValue(currentValue, m.editingItem.ValueType))
+				m.setTextInputValueWithCursor(formatValue(currentValue, m.editingItem.ValueType))
 
 				// Set placeholder and limits based on type
 				switch m.editingItem.ValueType {
@@ -1505,16 +1562,29 @@ func (m Model) handleMenuEditCommand(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				case ListValue:
 					m.textInput.Placeholder = "comma,separated,values"
 					m.textInput.CharLimit = 200
-					m.textInput.Width = 25
+					m.textInput.Width = 49 // Fixed width for scrolling
 				default: // StringValue
 					m.textInput.Placeholder = "Enter value"
 					m.textInput.CharLimit = 200
-					m.textInput.Width = 25
+					m.textInput.Width = 49 // Fixed width for scrolling
 				}
 			}
 
 			m.textInput.Focus()
+			// Add this in each place where you enter EditingValue mode:
+			m.textInput.TextStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorTextBright)).
+				Background(lipgloss.Color(ColorPrimary))
+			m.textInput.Cursor.Style = lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorTextBright))
+			m.textInput.PromptStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color(ColorPrimary))
+			m.textInput.PlaceholderStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorTextDim)).
+				Background(lipgloss.Color(ColorPrimary))
 			m.navMode = EditingValue
+			m.textInput.CursorEnd() // Move cursor to end
+			m.textInput.Focus()     // Ensure it's focused
 			m.message = ""
 		}
 		return m, nil
@@ -1598,7 +1668,7 @@ func (m Model) handleSecurityLevelsManagement(msg tea.KeyMsg) (tea.Model, tea.Cm
 					ItemType: EditableField,
 					EditableItem: &MenuItem{
 						ID:        "security-level-mins-per-day",
-						Label:     "Minutes per Day",
+						Label:     "Mins per Day",
 						ValueType: IntValue,
 						Field: ConfigField{
 							GetValue: func() interface{} { return level.securityLevel.MinsPerDay },
@@ -1623,7 +1693,7 @@ func (m Model) handleSecurityLevelsManagement(msg tea.KeyMsg) (tea.Model, tea.Cm
 					ItemType: EditableField,
 					EditableItem: &MenuItem{
 						ID:        "security-level-timeout-mins",
-						Label:     "Timeout Minutes",
+						Label:     "Timeout Mins",
 						ValueType: IntValue,
 						Field: ConfigField{
 							GetValue: func() interface{} { return level.securityLevel.TimeoutMins },
@@ -1648,7 +1718,7 @@ func (m Model) handleSecurityLevelsManagement(msg tea.KeyMsg) (tea.Model, tea.Cm
 					ItemType: EditableField,
 					EditableItem: &MenuItem{
 						ID:        "security-level-can-delete-own-msgs",
-						Label:     "Delete Own Msgs",
+						Label:     "Delete Own Msg",
 						ValueType: BoolValue,
 						Field: ConfigField{
 							GetValue: func() interface{} { return level.securityLevel.CanDeleteOwnMsgs },
@@ -1666,7 +1736,7 @@ func (m Model) handleSecurityLevelsManagement(msg tea.KeyMsg) (tea.Model, tea.Cm
 					ItemType: EditableField,
 					EditableItem: &MenuItem{
 						ID:        "security-level-can-delete-msgs",
-						Label:     "Delete Any Msgs",
+						Label:     "Delete Any Msg",
 						ValueType: BoolValue,
 						Field: ConfigField{
 							GetValue: func() interface{} { return level.securityLevel.CanDeleteMsgs },
@@ -1896,7 +1966,6 @@ func (m Model) handleMenuManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// Update handleEditingValue to set menuModified flag when editing menu data
 func (m Model) handleEditingValue(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Handle bool toggle separately
 	if m.editingItem.ValueType == BoolValue {
@@ -1916,6 +1985,7 @@ func (m Model) handleEditingValue(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.navMode = m.returnToMenuModifyOrModal()
 				}
 			} else {
+				// No change - just exit without incrementing counter
 				m.navMode = m.returnToMenuModifyOrModal()
 			}
 			return m, nil
@@ -1934,6 +2004,7 @@ func (m Model) handleEditingValue(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.navMode = m.returnToMenuModifyOrModal()
 				}
 			} else {
+				// No change - just exit without incrementing counter
 				m.navMode = m.returnToMenuModifyOrModal()
 			}
 			return m, nil
@@ -1942,6 +2013,11 @@ func (m Model) handleEditingValue(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if err := m.editingItem.Field.SetValue(!currentValue); err != nil {
 				m.editingError = err.Error()
 			} else {
+				// This is a toggle, so it's always a change
+				m.modifiedCount++
+				if m.editingMenu != nil {
+					m.menuModified = true
+				}
 				m.editingError = ""
 			}
 			return m, nil
@@ -1998,21 +2074,36 @@ func (m Model) handleEditingValue(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// Save the value
-		if err := m.editingItem.Field.SetValue(parsedValue); err != nil {
-			m.editingError = fmt.Sprintf("Error saving: %v", err)
-			return m, nil
+		// Check if value actually changed before saving
+		valueChanged := false
+		switch m.editingItem.ValueType {
+		case ListValue:
+			// For list values, compare the formatted strings
+			originalStr := formatValue(m.originalValue, m.editingItem.ValueType)
+			newStr := formatValue(parsedValue, m.editingItem.ValueType)
+			valueChanged = originalStr != newStr
+		default:
+			// For other types, direct comparison
+			valueChanged = parsedValue != m.originalValue
 		}
 
-		// Success - silently save and return
-		m.modifiedCount++
-		if m.editingMenu != nil {
-			m.menuModified = true // Mark menu as modified
+		// Only save and increment counter if value actually changed
+		if valueChanged {
+			if err := m.editingItem.Field.SetValue(parsedValue); err != nil {
+				m.editingError = fmt.Sprintf("Error saving: %v", err)
+				return m, nil
+			}
+
+			// Success - increment counters
+			m.modifiedCount++
+			if m.editingMenu != nil {
+				m.menuModified = true // Mark menu as modified
+			}
 		}
+
+		// Either way, exit editing mode
 		m.editingError = ""
 		m.message = ""
-
-		// Return to the appropriate mode
 		m.navMode = m.returnToMenuModifyOrModal()
 		m.textInput.Blur()
 

@@ -548,20 +548,17 @@ func InitialModelV2(cfg *config.Config) Model {
 	ti.Prompt = "" // Remove prompt to prevent shifting
 	ti.Placeholder = "Enter value"
 	ti.CharLimit = 200
-	ti.Width = 25 // Fixed width to prevent wrapping, allows scrolling
+	// Width will be set dynamically in render functions
 	ti.Cursor.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
 	ti.Cursor.Blink = true
 
-	// Set text input styling to match blue background
+	// Set text input styling to match blue background (remove conflicting background)
 	ti.TextStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("15")).
-		Background(lipgloss.Color("33"))
+		Foreground(lipgloss.Color("15"))
 	ti.PromptStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("15")).
-		Background(lipgloss.Color("33"))
+		Foreground(lipgloss.Color("15"))
 	ti.PlaceholderStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("8")).
-		Background(lipgloss.Color("33"))
+		Foreground(lipgloss.Color("8"))
 
 	menuBar := buildMenuStructure(cfg)
 

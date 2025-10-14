@@ -457,9 +457,9 @@ func (m Model) renderModalForm() string {
 					currentBool := currentValue.(bool)
 					var fieldDisplay string
 					if currentBool {
-						fieldDisplay = fmt.Sprintf(" %-19s [Y] Yes  [ ] No", field.EditableItem.Label+":")
+						fieldDisplay = fmt.Sprintf(" %-14s: [Y] Yes  [ ] No", field.EditableItem.Label) // Changed
 					} else {
-						fieldDisplay = fmt.Sprintf(" %-19s [ ] Yes  [N] No", field.EditableItem.Label+":")
+						fieldDisplay = fmt.Sprintf(" %-14s: [ ] Yes  [N] No", field.EditableItem.Label) // Changed
 					}
 
 					fullRowStyle := lipgloss.NewStyle().
@@ -470,10 +470,14 @@ func (m Model) renderModalForm() string {
 					fieldLines = append(fieldLines, fullRowStyle.Render(fieldDisplay))
 				} else {
 					// Text input field - inline editing
-					label := fmt.Sprintf(" %-19s", field.EditableItem.Label+":")
+					// Set dynamic width for text input
+					availableInputWidth := modalWidth - 17
+					m.textInput.Width = availableInputWidth
+
+					label := fmt.Sprintf(" %-14s:", field.EditableItem.Label)
 
 					fullRowStyle := lipgloss.NewStyle().
-						Background(lipgloss.Color(ColorAccent)).
+						Background(lipgloss.Color(ColorPrimary)).
 						Foreground(lipgloss.Color(ColorTextBright)).
 						Bold(true).
 						Width(modalWidth)
@@ -483,10 +487,10 @@ func (m Model) renderModalForm() string {
 				}
 			} else if isSelected && !isEditing {
 				// SELECTION MODE: Split highlighting
-				labelText := fmt.Sprintf(" %-19s", field.EditableItem.Label+":")
+				labelText := fmt.Sprintf(" %-14s:", field.EditableItem.Label) // Changed
 				valueText := " " + currentValueStr
 
-				availableValueSpace := modalWidth - 20
+				availableValueSpace := modalWidth - 16
 				if len(valueText) > availableValueSpace {
 					valueText = valueText[:availableValueSpace-3] + "..."
 				}
@@ -495,12 +499,12 @@ func (m Model) renderModalForm() string {
 					Background(lipgloss.Color(ColorAccent)).
 					Foreground(lipgloss.Color(ColorTextBright)).
 					Bold(true).
-					Width(20)
+					Width(16)
 
 				valueStyle := lipgloss.NewStyle().
 					Background(lipgloss.Color(ColorBgMedium)).
 					Foreground(lipgloss.Color(ColorTextNormal)).
-					Width(modalWidth - 20)
+					Width(modalWidth - 16)
 
 				label := labelStyle.Render(labelText)
 				value := valueStyle.Render(valueText)
@@ -508,7 +512,7 @@ func (m Model) renderModalForm() string {
 				fieldLines = append(fieldLines, label+value)
 			} else {
 				// UNSELECTED: Normal display
-				fieldDisplay := fmt.Sprintf(" %-19s %s", field.EditableItem.Label+":", currentValueStr)
+				fieldDisplay := fmt.Sprintf(" %-14s: %s", field.EditableItem.Label, currentValueStr) // Changed
 
 				if len(fieldDisplay) > modalWidth-1 {
 					fieldDisplay = fieldDisplay[:modalWidth-4] + "..."
@@ -520,6 +524,7 @@ func (m Model) renderModalForm() string {
 					Width(modalWidth)
 				fieldLines = append(fieldLines, fieldStyle.Render(fieldDisplay))
 			}
+
 		}
 	}
 
@@ -550,6 +555,7 @@ func (m Model) renderModalForm() string {
 		Render(combined)
 
 	return modalBox
+
 }
 
 // ============================================================================
@@ -1029,7 +1035,7 @@ func (m Model) renderMenuModify() string {
 		return emptyBox
 	}
 
-	width := 60
+	width := 70
 
 	// Create header with menu name
 	headerStyle := lipgloss.NewStyle().
@@ -1145,16 +1151,20 @@ func (m Model) renderMenuDataListWithEditing(width int) []string {
 					}
 
 					fullRowStyle := lipgloss.NewStyle().
-						Background(lipgloss.Color(ColorAccent)).
+						Background(lipgloss.Color(ColorPrimary)).
 						Foreground(lipgloss.Color(ColorTextBright)).
 						Bold(true).
 						Width(width - 4)
 					dataLines = append(dataLines, fullRowStyle.Render(fieldDisplay))
 				} else {
-					label := fmt.Sprintf(" %-20s:", field.EditableItem.Label)
+					// Set dynamic width for text input in menu data editing
+					availableInputWidth := width - 4 - 16 // width - padding - label width
+					m.textInput.Width = availableInputWidth
+
+					label := fmt.Sprintf(" %-14s:", field.EditableItem.Label)
 
 					fullRowStyle := lipgloss.NewStyle().
-						Background(lipgloss.Color(ColorAccent)).
+						Background(lipgloss.Color(ColorPrimary)).
 						Foreground(lipgloss.Color(ColorTextBright)).
 						Bold(true).
 						Width(width - 4)
@@ -1164,10 +1174,10 @@ func (m Model) renderMenuDataListWithEditing(width int) []string {
 				}
 			} else if isSelected && !isEditing {
 				// SELECTION MODE: Split highlighting - only highlight the label
-				labelText := fmt.Sprintf(" %-20s:", field.EditableItem.Label)
+				labelText := fmt.Sprintf(" %-14s:", field.EditableItem.Label) // Changed from %-20s
 				valueText := " " + valueStr
 
-				labelWidth := 22
+				labelWidth := 16
 				availableValueSpace := width - 4 - labelWidth
 				if len(valueText) > availableValueSpace {
 					valueText = valueText[:availableValueSpace-3] + "..."
@@ -1190,12 +1200,12 @@ func (m Model) renderMenuDataListWithEditing(width int) []string {
 				dataLines = append(dataLines, label+value)
 			} else {
 				// UNSELECTED: Normal display
-				maxValueLen := 30
+				maxValueLen := 49
 				if len(valueStr) > maxValueLen {
 					valueStr = valueStr[:maxValueLen-3] + "..."
 				}
 
-				line := fmt.Sprintf(" %-20s: %s", field.EditableItem.Label, valueStr)
+				line := fmt.Sprintf(" %-14s: %s", field.EditableItem.Label, valueStr)
 				if len(line) > width-4 {
 					line = line[:width-7] + "..."
 				}
@@ -1322,7 +1332,7 @@ func (m *Model) setupMenuEditCommandModal() {
 			ItemType: EditableField,
 			EditableItem: &MenuItem{
 				ID:        "command-short-description",
-				Label:     "Short Description",
+				Label:     "Short Desc",
 				ValueType: StringValue,
 				Field: ConfigField{
 					GetValue: func() interface{} { return m.editingMenuCommand.ShortDescription },

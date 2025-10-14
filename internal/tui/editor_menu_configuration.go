@@ -189,11 +189,11 @@ func configurationMenu(cfg *config.Config) MenuCategory {
 					},
 					{
 						ID:       "system-password",
-						Label:    "System Password",
+						Label:    "System Pass",
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "config.general.system_password",
-							Label:     "System Password",
+							Label:     "System Pass",
 							ValueType: StringValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return cfg.Configuration.General.SystemPassword },
@@ -207,11 +207,11 @@ func configurationMenu(cfg *config.Config) MenuCategory {
 					},
 					{
 						ID:       "timeout-minutes",
-						Label:    "Timeout Minutes",
+						Label:    "Timeout Mins",
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "config.general.timeout_minutes",
-							Label:     "Timeout Minutes",
+							Label:     "Timeout Mins",
 							ValueType: IntValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return cfg.Configuration.General.TimeoutMinutes },
@@ -275,11 +275,11 @@ func configurationMenu(cfg *config.Config) MenuCategory {
 				SubItems: []SubmenuItem{
 					{
 						ID:       "allow-new",
-						Label:    "Allow New Users",
+						Label:    "Allow New",
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "config.new_users.allow_new",
-							Label:     "Allow New Users",
+							Label:     "Allow New",
 							ValueType: BoolValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return cfg.Configuration.NewUsers.AllowNew },
@@ -372,11 +372,11 @@ func configurationMenu(cfg *config.Config) MenuCategory {
 					},
 					{
 						ID:       "auth-password-algorithm",
-						Label:    "Password Algorithm",
+						Label:    "Pwd Algorithm",
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
 							ID:        "config.auth.password_algorithm",
-							Label:     "Password Algorithm",
+							Label:     "Pwd Algorithm",
 							ValueType: StringValue,
 							Field: ConfigField{
 								GetValue: func() interface{} { return cfg.Configuration.Auth.PasswordAlgorithm },
