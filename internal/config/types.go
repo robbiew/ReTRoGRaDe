@@ -7,10 +7,10 @@ import (
 
 // Security Level Constants
 const (
-	SecurityLevelGuest     = 0   // Unauthenticated users
-	SecurityLevelRegular   = 10  // Standard registered users
-	SecurityLevelSysOp     = 100 // System operators with full access
-	SecurityLevelAdmin     = 255 // Special admin level (legacy compatibility)
+	SecurityLevelGuest   = 0   // Unauthenticated users
+	SecurityLevelRegular = 10  // Standard registered users
+	SecurityLevelSysOp   = 100 // System operators with full access
+	SecurityLevelAdmin   = 255 // Special admin level (legacy compatibility)
 )
 
 // Config struct to hold settings from the ini file with hierarchical structure
@@ -224,6 +224,8 @@ type TelnetSession struct {
 	IPAddress     string
 	Connected     bool
 	Conn          net.Conn // Add connection reference for timeout handling
+	Width         int      // Terminal width from NAWS negotiation
+	Height        int      // Terminal height from NAWS negotiation
 }
 
 // NodeConnection tracks individual connection details

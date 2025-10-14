@@ -1317,24 +1317,6 @@ func (m *Model) setupMenuEditCommandModal() {
 			},
 		},
 		{
-			ID:       "command-long-description",
-			Label:    "Long Description",
-			ItemType: EditableField,
-			EditableItem: &MenuItem{
-				ID:        "command-long-description",
-				Label:     "Long Description",
-				ValueType: StringValue,
-				Field: ConfigField{
-					GetValue: func() interface{} { return m.editingMenuCommand.LongDescription },
-					SetValue: func(v interface{}) error {
-						m.editingMenuCommand.LongDescription = v.(string)
-						return nil
-					},
-				},
-				HelpText: "Long description for help display",
-			},
-		},
-		{
 			ID:       "command-short-description",
 			Label:    "Short Description",
 			ItemType: EditableField,
@@ -1406,24 +1388,6 @@ func (m *Model) setupMenuEditCommandModal() {
 				HelpText: "Command options/parameters",
 			},
 		},
-		{
-			ID:       "command-flags",
-			Label:    "Flags",
-			ItemType: EditableField,
-			EditableItem: &MenuItem{
-				ID:        "command-flags",
-				Label:     "Flags",
-				ValueType: StringValue,
-				Field: ConfigField{
-					GetValue: func() interface{} { return m.editingMenuCommand.Flags },
-					SetValue: func(v interface{}) error {
-						m.editingMenuCommand.Flags = v.(string)
-						return nil
-					},
-				},
-				HelpText: "Command flags",
-			},
-		},
 	}
 
 	m.modalFieldIndex = 0
@@ -1478,42 +1442,6 @@ func (m *Model) setupMenuEditDataModal() {
 			},
 		},
 		{
-			ID:       "menu-help-file",
-			Label:    "Help File",
-			ItemType: EditableField,
-			EditableItem: &MenuItem{
-				ID:        "menu-help-file",
-				Label:     "Help File",
-				ValueType: StringValue,
-				Field: ConfigField{
-					GetValue: func() interface{} { return m.editingMenu.HelpFile },
-					SetValue: func(v interface{}) error {
-						m.editingMenu.HelpFile = v.(string)
-						return nil
-					},
-				},
-				HelpText: "Help file path",
-			},
-		},
-		{
-			ID:       "menu-long-help-file",
-			Label:    "Long Help File",
-			ItemType: EditableField,
-			EditableItem: &MenuItem{
-				ID:        "menu-long-help-file",
-				Label:     "Long Help File",
-				ValueType: StringValue,
-				Field: ConfigField{
-					GetValue: func() interface{} { return m.editingMenu.LongHelpFile },
-					SetValue: func(v interface{}) error {
-						m.editingMenu.LongHelpFile = v.(string)
-						return nil
-					},
-				},
-				HelpText: "Long help file path",
-			},
-		},
-		{
 			ID:       "menu-prompt",
 			Label:    "Prompt",
 			ItemType: EditableField,
@@ -1547,49 +1475,6 @@ func (m *Model) setupMenuEditDataModal() {
 					},
 				},
 				HelpText: "Access Control String required",
-			},
-		},
-		{
-			ID:       "menu-fallback-menu",
-			Label:    "Fallback Menu",
-			ItemType: EditableField,
-			EditableItem: &MenuItem{
-				ID:        "menu-fallback-menu",
-				Label:     "Fallback Menu",
-				ValueType: StringValue,
-				Field: ConfigField{
-					GetValue: func() interface{} { return m.editingMenu.FallbackMenu },
-					SetValue: func(v interface{}) error {
-						m.editingMenu.FallbackMenu = v.(string)
-						return nil
-					},
-				},
-				HelpText: "Fallback menu name",
-			},
-		},
-		{
-			ID:       "menu-forced-help-level",
-			Label:    "Forced Help Level",
-			ItemType: EditableField,
-			EditableItem: &MenuItem{
-				ID:        "menu-forced-help-level",
-				Label:     "Forced Help Level",
-				ValueType: IntValue,
-				Field: ConfigField{
-					GetValue: func() interface{} { return m.editingMenu.ForcedHelpLevel },
-					SetValue: func(v interface{}) error {
-						m.editingMenu.ForcedHelpLevel = v.(int)
-						return nil
-					},
-				},
-				HelpText: "Forced help level (0-3)",
-				Validation: func(v interface{}) error {
-					level := v.(int)
-					if level < 0 || level > 3 {
-						return fmt.Errorf("help level must be between 0 and 3")
-					}
-					return nil
-				},
 			},
 		},
 		{
@@ -1665,21 +1550,21 @@ func (m *Model) setupMenuEditDataModal() {
 			},
 		},
 		{
-			ID:       "menu-flags",
-			Label:    "Flags",
+			ID:       "menu-clear-screen",
+			Label:    "Clear Screen",
 			ItemType: EditableField,
 			EditableItem: &MenuItem{
-				ID:        "menu-flags",
-				Label:     "Flags",
-				ValueType: StringValue,
+				ID:        "menu-clear-screen",
+				Label:     "Clear Screen",
+				ValueType: BoolValue,
 				Field: ConfigField{
-					GetValue: func() interface{} { return m.editingMenu.Flags },
+					GetValue: func() interface{} { return m.editingMenu.ClearScreen },
 					SetValue: func(v interface{}) error {
-						m.editingMenu.Flags = v.(string)
+						m.editingMenu.ClearScreen = v.(bool)
 						return nil
 					},
 				},
-				HelpText: "Menu flags",
+				HelpText: "Clear screen before menu display",
 			},
 		},
 	}

@@ -286,11 +286,6 @@ func (m GuidedSetupModel) View() string {
 	return formStyle.Render(content.String())
 }
 
-// GetConfig returns the collected configuration data
-func (m GuidedSetupModel) GetConfig() *ConfigData {
-	return m.config
-}
-
 // RunGuidedSetupTUI runs the guided setup TUI and returns the configuration
 func RunGuidedSetupTUI(rootDir string) (*ConfigData, error) {
 	model := InitialGuidedSetupModel(rootDir)
@@ -306,5 +301,5 @@ func RunGuidedSetupTUI(rootDir string) (*ConfigData, error) {
 		return nil, fmt.Errorf("unexpected model type")
 	}
 
-	return setupModel.GetConfig(), nil
+	return setupModel.config, nil
 }

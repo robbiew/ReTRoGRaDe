@@ -37,18 +37,14 @@ type Menu struct {
 	ID                  int
 	Name                string
 	Titles              []string // JSON
-	HelpFile            string
-	LongHelpFile        string
 	Prompt              string
 	ACSRequired         string
 	Password            string
-	FallbackMenu        string
-	ForcedHelpLevel     int
 	GenericColumns      int
 	GenericBracketColor int
 	GenericCommandColor int
 	GenericDescColor    int
-	Flags               string
+	ClearScreen         bool
 }
 
 // MenuCommand represents a command in a menu
@@ -57,12 +53,10 @@ type MenuCommand struct {
 	MenuID           int
 	CommandNumber    int
 	Keys             string
-	LongDescription  string
 	ShortDescription string
 	ACSRequired      string
 	CmdKeys          string
 	Options          string
-	Flags            string
 }
 
 // Database interface defines all database operations

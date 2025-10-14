@@ -1,3 +1,7 @@
+[2025-10-13 14:15:00] - The ASCII normalization of mojibake glyphs throughout the TUI rendering code
+[2025-10-13 10:30:00] - The further splitting of menu structures into separate files (editor_menu_configuration.go, editor_menu_servers.go, editor_menu_editors.go, editor_menu_other.go)
+[2025-10-13 09:00:00] - The initial split of the 6447-line editor.go into multiple focused files (editor.go, editor_menu_structure.go, editor_update.go, editor_view.go, editor_canvas.go, editor_data.go)
+[2025-10-13 16:07:00] - Updated TUI editor to print ANSI background and removed the existing background pattern (shaded boxes)
 [2025-10-08 20:47:00] - Fixed unused field 'selectedMenuDataIndex' in internal/tui/editor.go by removing the unused struct field (U1000)
 [2025-10-08 20:40:00] - Modified menu modify TUI to default to "Menu Data" tab instead of "Commands", made Menu Data tab directly show edit modal instead of field list, fixed inactive tab visibility by changing background color from white to dark, and updated footer text for modal navigation behavior
 [2025-10-08 20:03:00] - Fixed index out of range panic when editing menu Flags field by properly initializing modalFields in setupMenuEditDataModal() before entering MenuEditDataMode

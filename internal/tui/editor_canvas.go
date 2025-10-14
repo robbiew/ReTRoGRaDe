@@ -541,31 +541,3 @@ func rasterizeANSIToLines(s string, width, height int) []string {
 	}
 	return lines
 }
-
-// SetANSIArtUTF8 sets art from a UTF-8 string. Lines are padded to 80 columns
-// by visible width; no truncation is performed.
-func (m *Model) SetANSIArtUTF8(s string) {
-	s = strings.ReplaceAll(s, "\r\n", "\n")
-	s = strings.ReplaceAll(s, "\r", "\n")
-	rawLines := strings.Split(s, "\n")
-
-	ansiPattern := regexp.MustCompile(`\x1b\[[0-9;]*m`)
-	const targetWidth = 80
-	const maxLines = 25
-	lines := make([]string, 0, maxLines)
-	for _, line := range rawLines {
-		vis := ansiPattern.ReplaceAllString(line, "")
-		visWidth := len([]rune(vis))
-		if visWidth < targetWidth {
-			line = line + strings.Repeat(" ", targetWidth-visWidth)
-		}
-		lines = append(lines, line)
-		if len(lines) >= maxLines {
-			break
-		}
-	}
-	for len(lines) < maxLines {
-		lines = append(lines, strings.Repeat(" ", targetWidth))
-	}
-	m.ansiArtLines = lines
-}

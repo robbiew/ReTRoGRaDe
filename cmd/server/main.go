@@ -56,34 +56,28 @@ func seedDefaultMenu(db database.Database) error {
 				MenuID:           menu.ID,
 				CommandNumber:    1,
 				Keys:             "R",
-				LongDescription:  "(R)ead Mail - Read private Electronic mail",
 				ShortDescription: "(R)ead Mail",
 				ACSRequired:      "",
 				CmdKeys:          "MM",
 				Options:          "",
-				Flags:            "",
 			},
 			{
 				MenuID:           menu.ID,
 				CommandNumber:    2,
 				Keys:             "P",
-				LongDescription:  "(P)ost Message - Post a message",
 				ShortDescription: "(P)ost Message",
 				ACSRequired:      "",
 				CmdKeys:          "MP",
 				Options:          "",
-				Flags:            "",
 			},
 			{
 				MenuID:           menu.ID,
 				CommandNumber:    3,
 				Keys:             "G",
-				LongDescription:  "(G)oodbye - Logout and disconnect",
 				ShortDescription: "(G)oodbye",
 				ACSRequired:      "",
 				CmdKeys:          "G",
 				Options:          "",
-				Flags:            "",
 			},
 		}
 		for _, cmd := range defaultCommands {
@@ -99,18 +93,14 @@ func seedDefaultMenu(db database.Database) error {
 	menu = &database.Menu{
 		Name:                "MAIN",
 		Titles:              []string{"-= Retrograde BBS =-", "-- Main Menu --"},
-		HelpFile:            "",
-		LongHelpFile:        "",
 		Prompt:              "[@1 - @2]@MTime Left: [@V] (?=Help)@MMain Menu :",
 		ACSRequired:         "",
 		Password:            "",
-		FallbackMenu:        "MAIN",
-		ForcedHelpLevel:     0,
 		GenericColumns:      4,
 		GenericBracketColor: 1,
 		GenericCommandColor: 9,
 		GenericDescColor:    1,
-		Flags:               "C---T-----",
+		ClearScreen:         true,
 	}
 
 	menuID, err := db.CreateMenu(menu)
@@ -124,34 +114,28 @@ func seedDefaultMenu(db database.Database) error {
 			MenuID:           int(menuID),
 			CommandNumber:    1,
 			Keys:             "R",
-			LongDescription:  "(R)ead Mail - Read private Electronic mail",
 			ShortDescription: "(R)ead Mail",
 			ACSRequired:      "",
 			CmdKeys:          "MM",
 			Options:          "",
-			Flags:            "",
 		},
 		{
 			MenuID:           int(menuID),
 			CommandNumber:    2,
 			Keys:             "P",
-			LongDescription:  "(P)ost Message - Post a message",
 			ShortDescription: "(P)ost Message",
 			ACSRequired:      "",
 			CmdKeys:          "MP",
 			Options:          "",
-			Flags:            "",
 		},
 		{
 			MenuID:           int(menuID),
 			CommandNumber:    3,
 			Keys:             "G",
-			LongDescription:  "(G)oodbye - Logout and disconnect",
 			ShortDescription: "(G)oodbye",
 			ACSRequired:      "",
 			CmdKeys:          "G",
 			Options:          "",
-			Flags:            "",
 		},
 	}
 
@@ -598,6 +582,7 @@ func negotiateTelnetOptions(writer *bufio.Writer) {
 		ECHO              = 1   // Echo option
 		SUPPRESS_GO_AHEAD = 3   // Suppress Go Ahead option
 		LINEMODE          = 34  // Line mode option
+		NAWS              = 31  // Negotiate About Window Size option
 	)
 
 	// Send telnet negotiations to enable character mode
@@ -621,6 +606,11 @@ func negotiateTelnetOptions(writer *bufio.Writer) {
 	writer.WriteByte(IAC)
 	writer.WriteByte(DONT)
 	writer.WriteByte(LINEMODE)
+
+	// Ask client to DO NAWS (Negotiate About Window Size)
+	writer.WriteByte(IAC)
+	writer.WriteByte(DO)
+	writer.WriteByte(NAWS)
 
 	writer.Flush()
 

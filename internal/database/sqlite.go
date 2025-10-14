@@ -66,6 +66,137 @@ func (s *SQLiteDB) InitializeSchema() error {
 		return err
 	}
 
+	// Check if we need to migrate from old menu schema
+	var currentVersion int
+	err = tx.QueryRow(`SELECT version FROM schema_version WHERE id = 1`).Scan(&currentVersion)
+	if err != nil {
+		return fmt.Errorf("failed to get current schema version: %w", err)
+	}
+
+	// If version is 1, check if menus table has obsolete columns and migrate
+	if currentVersion == 1 {
+		// Check if obsolete columns exist
+		var count int
+		err = tx.QueryRow(`
+			SELECT COUNT(*) FROM pragma_table_info('menus')
+			WHERE name IN ('help_file', 'long_help_file', 'fallback_menu', 'forced_help_level')
+		`).Scan(&count)
+		if err == nil && count > 0 {
+			// Migrate by recreating table without obsolete columns
+			_, err = tx.Exec(`
+				ALTER TABLE menus RENAME TO menus_old
+			`)
+			if err != nil {
+				return fmt.Errorf("failed to rename menus table: %w", err)
+			}
+
+			// Create new menus table without obsolete columns
+			_, err = tx.Exec(`
+				CREATE TABLE menus (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					name TEXT UNIQUE NOT NULL,
+					titles TEXT, -- JSON array
+					prompt TEXT,
+					acs_required TEXT,
+					password TEXT,
+					generic_columns INTEGER DEFAULT 4,
+					generic_bracket_color INTEGER DEFAULT 1,
+					generic_command_color INTEGER DEFAULT 9,
+					generic_desc_color INTEGER DEFAULT 1,
+					clear_screen BOOLEAN DEFAULT 0
+				)
+			`)
+			if err != nil {
+				return fmt.Errorf("failed to create new menus table: %w", err)
+			}
+
+			// Copy data from old table to new table, excluding obsolete columns and converting flags
+			_, err = tx.Exec(`
+				INSERT INTO menus (id, name, titles, prompt, acs_required, password, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, clear_screen)
+				SELECT id, name, titles, prompt, acs_required, password, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color,
+					   CASE WHEN substr(flags, 1, 1) = 'C' THEN 1 ELSE 0 END
+				FROM menus_old
+			`)
+			if err != nil {
+				return fmt.Errorf("failed to copy data to new menus table: %w", err)
+			}
+
+			// Drop old table
+			_, err = tx.Exec(`DROP TABLE menus_old`)
+			if err != nil {
+				return fmt.Errorf("failed to drop old menus table: %w", err)
+			}
+
+			// Update schema version
+			_, err = tx.Exec(`
+				UPDATE schema_version SET version = 2, description = 'Removed obsolete menu fields: help_file, long_help_file, fallback_menu, forced_help_level'
+				WHERE id = 1
+			`)
+			if err != nil {
+				return fmt.Errorf("failed to update schema version: %w", err)
+			}
+		} else if currentVersion == 2 {
+			// Check if menu_commands table has obsolete columns and migrate
+			var count int
+			err = tx.QueryRow(`
+				SELECT COUNT(*) FROM pragma_table_info('menu_commands')
+				WHERE name IN ('long_description', 'flags')
+			`).Scan(&count)
+			if err == nil && count > 0 {
+				// Migrate by recreating table without obsolete columns
+				_, err = tx.Exec(`
+					ALTER TABLE menu_commands RENAME TO menu_commands_old
+				`)
+				if err != nil {
+					return fmt.Errorf("failed to rename menu_commands table: %w", err)
+				}
+
+				// Create new menu_commands table without obsolete columns
+				_, err = tx.Exec(`
+					CREATE TABLE menu_commands (
+						id INTEGER PRIMARY KEY AUTOINCREMENT,
+						menu_id INTEGER NOT NULL,
+						command_number INTEGER NOT NULL,
+						keys TEXT,
+						short_description TEXT,
+						acs_required TEXT,
+						cmdkeys TEXT,
+						options TEXT,
+						FOREIGN KEY (menu_id) REFERENCES menus(id) ON DELETE CASCADE
+					)
+				`)
+				if err != nil {
+					return fmt.Errorf("failed to create new menu_commands table: %w", err)
+				}
+
+				// Copy data from old table to new table, excluding obsolete columns
+				_, err = tx.Exec(`
+					INSERT INTO menu_commands (id, menu_id, command_number, keys, short_description, acs_required, cmdkeys, options)
+					SELECT id, menu_id, command_number, keys, short_description, acs_required, cmdkeys, options
+					FROM menu_commands_old
+				`)
+				if err != nil {
+					return fmt.Errorf("failed to copy data to new menu_commands table: %w", err)
+				}
+
+				// Drop old table
+				_, err = tx.Exec(`DROP TABLE menu_commands_old`)
+				if err != nil {
+					return fmt.Errorf("failed to drop old menu_commands table: %w", err)
+				}
+
+				// Update schema version
+				_, err = tx.Exec(`
+					UPDATE schema_version SET version = 3, description = 'Removed obsolete menu_commands fields: long_description, flags'
+					WHERE id = 1
+				`)
+				if err != nil {
+					return fmt.Errorf("failed to update schema version: %w", err)
+				}
+			}
+		}
+	}
+
 	// Create config_settings table
 	_, err = tx.Exec(`
 		CREATE TABLE IF NOT EXISTS config_settings (
@@ -126,18 +257,14 @@ func (s *SQLiteDB) InitializeSchema() error {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			name TEXT UNIQUE NOT NULL,
 			titles TEXT, -- JSON array
-			help_file TEXT,
-			long_help_file TEXT,
 			prompt TEXT,
 			acs_required TEXT,
 			password TEXT,
-			fallback_menu TEXT,
-			forced_help_level INTEGER DEFAULT 0,
 			generic_columns INTEGER DEFAULT 4,
 			generic_bracket_color INTEGER DEFAULT 1,
 			generic_command_color INTEGER DEFAULT 9,
 			generic_desc_color INTEGER DEFAULT 1,
-			flags TEXT DEFAULT ''
+			clear_screen BOOLEAN DEFAULT 0
 		)
 	`)
 	if err != nil {
@@ -151,12 +278,10 @@ func (s *SQLiteDB) InitializeSchema() error {
 			menu_id INTEGER NOT NULL,
 			command_number INTEGER NOT NULL,
 			keys TEXT,
-			long_description TEXT,
 			short_description TEXT,
 			acs_required TEXT,
 			cmdkeys TEXT,
 			options TEXT,
-			flags TEXT DEFAULT '',
 			FOREIGN KEY (menu_id) REFERENCES menus(id) ON DELETE CASCADE
 		)
 	`)
@@ -370,9 +495,9 @@ func (s *SQLiteDB) CreateMenu(menu *Menu) (int64, error) {
 	}
 
 	result, err := s.db.Exec(`
-		INSERT INTO menus (name, titles, help_file, long_help_file, prompt, acs_required, password, fallback_menu, forced_help_level, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, flags)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		menu.Name, string(titlesJSON), menu.HelpFile, menu.LongHelpFile, menu.Prompt, menu.ACSRequired, menu.Password, menu.FallbackMenu, menu.ForcedHelpLevel, menu.GenericColumns, menu.GenericBracketColor, menu.GenericCommandColor, menu.GenericDescColor, menu.Flags)
+		INSERT INTO menus (name, titles, prompt, acs_required, password, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, clear_screen)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		menu.Name, string(titlesJSON), menu.Prompt, menu.ACSRequired, menu.Password, menu.GenericColumns, menu.GenericBracketColor, menu.GenericCommandColor, menu.GenericDescColor, menu.ClearScreen)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create menu: %w", err)
 	}
@@ -391,9 +516,9 @@ func (s *SQLiteDB) GetMenuByName(name string) (*Menu, error) {
 	var titlesJSON string
 
 	err := s.db.QueryRow(`
-		SELECT id, name, titles, help_file, long_help_file, prompt, acs_required, password, fallback_menu, forced_help_level, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, flags
+		SELECT id, name, titles, prompt, acs_required, password, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, clear_screen
 		FROM menus WHERE name = ?`, name).Scan(
-		&menu.ID, &menu.Name, &titlesJSON, &menu.HelpFile, &menu.LongHelpFile, &menu.Prompt, &menu.ACSRequired, &menu.Password, &menu.FallbackMenu, &menu.ForcedHelpLevel, &menu.GenericColumns, &menu.GenericBracketColor, &menu.GenericCommandColor, &menu.GenericDescColor, &menu.Flags)
+		&menu.ID, &menu.Name, &titlesJSON, &menu.Prompt, &menu.ACSRequired, &menu.Password, &menu.GenericColumns, &menu.GenericBracketColor, &menu.GenericCommandColor, &menu.GenericDescColor, &menu.ClearScreen)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("menu not found: %s", name)
 	}
@@ -415,9 +540,9 @@ func (s *SQLiteDB) GetMenuByID(id int64) (*Menu, error) {
 	var titlesJSON string
 
 	err := s.db.QueryRow(`
-		SELECT id, name, titles, help_file, long_help_file, prompt, acs_required, password, fallback_menu, forced_help_level, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, flags
+		SELECT id, name, titles, prompt, acs_required, password, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, clear_screen
 		FROM menus WHERE id = ?`, id).Scan(
-		&menu.ID, &menu.Name, &titlesJSON, &menu.HelpFile, &menu.LongHelpFile, &menu.Prompt, &menu.ACSRequired, &menu.Password, &menu.FallbackMenu, &menu.ForcedHelpLevel, &menu.GenericColumns, &menu.GenericBracketColor, &menu.GenericCommandColor, &menu.GenericDescColor, &menu.Flags)
+		&menu.ID, &menu.Name, &titlesJSON, &menu.Prompt, &menu.ACSRequired, &menu.Password, &menu.GenericColumns, &menu.GenericBracketColor, &menu.GenericCommandColor, &menu.GenericDescColor, &menu.ClearScreen)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("menu not found: %d", id)
 	}
@@ -436,7 +561,7 @@ func (s *SQLiteDB) GetMenuByID(id int64) (*Menu, error) {
 // GetAllMenus retrieves all menus
 func (s *SQLiteDB) GetAllMenus() ([]Menu, error) {
 	rows, err := s.db.Query(`
-		SELECT id, name, titles, help_file, long_help_file, prompt, acs_required, password, fallback_menu, forced_help_level, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, flags
+		SELECT id, name, titles, prompt, acs_required, password, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, clear_screen
 		FROM menus ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query menus: %w", err)
@@ -447,7 +572,7 @@ func (s *SQLiteDB) GetAllMenus() ([]Menu, error) {
 	for rows.Next() {
 		var menu Menu
 		var titlesJSON string
-		err := rows.Scan(&menu.ID, &menu.Name, &titlesJSON, &menu.HelpFile, &menu.LongHelpFile, &menu.Prompt, &menu.ACSRequired, &menu.Password, &menu.FallbackMenu, &menu.ForcedHelpLevel, &menu.GenericColumns, &menu.GenericBracketColor, &menu.GenericCommandColor, &menu.GenericDescColor, &menu.Flags)
+		err := rows.Scan(&menu.ID, &menu.Name, &titlesJSON, &menu.Prompt, &menu.ACSRequired, &menu.Password, &menu.GenericColumns, &menu.GenericBracketColor, &menu.GenericCommandColor, &menu.GenericDescColor, &menu.ClearScreen)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan menu: %w", err)
 		}
@@ -471,9 +596,9 @@ func (s *SQLiteDB) UpdateMenu(menu *Menu) error {
 	}
 
 	_, err = s.db.Exec(`
-		UPDATE menus SET name = ?, titles = ?, help_file = ?, long_help_file = ?, prompt = ?, acs_required = ?, password = ?, fallback_menu = ?, forced_help_level = ?, generic_columns = ?, generic_bracket_color = ?, generic_command_color = ?, generic_desc_color = ?, flags = ?
+		UPDATE menus SET name = ?, titles = ?, prompt = ?, acs_required = ?, password = ?, generic_columns = ?, generic_bracket_color = ?, generic_command_color = ?, generic_desc_color = ?, clear_screen = ?
 		WHERE id = ?`,
-		menu.Name, string(titlesJSON), menu.HelpFile, menu.LongHelpFile, menu.Prompt, menu.ACSRequired, menu.Password, menu.FallbackMenu, menu.ForcedHelpLevel, menu.GenericColumns, menu.GenericBracketColor, menu.GenericCommandColor, menu.GenericDescColor, menu.Flags, menu.ID)
+		menu.Name, string(titlesJSON), menu.Prompt, menu.ACSRequired, menu.Password, menu.GenericColumns, menu.GenericBracketColor, menu.GenericCommandColor, menu.GenericDescColor, menu.ClearScreen, menu.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update menu: %w", err)
 	}
@@ -493,9 +618,9 @@ func (s *SQLiteDB) DeleteMenu(id int64) error {
 // CreateMenuCommand creates a new menu command
 func (s *SQLiteDB) CreateMenuCommand(cmd *MenuCommand) (int64, error) {
 	result, err := s.db.Exec(`
-		INSERT INTO menu_commands (menu_id, command_number, keys, long_description, short_description, acs_required, cmdkeys, options, flags)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		cmd.MenuID, cmd.CommandNumber, cmd.Keys, cmd.LongDescription, cmd.ShortDescription, cmd.ACSRequired, cmd.CmdKeys, cmd.Options, cmd.Flags)
+		INSERT INTO menu_commands (menu_id, command_number, keys, short_description, acs_required, cmdkeys, options)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		cmd.MenuID, cmd.CommandNumber, cmd.Keys, cmd.ShortDescription, cmd.ACSRequired, cmd.CmdKeys, cmd.Options)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create menu command: %w", err)
 	}
@@ -511,7 +636,7 @@ func (s *SQLiteDB) CreateMenuCommand(cmd *MenuCommand) (int64, error) {
 // GetMenuCommands retrieves all commands for a menu
 func (s *SQLiteDB) GetMenuCommands(menuID int) ([]MenuCommand, error) {
 	rows, err := s.db.Query(`
-		SELECT id, menu_id, command_number, keys, long_description, short_description, acs_required, cmdkeys, options, flags
+		SELECT id, menu_id, command_number, keys, short_description, acs_required, cmdkeys, options
 		FROM menu_commands WHERE menu_id = ? ORDER BY command_number`, menuID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query menu commands: %w", err)
@@ -521,7 +646,7 @@ func (s *SQLiteDB) GetMenuCommands(menuID int) ([]MenuCommand, error) {
 	var commands []MenuCommand
 	for rows.Next() {
 		var cmd MenuCommand
-		err := rows.Scan(&cmd.ID, &cmd.MenuID, &cmd.CommandNumber, &cmd.Keys, &cmd.LongDescription, &cmd.ShortDescription, &cmd.ACSRequired, &cmd.CmdKeys, &cmd.Options, &cmd.Flags)
+		err := rows.Scan(&cmd.ID, &cmd.MenuID, &cmd.CommandNumber, &cmd.Keys, &cmd.ShortDescription, &cmd.ACSRequired, &cmd.CmdKeys, &cmd.Options)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan menu command: %w", err)
 		}
@@ -534,9 +659,9 @@ func (s *SQLiteDB) GetMenuCommands(menuID int) ([]MenuCommand, error) {
 // UpdateMenuCommand updates a menu command
 func (s *SQLiteDB) UpdateMenuCommand(cmd *MenuCommand) error {
 	_, err := s.db.Exec(`
-		UPDATE menu_commands SET menu_id = ?, command_number = ?, keys = ?, long_description = ?, short_description = ?, acs_required = ?, cmdkeys = ?, options = ?, flags = ?
+		UPDATE menu_commands SET menu_id = ?, command_number = ?, keys = ?, short_description = ?, acs_required = ?, cmdkeys = ?, options = ?
 		WHERE id = ?`,
-		cmd.MenuID, cmd.CommandNumber, cmd.Keys, cmd.LongDescription, cmd.ShortDescription, cmd.ACSRequired, cmd.CmdKeys, cmd.Options, cmd.Flags, cmd.ID)
+		cmd.MenuID, cmd.CommandNumber, cmd.Keys, cmd.ShortDescription, cmd.ACSRequired, cmd.CmdKeys, cmd.Options, cmd.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update menu command: %w", err)
 	}

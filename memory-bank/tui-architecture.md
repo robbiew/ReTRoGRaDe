@@ -3,7 +3,7 @@
 ## Retrograde Configuration Editor - BubbleTea TUI
 
 **Version**: 1.0
-**Date**: 2025-10-07
+**Date**: 2025-10-13
 **Author**: Code Analysis
 **Status**: Implemented
 
@@ -19,6 +19,7 @@
     - [Technology Stack](#technology-stack)
     - [Architecture Pattern](#architecture-pattern)
     - [Key Files](#key-files)
+    - [File Organization](#file-organization)
   - [Navigation Modes](#navigation-modes)
     - [1. MainMenuNavigation (Level 1)](#1-mainmenunavigation-level-1)
     - [2. Level2MenuNavigation (Level 2)](#2-level2menunavigation-level-2)
@@ -67,9 +68,43 @@ The TUI follows the **Model-View-Update (MVU)** pattern enforced by BubbleTea:
 
 ### Key Files
 
-- `internal/tui/editor.go` - Main TUI implementation (2888 lines)
+- `internal/tui/editor.go` - Core model structures and initialization
+- `internal/tui/editor_data.go` - Data structures and helper functions
+- `internal/tui/editor_menu_structure.go` - Main menu building logic
+- `internal/tui/editor_menu_configuration.go` - Configuration menu definitions
+- `internal/tui/editor_menu_servers.go` - Server menu definitions
+- `internal/tui/editor_menu_editors.go` - Editor menu definitions
+- `internal/tui/editor_menu_other.go` - Other menu definitions
+- `internal/tui/editor_update.go` - BubbleTea update function
+- `internal/tui/editor_view.go` - BubbleTea view function
+- `internal/tui/editor_canvas.go` - Canvas rendering utilities
 - `internal/config/` - Configuration data structures
 - `internal/database/` - SQLite backend for persistence
+
+### File Organization
+
+Following a recent refactoring, the original monolithic `editor.go` (6447 lines) has been split into multiple focused files to improve maintainability and organization:
+
+#### Core Components
+
+- `editor.go`: Core model structures and initialization logic
+- `editor_data.go`: Data structures, types, and helper functions
+
+#### Menu System
+
+- `editor_menu_structure.go`: Main menu building and hierarchy logic
+- `editor_menu_configuration.go`: Configuration-specific menu definitions
+- `editor_menu_servers.go`: Server-related menu definitions
+- `editor_menu_editors.go`: Editor-related menu definitions
+- `editor_menu_other.go`: Other/miscellaneous menu definitions
+
+#### BubbleTea Implementation
+
+- `editor_update.go`: Update function handling user input and state transitions
+- `editor_view.go`: View function responsible for rendering the UI
+- `editor_canvas.go`: Canvas-based rendering utilities and positioning logic
+
+This modular structure allows for better separation of concerns and easier maintenance of individual components.
 
 ---
 

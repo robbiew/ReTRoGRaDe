@@ -358,8 +358,63 @@ func (t *TelnetIO) handleTelnetCommand() {
 	switch cmd {
 	case 251, 252, 253, 254: // WILL, WONT, DO, DONT
 		// Read the option byte
-		t.Reader.ReadByte()
-		// For now, just consume the option - could respond appropriately later
+		option, err := t.Reader.ReadByte()
+		if err != nil {
+			return
+		}
+		// Handle NAWS subnegotiation
+		if option == 31 { // NAWS option
+			t.handleNAWSSubnegotiation()
+		}
+		// For other options, just consume the option - could respond appropriately later
+	}
+}
+
+// handleNAWSSubnegotiation parses NAWS (Negotiate About Window Size) responses
+func (t *TelnetIO) handleNAWSSubnegotiation() {
+	// Read the subnegotiation data: IAC SB NAWS <width-high> <width-low> <height-high> <height-low> IAC SE
+	// Skip the IAC and SB bytes that were already consumed
+
+	// Read width high byte
+	widthHigh, err := t.Reader.ReadByte()
+	if err != nil {
+		return
+	}
+
+	// Read width low byte
+	widthLow, err := t.Reader.ReadByte()
+	if err != nil {
+		return
+	}
+
+	// Read height high byte
+	heightHigh, err := t.Reader.ReadByte()
+	if err != nil {
+		return
+	}
+
+	// Read height low byte
+	heightLow, err := t.Reader.ReadByte()
+	if err != nil {
+		return
+	}
+
+	// Calculate width and height (big-endian)
+	width := int(widthHigh)<<8 | int(widthLow)
+	height := int(heightHigh)<<8 | int(heightLow)
+
+	// Cap at 80x25 maximum as specified
+	if width > 80 {
+		width = 80
+	}
+	if height > 25 {
+		height = 25
+	}
+
+	// Store dimensions in session
+	if t.Session != nil {
+		t.Session.Width = width
+		t.Session.Height = height
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -477,6 +478,78 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 	// Collect additional registration fields based on configuration
 	userDetails := make(map[string]string)
 
+	// Get terminal width preference
+	var terminalWidth int
+	for {
+		var err error
+		widthStr, err := io.Prompt("Terminal Width (80): ", 2, 14, 3)
+		if err != nil {
+			if err.Error() == "ESC_PRESSED" {
+				if io.HandleEscQuit() {
+					logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "registration cancelled by user")
+					return nil, fmt.Errorf("registration cancelled")
+				}
+				// User chose to continue, clear field and retry
+				io.ClearField("Terminal Width (80): ", 2, 14, 3)
+				continue
+			}
+			return nil, err
+		}
+
+		if widthStr == "" {
+			terminalWidth = 80
+			break
+		}
+
+		width, err := strconv.Atoi(widthStr)
+		if err != nil || width < 1 || width > 80 {
+			io.ShowTimedError("Width must be between 1 and 80.", 2, 15)
+			io.ClearField("Terminal Width (80): ", 2, 14, 3)
+			continue
+		}
+
+		terminalWidth = width
+		break
+	}
+
+	// Get terminal height preference
+	var terminalHeight int
+	for {
+		var err error
+		heightStr, err := io.Prompt("Terminal Height (25): ", 2, 15, 3)
+		if err != nil {
+			if err.Error() == "ESC_PRESSED" {
+				if io.HandleEscQuit() {
+					logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "registration cancelled by user")
+					return nil, fmt.Errorf("registration cancelled")
+				}
+				// User chose to continue, clear field and retry
+				io.ClearField("Terminal Height (25): ", 2, 15, 3)
+				continue
+			}
+			return nil, err
+		}
+
+		if heightStr == "" {
+			terminalHeight = 25
+			break
+		}
+
+		height, err := strconv.Atoi(heightStr)
+		if err != nil || height < 1 || height > 25 {
+			io.ShowTimedError("Height must be between 1 and 25.", 2, 16)
+			io.ClearField("Terminal Height (25): ", 2, 15, 3)
+			continue
+		}
+
+		terminalHeight = height
+		break
+	}
+
+	// Store terminal preferences in userDetails
+	userDetails["terminal_width"] = strconv.Itoa(terminalWidth)
+	userDetails["terminal_height"] = strconv.Itoa(terminalHeight)
+
 	row := 14 // Start after email field
 
 	// Check for additional fields from RegistrationFields config
@@ -567,8 +640,12 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 	io.Printf(ansiWhiteHi+"Username: "+ansiReset+"%s\r\n", username)
 	io.Printf(ansiWhiteHi+"Password: "+ansiReset+"%s\r\n", strings.Repeat("*", len(password)))
 	io.Printf(ansiWhiteHi+"Email: "+ansiReset+"%s\r\n", email)
+	io.Printf(ansiWhiteHi+"Terminal Width: "+ansiReset+"%s\r\n", userDetails["terminal_width"])
+	io.Printf(ansiWhiteHi+"Terminal Height: "+ansiReset+"%s\r\n", userDetails["terminal_height"])
 	for fieldName, value := range userDetails {
-		io.Printf(ansiWhiteHi+"%s: "+ansiReset+"%s\r\n", fieldName, value)
+		if fieldName != "terminal_width" && fieldName != "terminal_height" {
+			io.Printf(ansiWhiteHi+"%s: "+ansiReset+"%s\r\n", fieldName, value)
+		}
 	}
 	io.Print("\r\n")
 

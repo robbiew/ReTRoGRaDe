@@ -1279,12 +1279,10 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					MenuID:           selectedCmd.MenuID,
 					CommandNumber:    selectedCmd.CommandNumber,
 					Keys:             selectedCmd.Keys,
-					LongDescription:  selectedCmd.LongDescription,
 					ShortDescription: selectedCmd.ShortDescription,
 					ACSRequired:      selectedCmd.ACSRequired,
 					CmdKeys:          selectedCmd.CmdKeys,
 					Options:          selectedCmd.Options,
-					Flags:            selectedCmd.Flags,
 				}
 				// Set up modal fields for command editing
 				m.setupMenuEditCommandModal()
@@ -1299,12 +1297,10 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				MenuID:           m.editingMenu.ID,
 				CommandNumber:    len(m.menuCommandsList) + 1,
 				Keys:             "",
-				LongDescription:  "",
 				ShortDescription: "",
 				ACSRequired:      "",
 				CmdKeys:          "",
 				Options:          "",
-				Flags:            "",
 			}
 			// Set up modal fields for command editing
 			m.setupMenuEditCommandModal()
@@ -1767,18 +1763,14 @@ func (m Model) handleMenuManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				ID:                  originalMenu.ID,
 				Name:                originalMenu.Name,
 				Titles:              append([]string{}, originalMenu.Titles...),
-				HelpFile:            originalMenu.HelpFile,
-				LongHelpFile:        originalMenu.LongHelpFile,
 				Prompt:              originalMenu.Prompt,
 				ACSRequired:         originalMenu.ACSRequired,
 				Password:            originalMenu.Password,
-				FallbackMenu:        originalMenu.FallbackMenu,
-				ForcedHelpLevel:     originalMenu.ForcedHelpLevel,
 				GenericColumns:      originalMenu.GenericColumns,
 				GenericBracketColor: originalMenu.GenericBracketColor,
 				GenericCommandColor: originalMenu.GenericCommandColor,
 				GenericDescColor:    originalMenu.GenericDescColor,
-				Flags:               originalMenu.Flags,
+				ClearScreen:         originalMenu.ClearScreen,
 			}
 
 			// Make a working copy
@@ -1786,18 +1778,14 @@ func (m Model) handleMenuManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				ID:                  originalMenu.ID,
 				Name:                originalMenu.Name,
 				Titles:              append([]string{}, originalMenu.Titles...),
-				HelpFile:            originalMenu.HelpFile,
-				LongHelpFile:        originalMenu.LongHelpFile,
 				Prompt:              originalMenu.Prompt,
 				ACSRequired:         originalMenu.ACSRequired,
 				Password:            originalMenu.Password,
-				FallbackMenu:        originalMenu.FallbackMenu,
-				ForcedHelpLevel:     originalMenu.ForcedHelpLevel,
 				GenericColumns:      originalMenu.GenericColumns,
 				GenericBracketColor: originalMenu.GenericBracketColor,
 				GenericCommandColor: originalMenu.GenericCommandColor,
 				GenericDescColor:    originalMenu.GenericDescColor,
-				Flags:               originalMenu.Flags,
+				ClearScreen:         originalMenu.ClearScreen,
 			}
 
 			if err := m.loadMenuCommandsForEditing(); err != nil {
@@ -1815,12 +1803,10 @@ func (m Model) handleMenuManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					MenuID:           cmd.MenuID,
 					CommandNumber:    cmd.CommandNumber,
 					Keys:             cmd.Keys,
-					LongDescription:  cmd.LongDescription,
 					ShortDescription: cmd.ShortDescription,
 					ACSRequired:      cmd.ACSRequired,
 					CmdKeys:          cmd.CmdKeys,
 					Options:          cmd.Options,
-					Flags:            cmd.Flags,
 				}
 			}
 
@@ -1842,18 +1828,14 @@ func (m Model) handleMenuManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.editingMenu = &database.Menu{
 			Name:                "",
 			Titles:              []string{""},
-			HelpFile:            "",
-			LongHelpFile:        "",
 			Prompt:              "",
 			ACSRequired:         "",
 			Password:            "",
-			FallbackMenu:        "",
-			ForcedHelpLevel:     0,
 			GenericColumns:      4,
 			GenericBracketColor: 1,
 			GenericCommandColor: 9,
 			GenericDescColor:    1,
-			Flags:               "C---T-----",
+			ClearScreen:         false,
 		}
 		m.navMode = MenuEditDataMode
 		m.message = "Creating new menu"
