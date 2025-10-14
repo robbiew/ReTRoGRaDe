@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -47,6 +48,7 @@ func trimLastChar(s string) string {
 const (
 	ColorWhite     = "15"
 	ColorBlue      = "33"
+	ColorRed       = "196"
 	ColorGray      = "240"
 	ColorLightBlue = "39"
 	ColorLightGray = "252"
@@ -60,6 +62,7 @@ type GuidedSetupModel struct {
 	fields      []SetupField
 	fieldIndex  int
 	confirmMode bool
+	buttonIndex int // 0 for CONFIRM, 1 for CANCEL
 
 	// Text input for editing
 	textInput textinput.Model
@@ -71,7 +74,12 @@ type GuidedSetupModel struct {
 	// Setup data
 	rootDir   string
 	config    *ConfigData
-	cancelled bool // Track if user cancelled with CTRL-C
+	cancelled bool // Track if user cancelled
+
+	// Message system
+	message     string
+	messageTime time.Time
+	messageType int // 0=Info, 1=Success, 2=Warning, 3=Error
 }
 
 // SetupField represents a single field in the setup form
@@ -83,23 +91,13 @@ type SetupField struct {
 
 // ConfigData holds the collected configuration
 type ConfigData struct {
-	Root        string
-	Data        string
-	Files       string
-	Msgs        string
-	Logs        string
-	Theme       string
-	CreateSysop bool
-	SysopData   *SysopData
-}
-
-// SysopData holds sysop account information
-type SysopData struct {
-	Username string
-	Password string
-	RealName string
-	Email    string
-	Location string
+	Root     string
+	Data     string
+	Files    string
+	Msgs     string
+	Logs     string
+	Security string
+	Theme    string
 }
 
 // InitialGuidedSetupModel creates the initial guided setup model
@@ -115,18 +113,20 @@ func InitialGuidedSetupModel(rootDir string) GuidedSetupModel {
 	ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorGray)).Background(lipgloss.Color(ColorBlue))
 
 	fields := []SetupField{
-		{Label: " Root", Value: rootDir, ReadOnly: false},
-		{Label: " Data", Value: rootDir + "/data", ReadOnly: false},
-		{Label: "Files", Value: rootDir + "/files", ReadOnly: false},
-		{Label: " Msgs", Value: rootDir + "/msgs", ReadOnly: false},
-		{Label: " Logs", Value: rootDir + "/logs", ReadOnly: false},
-		{Label: "Theme", Value: rootDir + "/theme", ReadOnly: false},
+		{Label: "    Root", Value: rootDir, ReadOnly: false},
+		{Label: "    Data", Value: rootDir + "/data", ReadOnly: false},
+		{Label: "   Files", Value: rootDir + "/files", ReadOnly: false},
+		{Label: "    Msgs", Value: rootDir + "/msgs", ReadOnly: false},
+		{Label: "    Logs", Value: rootDir + "/logs", ReadOnly: false},
+		{Label: "Security", Value: rootDir + "/security", ReadOnly: false},
+		{Label: "   Theme", Value: rootDir + "/theme", ReadOnly: false},
 	}
 
 	return GuidedSetupModel{
 		fields:      fields,
-		fieldIndex:  0,
+		fieldIndex:  1, // Start with Data field selected (index 1)
 		confirmMode: false,
+		buttonIndex: 0, // Start with CONFIRM selected
 		textInput:   ti,
 		rootDir:     rootDir,
 		config:      &ConfigData{Root: rootDir},
@@ -151,64 +151,86 @@ func (m GuidedSetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
-			m.cancelled = true // Mark as cancelled
-			return m, tea.Quit
+			// CTRL+C disabled - use CANCEL button instead
+			return m, nil
 
 		case "up", "k":
 			if m.confirmMode {
-				m.confirmMode = false
+				// Navigate between buttons
+				if m.buttonIndex > 0 {
+					m.buttonIndex--
+				} else {
+					m.confirmMode = false
+				}
 			} else if m.fieldIndex > 0 {
 				m.fieldIndex--
 			}
 			return m, nil
 
 		case "down", "j":
-			if m.fieldIndex < len(m.fields)-1 {
+			if m.confirmMode {
+				// Navigate between buttons
+				if m.buttonIndex < 1 {
+					m.buttonIndex++
+				}
+			} else if m.fieldIndex < len(m.fields)-1 {
 				m.fieldIndex++
-				m.confirmMode = false
 			} else {
 				m.confirmMode = true
+				m.buttonIndex = 0 // Reset to first button
 			}
 			return m, nil
 
 		case "enter":
 			if m.confirmMode {
-				// Validate all fields are not empty (FIX #2)
-				for _, field := range m.fields {
-					if strings.TrimSpace(field.Value) == "" {
-						// Don't allow confirmation with empty fields
-						return m, nil
+				if m.buttonIndex == 0 {
+					// CONFIRM button pressed
+					// Validate all fields are not empty (FIX #2)
+					for _, field := range m.fields {
+						if strings.TrimSpace(field.Value) == "" {
+							// Show warning message for empty fields
+							m.message = "Path cannot be empty."
+							m.messageTime = time.Now()
+							m.messageType = 3 // Error
+							return m, nil
+						}
 					}
-				}
 
-				// Collect all field values into config
-				m.config.Root = m.fields[0].Value
-				m.config.Data = m.fields[1].Value
-				m.config.Files = m.fields[2].Value
-				m.config.Msgs = m.fields[3].Value
-				m.config.Logs = m.fields[4].Value
-				m.config.Theme = m.fields[5].Value
+					// Collect all field values into config
+					m.config.Root = m.fields[0].Value
+					m.config.Data = m.fields[1].Value
+					m.config.Files = m.fields[2].Value
+					m.config.Msgs = m.fields[3].Value
+					m.config.Logs = m.fields[4].Value
+					m.config.Security = m.fields[5].Value
+					m.config.Theme = m.fields[6].Value
 
-				// Create directories (FIX #3)
-				dirs := []string{
-					m.config.Root,
-					m.config.Data,
-					m.config.Files,
-					m.config.Msgs,
-					m.config.Logs,
-					m.config.Theme,
-				}
-
-				for _, dir := range dirs {
-					if err := os.MkdirAll(dir, 0755); err != nil {
-						// Store error in config or handle it
-						// For now, continue trying to create other dirs
-						continue
+					// Create directories (FIX #3)
+					dirs := []string{
+						m.config.Root,
+						m.config.Data,
+						m.config.Files,
+						m.config.Msgs,
+						m.config.Logs,
+						m.config.Security,
+						m.config.Theme,
 					}
-				}
 
-				// Return completion
-				return m, tea.Quit
+					for _, dir := range dirs {
+						if err := os.MkdirAll(dir, 0755); err != nil {
+							// Store error in config or handle it
+							// For now, continue trying to create other dirs
+							continue
+						}
+					}
+
+					// Return completion
+					return m, tea.Quit
+				} else {
+					// CANCEL button pressed
+					m.cancelled = true
+					return m, tea.Quit
+				}
 			} else {
 				// If currently editing, stop editing and move to next field
 				if m.textInput.Focused() {
@@ -274,13 +296,13 @@ func (m GuidedSetupModel) View() string {
 	}
 
 	// Instructions - narrower and centered (FIX #1)
-	instructions := "Use ↑↓ arrows to navigate, Enter to edit/select, Esc to cancel editing, CTLR+C to quit"
+	instructions := "Use ↑↓ arrows to navigate, Enter to edit/select"
 	instStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(ColorDarkGray2)).
 		Width(70).             // Narrower
 		Align(lipgloss.Center) // Center text within the 70 width
 	header.WriteString(instStyle.Render(instructions))
-	header.WriteString("\n\n")
+	header.WriteString("\n")
 
 	// Form fields
 	const valueWidth = 45 // Fixed width for consistent highlighting (FIX #4)
@@ -323,23 +345,45 @@ func (m GuidedSetupModel) View() string {
 		formFields.WriteString("\n")
 	}
 
-	// Confirm button
+	// Confirm/Cancel buttons
 	footer.WriteString("\n")
-	confirmLabel := "[CONFIRM]"
-	if m.confirmMode {
+
+	// CONFIRM button
+	confirmLabel := " CONFIRM "
+	if m.confirmMode && m.buttonIndex == 0 {
 		confirmStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(ColorWhite)).
 			Background(lipgloss.Color(ColorBlue)).
 			Bold(true).
-			Padding(0, 2)
+			Padding(0, 1).
+			MarginRight(2)
 		footer.WriteString(confirmStyle.Render(confirmLabel))
 	} else {
-		normalStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(ColorLightGray)).
-			Background(lipgloss.Color(ColorDarkGray)).
-			Padding(0, 2)
-		footer.WriteString(normalStyle.Render(confirmLabel))
+		confirmStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorWhite)).
+			Background(lipgloss.Color("240")). // Grey background
+			Padding(0, 1).
+			MarginRight(2)
+		footer.WriteString(confirmStyle.Render(confirmLabel))
 	}
+
+	// CANCEL button
+	cancelLabel := " CANCEL "
+	if m.confirmMode && m.buttonIndex == 1 {
+		cancelStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorWhite)).
+			Background(lipgloss.Color(ColorRed)).
+			Bold(true).
+			Padding(0, 1)
+		footer.WriteString(cancelStyle.Render(cancelLabel))
+	} else {
+		cancelStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorWhite)).
+			Background(lipgloss.Color("240")). // Grey background
+			Padding(0, 1)
+		footer.WriteString(cancelStyle.Render(cancelLabel))
+	}
+
 	footer.WriteString("\n")
 
 	// Apply center alignment to header and footer

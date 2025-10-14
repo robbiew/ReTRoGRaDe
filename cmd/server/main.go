@@ -27,13 +27,13 @@ func main() {
 			runConfigEditor()
 			return
 		case "setup", "install", "-setup", "--setup", "-install", "--install":
-			if err := runGuidedSetup(); err != nil {
+			err := runGuidedSetup()
+			if err != nil {
 				fmt.Printf("Guided setup failed: %v\n", err)
 				os.Exit(1)
 			}
-			fmt.Println("\nRetrograde BBS successfully installed... Next steps:")
-			fmt.Println("- \"retrograde config\" to customize, or")
-			fmt.Printf("- \"retrograde\" to start server on port %d\n", 2323) // default port
+			// runGuidedSetup returns nil on cancellation, so we only show success message on actual success
+			// (success message is handled inside runGuidedSetup)
 			return
 		}
 	}
@@ -65,7 +65,7 @@ func seedDefaultMenu(db database.Database) error {
 				MenuID:           menu.ID,
 				CommandNumber:    1,
 				Keys:             "R",
-				ShortDescription: "(R)ead Mail",
+				ShortDescription: "Read Mail",
 				ACSRequired:      "",
 				CmdKeys:          "MM",
 				Options:          "",
@@ -74,7 +74,7 @@ func seedDefaultMenu(db database.Database) error {
 				MenuID:           menu.ID,
 				CommandNumber:    2,
 				Keys:             "P",
-				ShortDescription: "(P)ost Message",
+				ShortDescription: "Post Message",
 				ACSRequired:      "",
 				CmdKeys:          "MP",
 				Options:          "",
@@ -83,7 +83,7 @@ func seedDefaultMenu(db database.Database) error {
 				MenuID:           menu.ID,
 				CommandNumber:    3,
 				Keys:             "G",
-				ShortDescription: "(G)oodbye",
+				ShortDescription: "Goodbye",
 				ACSRequired:      "",
 				CmdKeys:          "G",
 				Options:          "",
@@ -123,7 +123,7 @@ func seedDefaultMenu(db database.Database) error {
 			MenuID:           int(menuID),
 			CommandNumber:    1,
 			Keys:             "R",
-			ShortDescription: "(R)ead Mail",
+			ShortDescription: "Read Mail",
 			ACSRequired:      "",
 			CmdKeys:          "MM",
 			Options:          "",
@@ -132,7 +132,7 @@ func seedDefaultMenu(db database.Database) error {
 			MenuID:           int(menuID),
 			CommandNumber:    2,
 			Keys:             "P",
-			ShortDescription: "(P)ost Message",
+			ShortDescription: "Post Message",
 			ACSRequired:      "",
 			CmdKeys:          "MP",
 			Options:          "",
@@ -141,7 +141,7 @@ func seedDefaultMenu(db database.Database) error {
 			MenuID:           int(menuID),
 			CommandNumber:    3,
 			Keys:             "G",
-			ShortDescription: "(G)oodbye",
+			ShortDescription: "Goodbye",
 			ACSRequired:      "",
 			CmdKeys:          "G",
 			Options:          "",
@@ -172,6 +172,12 @@ func runGuidedSetup() error {
 		return fmt.Errorf("guided setup failed: %v", err)
 	}
 
+	// Check if user cancelled (nil return indicates cancellation)
+	if setupConfig == nil {
+		fmt.Println("\nCancelled! Run install again to complete setup")
+		return nil
+	}
+
 	// Create config from collected data
 	cfg := config.GetDefaultConfig()
 	cfg.Configuration.Paths.Database = filepath.Join(setupConfig.Data, "retrograde.db")
@@ -180,6 +186,7 @@ func runGuidedSetup() error {
 	cfg.Configuration.Paths.MessageBase = setupConfig.Msgs
 	cfg.Configuration.Paths.System = setupConfig.Root
 	cfg.Configuration.Paths.Themes = setupConfig.Theme
+	cfg.Configuration.Paths.Security = setupConfig.Security
 
 	// Create directories
 	paths := []struct {
@@ -190,17 +197,27 @@ func runGuidedSetup() error {
 		{"Files", cfg.Configuration.Paths.FileBase},
 		{"Logs", cfg.Configuration.Paths.Logs},
 		{"Messages", cfg.Configuration.Paths.MessageBase},
+		{"Security", cfg.Configuration.Paths.Security},
 		{"System", cfg.Configuration.Paths.System},
 		{"Text", cfg.Configuration.Paths.Themes},
 	}
 
 	for _, p := range paths {
-		if err := os.MkdirAll(p.path, 0755); err != nil {
+		if _, err := os.Stat(p.path); err == nil {
+			// Directory already exists
+			fmt.Printf("✓ %s directory exists.\n", p.name)
+		} else if err := os.MkdirAll(p.path, 0755); err != nil {
 			fmt.Printf(ui.Ansi.RedHi+"Failed to create %s: %v\n"+ui.Ansi.Reset, p.name, err)
 		} else {
-			fmt.Printf(ui.Ansi.GreenHi+"✓ Created %s directory.\n"+ui.Ansi.Reset, p.name)
+			fmt.Printf("✓ Created %s directory.\n", p.name)
 		}
+
 	}
+
+	// Show success message only on successful completion
+	fmt.Println("\nRetrograde BBS successfully installed... Next steps:")
+	fmt.Printf("- \"retrograde\" to start server on port %d\n", 2323) // default port
+	fmt.Println("- \"retrograde config\" to customize")
 
 	// Open db - ensure data directory exists
 	dbPath := filepath.Join("data", "retrograde.db")

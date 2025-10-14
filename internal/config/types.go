@@ -39,6 +39,7 @@ type PathsConfig struct {
 	MessageBase string
 	System      string
 	Themes      string
+	Security    string
 }
 
 // GeneralConfig holds general BBS settings
