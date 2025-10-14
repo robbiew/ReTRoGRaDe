@@ -150,10 +150,6 @@ func (m GuidedSetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c":
-			// CTRL+C disabled - use CANCEL button instead
-			return m, nil
-
 		case "up", "k":
 			if m.confirmMode {
 				// Navigate between buttons
@@ -181,11 +177,31 @@ func (m GuidedSetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
+		case "left", "h":
+			if m.confirmMode {
+				// Switch between CONFIRM and CANCEL buttons
+				if m.buttonIndex > 0 {
+					m.buttonIndex--
+				} else {
+					m.buttonIndex = 1
+				}
+				return m, nil
+			}
+		case "right", "l":
+			if m.confirmMode {
+				// Switch between CONFIRM and CANCEL buttons
+				if m.buttonIndex < 1 {
+					m.buttonIndex++
+				} else {
+					m.buttonIndex = 0
+				}
+				return m, nil
+			}
 		case "enter":
 			if m.confirmMode {
 				if m.buttonIndex == 0 {
 					// CONFIRM button pressed
-					// Validate all fields are not empty (FIX #2)
+					// Validate all fields are not empty
 					for _, field := range m.fields {
 						if strings.TrimSpace(field.Value) == "" {
 							// Show warning message for empty fields
@@ -295,14 +311,22 @@ func (m GuidedSetupModel) View() string {
 		header.WriteString("\n")
 	}
 
-	// Instructions - narrower and centered (FIX #1)
-	instructions := "Use ↑↓ arrows to navigate, Enter to edit/select"
+	// Instructions
+	instructions := "Use ↑↓ arrows to navigate fields, Enter to select / edit"
 	instStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(ColorDarkGray2)).
-		Width(70).             // Narrower
+		Width(70).
 		Align(lipgloss.Center) // Center text within the 70 width
 	header.WriteString(instStyle.Render(instructions))
 	header.WriteString("\n")
+	if m.message != "" {
+		header.WriteString(lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorRed)).
+			Bold(true).
+			Render(m.message))
+	} else {
+		header.WriteString(" ")
+	}
 
 	// Form fields
 	const valueWidth = 45 // Fixed width for consistent highlighting (FIX #4)

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	_ "embed"
 	"fmt"
 	"io"
 	"os"
@@ -16,6 +17,9 @@ import (
 	"github.com/robbiew/retrograde/internal/config"
 	"github.com/robbiew/retrograde/internal/database"
 )
+
+//go:embed config.ans
+var configArt string
 
 // ============================================================================
 // Color Scheme & Styling
@@ -606,7 +610,7 @@ func InitialModelV2(cfg *config.Config) Model {
 	}
 
 	// Try to load a default ANSI art if present (CP437 encoded). Failures are ignored.
-	_ = m.LoadANSIArtCP437("theme/config.ans")
+	_ = m.LoadANSIArtCP437(configArt)
 
 	return m
 }
