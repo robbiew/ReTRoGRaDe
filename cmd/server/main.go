@@ -26,6 +26,15 @@ func main() {
 		case "config", "edit", "-config", "--config", "/config":
 			runConfigEditor()
 			return
+		case "setup", "install", "-setup", "--setup", "-install", "--install":
+			if err := runGuidedSetup(); err != nil {
+				fmt.Printf("Guided setup failed: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Println("\nRetrograde BBS successfully installed... Next steps:")
+			fmt.Println("- \"retrograde config\" to customize, or")
+			fmt.Printf("- \"retrograde\" to start server on port %d\n", 2323) // default port
+			return
 		}
 	}
 

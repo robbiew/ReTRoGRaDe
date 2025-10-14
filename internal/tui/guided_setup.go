@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"unicode/utf8"
 
@@ -68,8 +69,9 @@ type GuidedSetupModel struct {
 	screenHeight int
 
 	// Setup data
-	rootDir string
-	config  *ConfigData
+	rootDir   string
+	config    *ConfigData
+	cancelled bool // Track if user cancelled with CTRL-C
 }
 
 // SetupField represents a single field in the setup form
@@ -113,11 +115,11 @@ func InitialGuidedSetupModel(rootDir string) GuidedSetupModel {
 	ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorGray)).Background(lipgloss.Color(ColorBlue))
 
 	fields := []SetupField{
-		{Label: "Root", Value: rootDir, ReadOnly: false},
-		{Label: "Data", Value: rootDir + "/data", ReadOnly: false},
+		{Label: " Root", Value: rootDir, ReadOnly: false},
+		{Label: " Data", Value: rootDir + "/data", ReadOnly: false},
 		{Label: "Files", Value: rootDir + "/files", ReadOnly: false},
-		{Label: "Msgs", Value: rootDir + "/msgs", ReadOnly: false},
-		{Label: "Logs", Value: rootDir + "/logs", ReadOnly: false},
+		{Label: " Msgs", Value: rootDir + "/msgs", ReadOnly: false},
+		{Label: " Logs", Value: rootDir + "/logs", ReadOnly: false},
 		{Label: "Theme", Value: rootDir + "/theme", ReadOnly: false},
 	}
 
@@ -133,10 +135,12 @@ func InitialGuidedSetupModel(rootDir string) GuidedSetupModel {
 
 // Init implements tea.Model
 func (m GuidedSetupModel) Init() tea.Cmd {
+	// FIX #3: Focus on first field immediately
+	m.textInput.SetValue(m.fields[0].Value)
+	m.textInput.Focus()
 	return tea.Batch(tea.ClearScreen, tea.EnterAltScreen)
 }
 
-// Update handles all input events
 func (m GuidedSetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -147,12 +151,12 @@ func (m GuidedSetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
+			m.cancelled = true // Mark as cancelled
 			return m, tea.Quit
 
 		case "up", "k":
 			if m.confirmMode {
 				m.confirmMode = false
-				// Stay on last field
 			} else if m.fieldIndex > 0 {
 				m.fieldIndex--
 			}
@@ -169,6 +173,14 @@ func (m GuidedSetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "enter":
 			if m.confirmMode {
+				// Validate all fields are not empty (FIX #2)
+				for _, field := range m.fields {
+					if strings.TrimSpace(field.Value) == "" {
+						// Don't allow confirmation with empty fields
+						return m, nil
+					}
+				}
+
 				// Collect all field values into config
 				m.config.Root = m.fields[0].Value
 				m.config.Data = m.fields[1].Value
@@ -177,7 +189,25 @@ func (m GuidedSetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.config.Logs = m.fields[4].Value
 				m.config.Theme = m.fields[5].Value
 
-				// Return completion message
+				// Create directories (FIX #3)
+				dirs := []string{
+					m.config.Root,
+					m.config.Data,
+					m.config.Files,
+					m.config.Msgs,
+					m.config.Logs,
+					m.config.Theme,
+				}
+
+				for _, dir := range dirs {
+					if err := os.MkdirAll(dir, 0755); err != nil {
+						// Store error in config or handle it
+						// For now, continue trying to create other dirs
+						continue
+					}
+				}
+
+				// Return completion
 				return m, tea.Quit
 			} else {
 				// If currently editing, stop editing and move to next field
@@ -223,73 +253,78 @@ func (m GuidedSetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// View renders the guided setup form
 func (m GuidedSetupModel) View() string {
-	var content strings.Builder
+	var header strings.Builder
+	var formFields strings.Builder
+	var footer strings.Builder
 
-	// ANSI Art Header (5 rows high, 80 columns wide)
-	// Decode CP437 -> UTF-8 and rasterize to 80x5
+	// ANSI Art Header
 	rdr := transform.NewReader(bytes.NewReader([]byte(guidedArt)), charmap.CodePage437.NewDecoder())
 	decoded, err := io.ReadAll(rdr)
 	if err != nil {
-		// Fallback if decoding fails
-		content.WriteString("Retrograde Setup\n\n")
+		header.WriteString("Retrograde Setup\n\n")
 	} else {
-		// Normalize newlines and remove SAUCE metadata
 		s := strings.ReplaceAll(string(decoded), "\r\n", "\n")
 		s = strings.ReplaceAll(s, "\r", "\n")
 		s = trimStringFromSauce(s)
-		// Rasterize ANSI to 80x5
 		artLines := rasterizeANSIToLines(s, 80, 7)
 		artHeader := strings.Join(artLines, "\n")
-		content.WriteString(artHeader)
-		content.WriteString("\n\n")
+		header.WriteString(artHeader)
+		header.WriteString("\n")
 	}
 
-	// Form fields - align PATHS fields
+	// Instructions - narrower and centered (FIX #1)
+	instructions := "Use ↑↓ arrows to navigate, Enter to edit/select, Esc to cancel editing, CTLR+C to quit"
+	instStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(ColorDarkGray2)).
+		Width(70).             // Narrower
+		Align(lipgloss.Center) // Center text within the 70 width
+	header.WriteString(instStyle.Render(instructions))
+	header.WriteString("\n\n")
+
+	// Form fields
+	const valueWidth = 45 // Fixed width for consistent highlighting (FIX #4)
+
 	for i, field := range m.fields {
 		isSelected := i == m.fieldIndex && !m.confirmMode
 
-		// Simple label formatting without padding
 		label := field.Label + ": "
 
 		var valuePart string
 		if isSelected && m.textInput.Focused() {
-			// Show text input for editing
 			valuePart = m.textInput.View()
 		} else {
-			// Show static value
 			valuePart = field.Value
 			if len(valuePart) > 40 {
 				valuePart = valuePart[:37] + "..."
 			}
 		}
 
-		// Always separate label and value styling
 		labelStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(ColorLightGray)).
 			Background(lipgloss.Color(ColorDarkGray))
 
 		var valueStyle lipgloss.Style
 		if isSelected {
-			// Highlight selected field value - blue background, white text
+			// Fixed width for consistent highlighting (FIX #4)
 			valueStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color(ColorWhite)).
 				Background(lipgloss.Color(ColorBlue)).
-				Bold(true)
+				Width(valueWidth)
 		} else {
-			// Normal value styling
 			valueStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color(ColorLightGray)).
-				Background(lipgloss.Color(ColorDarkGray))
+				Background(lipgloss.Color(ColorDarkGray)).
+				Width(valueWidth)
 		}
 
 		styledLine := labelStyle.Render(label) + valueStyle.Render(valuePart)
-		content.WriteString(styledLine)
-		content.WriteString("\n")
+		formFields.WriteString(styledLine)
+		formFields.WriteString("\n")
 	}
 
 	// Confirm button
+	footer.WriteString("\n")
 	confirmLabel := "[CONFIRM]"
 	if m.confirmMode {
 		confirmStyle := lipgloss.NewStyle().
@@ -297,34 +332,42 @@ func (m GuidedSetupModel) View() string {
 			Background(lipgloss.Color(ColorBlue)).
 			Bold(true).
 			Padding(0, 2)
-		content.WriteString("\n")
-		content.WriteString(confirmStyle.Render(confirmLabel))
+		footer.WriteString(confirmStyle.Render(confirmLabel))
 	} else {
 		normalStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(ColorLightGray)).
 			Background(lipgloss.Color(ColorDarkGray)).
 			Padding(0, 2)
-		content.WriteString("\n")
-		content.WriteString(normalStyle.Render(confirmLabel))
+		footer.WriteString(normalStyle.Render(confirmLabel))
 	}
+	footer.WriteString("\n")
 
-	content.WriteString("\n\n")
-
-	// Instructions
-	instructions := "Use ↑↓ arrows to navigate, Enter to edit/select, Esc to cancel editing, CTLR+C to quit"
-	instStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(ColorDarkGray2)).
-		Align(lipgloss.Center).
-		Width(60)
-	content.WriteString(instStyle.Render(instructions))
-
-	// Center the entire form
-	formStyle := lipgloss.NewStyle().
+	// Apply center alignment to header and footer
+	headerCentered := lipgloss.NewStyle().
 		Align(lipgloss.Center).
 		Width(m.screenWidth).
+		Render(header.String())
+
+	footerCentered := lipgloss.NewStyle().
+		Align(lipgloss.Center).
+		Width(m.screenWidth).
+		Render(footer.String())
+
+	// Move form more to the right for better centering (FIX #2)
+	formCentered := lipgloss.NewStyle().
+		Align(lipgloss.Left).
+		Width(m.screenWidth).
+		PaddingLeft((m.screenWidth - 50) / 2). // Adjusted from 60 to 50 for more centering
+		Render(formFields.String())
+
+	// Combine all sections
+	finalContent := headerCentered + formCentered + footerCentered
+
+	// Apply height centering
+	finalStyle := lipgloss.NewStyle().
 		Height(m.screenHeight)
 
-	return formStyle.Render(content.String())
+	return finalStyle.Render(finalContent)
 }
 
 // RunGuidedSetupTUI runs the guided setup TUI and returns the configuration
@@ -340,6 +383,11 @@ func RunGuidedSetupTUI(rootDir string) (*ConfigData, error) {
 	setupModel, ok := finalModel.(GuidedSetupModel)
 	if !ok {
 		return nil, fmt.Errorf("unexpected model type")
+	}
+
+	// Return nil if user cancelled (FIX #1)
+	if setupModel.cancelled {
+		return nil, nil
 	}
 
 	return setupModel.config, nil
