@@ -675,11 +675,11 @@ func (m Model) renderPersistentHeader() string {
 	// Right side: Version with decorative elements
 	versionStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(ColorPrimary)).
-		Background(lipgloss.Color(ColorBgGrey))
+		Background(lipgloss.Color(ColorBgLight))
 
 	versionAccent := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(ColorPrimary)).
-		Background(lipgloss.Color(ColorBgGrey)).
+		Background(lipgloss.Color(ColorBgLight)).
 		Bold(true)
 
 	rightText := versionStyle.Render(" v") + versionAccent.Render("0.01") + versionStyle.Render(" ")

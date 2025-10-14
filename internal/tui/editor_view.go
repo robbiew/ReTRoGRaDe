@@ -213,21 +213,21 @@ func (m Model) renderCommandEditBreadcrumb() string {
 	var path strings.Builder
 
 	categoryStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("243")).
+		Foreground(lipgloss.Color("7")). // Basic 16: light gray/white
 		Bold(true)
 
 	arrowStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240"))
+		Foreground(lipgloss.Color("8")) // Basic 16: dark gray
 
 	detailStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("250"))
+		Foreground(lipgloss.Color("7")) // Basic 16: light gray/white
 
 	highlightStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("214")).
+		Foreground(lipgloss.Color("11")). // Basic 16: bright yellow
 		Bold(true)
 
 	editingStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("196")).
+		Foreground(lipgloss.Color("9")). // Basic 16: bright red
 		Bold(true)
 
 	// Show: Editors -> Edit Menu: MAIN -> Menu Commands -> Edit Command: R
@@ -252,7 +252,7 @@ func (m Model) renderCommandEditBreadcrumb() string {
 	breadcrumbText := " " + path.String()
 
 	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("243")).
+		Foreground(lipgloss.Color("7")). // Basic 16: light gray/white (changed from 243)
 		Render(breadcrumbText)
 }
 
@@ -1062,8 +1062,7 @@ func (m Model) renderMenuModify() string {
 				Align(lipgloss.Center)
 		} else {
 			style = lipgloss.NewStyle().
-				Background(lipgloss.Color(ColorBgGrey)).
-				Foreground(lipgloss.Color(ColorTextNormal)).
+				Foreground(lipgloss.Color("7")). // Changed: light gray, removed Background
 				Width(15).
 				Align(lipgloss.Center)
 		}
