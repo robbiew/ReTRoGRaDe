@@ -1,0 +1,4 @@
+./auth.go
+./registry.go
+./storage.go
+./storage_sqlite.go

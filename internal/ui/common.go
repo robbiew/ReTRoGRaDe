@@ -1,45 +1,18 @@
 package ui
 
 import (
-	"bufio"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/robbiew/retrograde/internal/util"
 )
-
-// ANSI art files are read from disk at runtime
-// Paths are relative to the server executable location
-var welcomeArt string
-var adminArt string
-var ghostnetArt string
-var mainArt string
-var statusArt string
-var wwivnetArt string
-
-func init() {
-	// Load art files at startup
-	if data, err := os.ReadFile("artfiles/welcome.ans"); err == nil {
-		welcomeArt = string(data)
-	}
-	if data, err := os.ReadFile("artfiles/admin.ans"); err == nil {
-		adminArt = string(data)
-	}
-	if data, err := os.ReadFile("artfiles/ghostnet.ans"); err == nil {
-		ghostnetArt = string(data)
-	}
-	if data, err := os.ReadFile("artfiles/main.ans"); err == nil {
-		mainArt = string(data)
-	}
-	if data, err := os.ReadFile("artfiles/status.ans"); err == nil {
-		statusArt = string(data)
-	}
-	if data, err := os.ReadFile("artfiles/wwivnet.ans"); err == nil {
-		wwivnetArt = string(data)
-	}
-}
 
 // Struct for organizing all ANSI escape sequences
 type AnsiEscapes struct {
@@ -98,13 +71,6 @@ type AnsiEscapes struct {
 	BgCyanHi           string
 	BgWhiteHi          string
 	Reset              string
-	// Custom handle colors in README
-	H1   string
-	H2   string
-	H3   string
-	H4   string
-	Bold string
-	// Add more as needed
 }
 
 var Ansi = AnsiEscapes{
@@ -163,11 +129,6 @@ var Ansi = AnsiEscapes{
 	BgCyanHi:           Esc + "46;1m",
 	BgWhiteHi:          Esc + "47;1m",
 	Reset:              Esc + "0m",
-	H1:                 Esc + "32;1m", // Bright Green
-	H2:                 Esc + "34;1m", // Bright Blue
-	H3:                 Esc + "36;1m", // Bright Cyan
-	H4:                 Esc + "35;1m", // Bright Magenta
-	Bold:               Esc + "1m",
 }
 
 const (
@@ -179,18 +140,144 @@ const (
 	ResetText   = "\033[0m"     // Reset to normal
 )
 
-// ClearScreen clears the terminal screen
-func ClearScreen() {
-	fmt.Print("\033[2J\033[H")
+var (
+	artMu    sync.RWMutex
+	artDirs  []string
+	artCache = make(map[string]string)
+)
+
+// SetArtDirectories configures the lookup order for ANSI art files. Empty values are ignored.
+func SetArtDirectories(dirs ...string) {
+	artMu.Lock()
+	defer artMu.Unlock()
+
+	seen := make(map[string]struct{})
+	artDirs = artDirs[:0]
+
+	appendDir := func(dir string) {
+		dir = strings.TrimSpace(dir)
+		if dir == "" {
+			return
+		}
+		clean := filepath.Clean(dir)
+		if _, ok := seen[clean]; ok {
+			return
+		}
+		seen[clean] = struct{}{}
+		artDirs = append(artDirs, clean)
+	}
+
+	for _, dir := range dirs {
+		appendDir(dir)
+	}
+
+	artCache = make(map[string]string)
 }
 
-// StripANSI removes ANSI escape codes to calculate the visible length of a string
+func artDirectories() []string {
+	artMu.RLock()
+	defer artMu.RUnlock()
+	return append([]string(nil), artDirs...)
+}
+
+func cacheAnsiArt(name, content string) {
+	artMu.Lock()
+	defer artMu.Unlock()
+	artCache[name] = content
+}
+
+func cachedAnsiArt(name string) (string, bool) {
+	artMu.RLock()
+	defer artMu.RUnlock()
+	content, ok := artCache[name]
+	return content, ok
+}
+
+func artCandidates(name string) []string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil
+	}
+
+	if filepath.Ext(name) != "" {
+		return []string{name}
+	}
+
+	return []string{name, name + ".ans", name + ".asc"}
+}
+
+// LoadAnsiArt reads the ANSI art file content for the provided name, searching configured directories.
+func LoadAnsiArt(artName string) (string, error) {
+	if artName == "" {
+		return "", fmt.Errorf("ANSI art name cannot be empty")
+	}
+
+	if content, ok := cachedAnsiArt(artName); ok {
+		return content, nil
+	}
+
+	candidates := artCandidates(artName)
+	if len(candidates) == 0 {
+		return "", fmt.Errorf("ANSI art %q not found", artName)
+	}
+
+	for _, dir := range artDirectories() {
+		for _, candidate := range candidates {
+			path := candidate
+			if dir != "" {
+				path = filepath.Join(dir, candidate)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				continue
+			}
+			content := string(data)
+			cacheAnsiArt(artName, content)
+			return content, nil
+		}
+	}
+
+	return "", fmt.Errorf("ANSI art %q not found", artName)
+}
+
+// LoadAnsiLines returns ANSI art content split into lines (without trailing carriage returns).
+func LoadAnsiLines(artName string) ([]string, error) {
+	content, err := LoadAnsiArt(artName)
+	if err != nil {
+		return nil, err
+	}
+
+	trimmedContent := TrimStringFromSauce(content)
+	rawLines := strings.Split(trimmedContent, "\n")
+	lines := make([]string, 0, len(rawLines))
+	for _, line := range rawLines {
+		lines = append(lines, strings.TrimRight(line, "\r"))
+	}
+	return lines, nil
+}
+
+// ClearScreen clears the terminal screen.
+func ClearScreen() {
+	fmt.Print(ClearScreenSequence())
+}
+
+// ClearScreenSequence returns the escape sequence to clear the screen and move the cursor to the top-left.
+func ClearScreenSequence() string {
+	return Ansi.EraseScreen + Ansi.CursorTopLeft
+}
+
+// MoveCursorSequence returns the escape sequence to move the cursor to the specified coordinates.
+func MoveCursorSequence(x, y int) string {
+	return fmt.Sprintf(Esc+"%d;%df", y, x)
+}
+
+// StripANSI removes ANSI escape codes to calculate the visible length of a string.
 func StripANSI(s string) string {
 	re := regexp.MustCompile(`\x1b\[[0-9;]*m`)
 	return re.ReplaceAllString(s, "")
 }
 
-// GetTermSize retrieves the terminal's current height and width - for telnet we'll use defaults
+// GetTermSize retrieves the terminal's current height and width - for telnet we'll use defaults.
 func GetTermSize() (int, int) {
 	// For telnet connections, we'll use standard terminal size
 	// This can be enhanced later to negotiate terminal size via telnet options
@@ -203,7 +290,7 @@ func DrawInputField(label string, x, y, width int) {
 	PrintStringLoc(PadRight(" ", width), x+len(label)+2, y) // Non-highlighted background for inactive fields
 }
 
-// PadRight pads a string with spaces to a specified width
+// PadRight pads a string with spaces to a specified width.
 func PadRight(str string, width int) string {
 	for len(str) < width {
 		str += " "
@@ -211,75 +298,53 @@ func PadRight(str string, width int) string {
 	return str
 }
 
-// Print text at a specific X, Y location (optional)
+// PrintStringLoc prints text at a specific X, Y location.
 func PrintStringLoc(text string, x int, y int) {
-	fmt.Fprintf(os.Stdout, "\033[%d;%df%s", y, x, text)
+	WriteAt(os.Stdout, text, x, y) // ignore error for stdout printing
 }
 
+// WriteAt writes text to the provided writer after moving the cursor to X, Y.
+func WriteAt(w io.Writer, text string, x int, y int) (int, error) {
+	if w == nil {
+		return 0, fmt.Errorf("nil writer")
+	}
+	return fmt.Fprint(w, MoveCursorSequence(x, y)+text)
+}
+
+// PrintStyledText prints styled text at a specific location using the provided font escape code.
 func PrintStyledText(text, font string, x, y int) {
 	styledText := font + text + Ansi.Reset
 	PrintStringLoc(styledText, x, y)
 }
 
-// PrintAnsi displays embedded ANSI art by name, removes SAUCE metadata, and prints it line by line with an optional delay and height limit
+// PrintAnsi displays ANSI art by name, removes SAUCE metadata, and prints it line by line with an optional delay and height limit.
 func PrintAnsi(artName string, delay int, height int) {
-	// Get the embedded art content
-	content := GetArtContent(artName)
-	if content == "" {
-		fmt.Printf("Error: ANSI art '%s' not found\n", artName)
+	lines, err := LoadAnsiLines(artName)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
 		return
 	}
 
-	// Remove SAUCE metadata
-	trimmedContent := TrimStringFromSauce(content)
-
-	// Create a scanner to read the trimmed content line by line
-	scanner := bufio.NewScanner(strings.NewReader(trimmedContent))
-	lineCount := 0
-
-	// Print each line with a delay and stop after reaching the specified height
-	for scanner.Scan() {
-		line := scanner.Text()
-		fmt.Print(line + "\r\n") // Print the current line
-		time.Sleep(time.Duration(delay) * time.Millisecond)
-
-		lineCount++
-		if lineCount >= height {
+	delayDuration := time.Duration(delay) * time.Millisecond
+	printed := 0
+	for _, line := range lines {
+		if height > 0 && printed >= height {
 			break
 		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		fmt.Printf("Error reading ANSI art content: %v\n", err)
-	}
-}
-
-// GetArtContent returns the embedded art content by name
-func GetArtContent(artName string) string {
-	switch artName {
-	case "welcome":
-		return welcomeArt
-	case "admin":
-		return adminArt
-	case "ghostnet":
-		return ghostnetArt
-	case "main":
-		return mainArt
-	case "status":
-		return statusArt
-	case "wwivnet":
-		return wwivnetArt
-	default:
-		return ""
+		fmt.Print(line + "\r\n")
+		if delay > 0 {
+			time.Sleep(delayDuration)
+		}
+		printed++
 	}
 }
 
-// Trims SAUCE metadata from a string (if necessary)
+// TrimStringFromSauce trims SAUCE metadata from a string (if necessary).
 func TrimStringFromSauce(s string) string {
-	return trimMetadata(s, "COMNT", "SAUCE00")
+	return trimMetadata(s, "SAUCE00", "COMNT")
 }
 
-// Helper to trim metadata based on delimiters
+// Helper to trim metadata based on delimiters.
 func trimMetadata(s string, delimiters ...string) string {
 	for _, delimiter := range delimiters {
 		if idx := strings.Index(s, delimiter); idx != -1 {
@@ -289,7 +354,7 @@ func trimMetadata(s string, delimiters ...string) string {
 	return s
 }
 
-// trimLastChar trims the last character from a string
+// trimLastChar trims the last character from a string.
 func trimLastChar(s string) string {
 	if len(s) > 0 {
 		_, size := utf8.DecodeLastRuneInString(s)
@@ -298,18 +363,39 @@ func trimLastChar(s string) string {
 	return s
 }
 
-// Move cursor to X, Y location
+// MoveCursor moves the cursor to X, Y location.
 func MoveCursor(x int, y int) {
-	fmt.Printf(Esc+"%d;%df", y, x)
+	fmt.Print(MoveCursorSequence(x, y))
 }
 
-// SanitizeFilename removes or replaces unsafe characters from filenames
+// SanitizeFilename removes or replaces unsafe characters from filenames.
 func SanitizeFilename(filename string) string {
-	// Replace unsafe characters with underscores
-	unsafe := []string{"/", "\\", ":", "*", "?", "\"", "<", ">", "|", " "}
-	result := filename
-	for _, char := range unsafe {
-		result = strings.ReplaceAll(result, char, "_")
+	return util.SanitizeFilename(filename)
+}
+
+var ansiColorTable = []string{
+	Ansi.Black,
+	Ansi.Red,
+	Ansi.Green,
+	Ansi.Yellow,
+	Ansi.Blue,
+	Ansi.Magenta,
+	Ansi.Cyan,
+	Ansi.White,
+	Ansi.BlackHi,
+	Ansi.RedHi,
+	Ansi.GreenHi,
+	Ansi.YellowHi,
+	Ansi.BlueHi,
+	Ansi.MagentaHi,
+	Ansi.CyanHi,
+	Ansi.WhiteHi,
+}
+
+// ColorFromNumber maps a 0-15 color code to the corresponding ANSI escape sequence.
+func ColorFromNumber(code int) string {
+	if code >= 0 && code < len(ansiColorTable) {
+		return ansiColorTable[code]
 	}
-	return result
+	return Ansi.White
 }

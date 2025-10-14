@@ -358,21 +358,6 @@ func isUniqueConstraintError(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "unique")
 }
 
-func splitCSV(value string) []string {
-	if strings.TrimSpace(value) == "" {
-		return nil
-	}
-	parts := strings.Split(value, ",")
-	result := make([]string, 0, len(parts))
-	for _, part := range parts {
-		trimmed := strings.TrimSpace(part)
-		if trimmed != "" {
-			result = append(result, trimmed)
-		}
-	}
-	return result
-}
-
 // ErrNotFound returns a typed error for missing entities.
 func ErrNotFound(entity string) error {
 	return fmt.Errorf("auth: %s not found", entity)

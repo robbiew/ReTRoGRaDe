@@ -280,7 +280,7 @@ func runConfigEditor() {
 		cfg.Servers.Security.Logs.LogSecurityEvents = true
 		cfg.Servers.Security.Logs.LogBlockedAttempts = true
 		cfg.Other.Discord.Enabled = false
-		cfg.Other.Discord.Username = "GHOSTnet Bot"
+		cfg.Other.Discord.Username = "Retrograde BBS Bot"
 
 		// Seed default menu for new installations
 		db := config.GetDatabase()
@@ -328,6 +328,11 @@ func runServer() {
 		os.Exit(1)
 	}
 
+	ui.SetArtDirectories(
+		cfg.Configuration.Paths.Themes,
+		filepath.Join(cfg.Configuration.Paths.System, "theme"),
+	)
+
 	defer config.CloseDatabase()
 
 	// Check if required paths exist, if not, launch config editor
@@ -348,6 +353,12 @@ func runServer() {
 			fmt.Printf("Error reloading configuration: %v\n", err)
 			os.Exit(1)
 		}
+
+		ui.SetArtDirectories(
+			cfg.Configuration.Paths.Themes,
+			filepath.Join(cfg.Configuration.Paths.System, "theme"),
+			filepath.Join(cfg.Configuration.Paths.System, "artfiles"),
+		)
 
 		// Try to create missing directories
 		if err := config.EnsureRequiredPaths(cfg); err != nil {
@@ -456,145 +467,45 @@ func handleConnection(conn net.Conn, cfg *config.Config, nodeID int) {
 	// NOW that security is cleared, send telnet options to enable character mode
 	negotiateTelnetOptions(writer)
 
-	// Main menu loop - only for security-cleared connections
-	mainMenu(io, session, cfg)
-}
-
-func mainMenu(io *telnet.TelnetIO, session *config.TelnetSession, cfg *config.Config) {
-	for session.Connected {
-		// Display main menu
-		showMainMenu(io, session, cfg)
-
-		// Get user input
-		key, err := io.GetKeyPressUpper()
-		if err != nil {
-			fmt.Printf("Connection error: %v\n", err)
-			return
+	// Bypass main menu and proceed directly to login for telnet connections
+	userRecord, err := auth.LoginPrompt(io, session, cfg)
+	if err != nil {
+		// Login failed or cancelled - disconnect
+		if err.Error() != "login cancelled" {
+			io.Printf(ui.Ansi.RedHi+"\r\n Login failed: %v\r\n"+ui.Ansi.Reset, err)
+			io.Pause()
 		}
+		return
+	}
 
-		// Log what we received on server side
-		fmt.Printf("Received key press: %d (char: '%c')\n", key, key)
-
-		// Handle menu options
-		switch key {
-		case 'L':
-			if session.Alias != "Guest" {
-				// Logout functionality
-				logging.LogLogout(session.NodeNumber, session.Alias, session.IPAddress)
-				io.Printf("\r\n Logging out %s...\r\n", session.Alias)
-				session.Alias = "Guest"
-				session.SecurityLevel = config.SecurityLevelGuest
-				// Update node manager
-				if nm := logging.GetNodeManager(); nm != nil && session.NodeNumber > 0 {
-					if conn, exists := nm.Connections[session.NodeNumber]; exists {
-						conn.Username = "Guest"
-					}
-				}
-				io.Pause()
-			} else {
-				// Direct login for guest users
-				userRecord, err := auth.LoginPrompt(io, session)
-				if err != nil {
-					// Don't show error message or pause for cancelled logins
-					if err.Error() != "login cancelled" {
-						io.Printf(ui.Ansi.RedHi+"\r\n Login failed: %v\r\n"+ui.Ansi.Reset, err)
-						io.Pause()
-					}
-					// For cancelled logins, silently return to main menu
-				} else {
-					// Update session with logged-in user info
-					session.Alias = userRecord.Username
-					session.SecurityLevel = userRecord.SecurityLevel
-					// Update node manager with new username
-					if nm := logging.GetNodeManager(); nm != nil && session.NodeNumber > 0 {
-						if conn, exists := nm.Connections[session.NodeNumber]; exists {
-							conn.Username = userRecord.Username
-						}
-					}
-
-					// Load and execute start menu
-					db := config.GetDatabase()
-					if db != nil {
-						executor := menu.NewMenuExecutor(db, io)
-						ctx := &menu.ExecutionContext{
-							UserID:   userRecord.ID,
-							Username: userRecord.Username,
-							IO:       io,
-							Session:  session,
-						}
-						startMenu := cfg.Configuration.General.StartMenu
-						if startMenu == "" {
-							startMenu = "MAIN"
-						}
-						if err := executor.ExecuteMenu(startMenu, ctx); err != nil {
-							io.Printf("Menu error: %v\r\n", err)
-						}
-					}
-				}
-			}
-
-		case 'R':
-			// Only allow registration for guest users
-			if session.Alias == "Guest" {
-				userRecord, err := auth.RegisterPrompt(io, session, cfg)
-				if err != nil {
-					// Don't show error message or pause for cancelled registration
-					if err.Error() != "registration cancelled" {
-						io.Printf(ui.Ansi.RedHi+"\r\n Registration failed: %v\r\n"+ui.Ansi.Reset, err)
-						io.Pause()
-					}
-					// For cancelled registration, silently return to main menu
-				} else {
-					// Update session with registered user info
-					session.Alias = userRecord.Username
-					session.SecurityLevel = userRecord.SecurityLevel
-					// Update node manager with new username
-					if nm := logging.GetNodeManager(); nm != nil && session.NodeNumber > 0 {
-						if conn, exists := nm.Connections[session.NodeNumber]; exists {
-							conn.Username = userRecord.Username
-						}
-					}
-				}
-			}
-			// Silently ignore 'R' key if user is logged in
-
-		case 'Q':
-			io.Print("\r\n\r\nGoodbye! Thanks for visiting.\r\n")
-			return
-
-		default:
-			// Silently ignore invalid menu options
+	// Login successful - update session with user info
+	session.Alias = userRecord.Username
+	session.SecurityLevel = userRecord.SecurityLevel
+	// Update node manager with new username
+	if nm := logging.GetNodeManager(); nm != nil && session.NodeNumber > 0 {
+		if conn, exists := nm.Connections[session.NodeNumber]; exists {
+			conn.Username = userRecord.Username
 		}
 	}
-}
 
-func showMainMenu(io *telnet.TelnetIO, session *config.TelnetSession, cfg *config.Config) {
-	// Clear screen and show header
-	io.ClearScreen()
-	io.PrintAnsi("connect", 0, 6)
-	io.MoveCursor(0, 6)
-	io.Print(" " + ui.Ansi.BgCyanHi + ui.Ansi.WhiteHi + " " + cfg.Configuration.General.BBSName + " - Main Menu " + ui.Ansi.Reset + "\r\n")
-
-	// Show user status
-	if session.Alias == "Guest" {
-		io.Print("\r\n " + ui.Ansi.CyanHi + "Welcome, Guest!" + ui.Ansi.Reset + "\r\n")
-	} else {
-		io.Print("\r\n " + ui.Ansi.CyanHi + "Logged in as: " + session.Alias + ui.Ansi.Reset + "\r\n")
+	// Load and execute start menu
+	db := config.GetDatabase()
+	if db != nil {
+		executor := menu.NewMenuExecutor(db, io)
+		ctx := &menu.ExecutionContext{
+			UserID:   userRecord.ID,
+			Username: userRecord.Username,
+			IO:       io,
+			Session:  session,
+		}
+		startMenu := cfg.Configuration.General.StartMenu
+		if startMenu == "" {
+			startMenu = "MAIN"
+		}
+		if err := executor.ExecuteMenu(startMenu, ctx); err != nil {
+			io.Printf("Menu error: %v\r\n", err)
+		}
 	}
-
-	io.Print("\r\n")
-
-	// Display Login/Register/Logout as menu items
-	if session.Alias == "Guest" {
-		io.Print(" " + ui.Ansi.Cyan + "[" + ui.Ansi.CyanHi + "L" + ui.Ansi.Reset + ui.Ansi.Cyan + "] " + ui.Ansi.Cyan + "Login\r\n" + ui.Ansi.Reset)
-		io.Print(" " + ui.Ansi.Cyan + "[" + ui.Ansi.CyanHi + "R" + ui.Ansi.Reset + ui.Ansi.Cyan + "] " + ui.Ansi.Cyan + "Register\r\n" + ui.Ansi.Reset)
-	} else {
-		io.Print(" " + ui.Ansi.Cyan + "[" + ui.Ansi.CyanHi + "L" + ui.Ansi.Reset + ui.Ansi.Cyan + "] " + ui.Ansi.Cyan + "Logout\r\n" + ui.Ansi.Reset)
-	}
-
-	io.Print(" " + ui.Ansi.Cyan + "[" + ui.Ansi.CyanHi + "Q" + ui.Ansi.Reset + ui.Ansi.Cyan + "] " + ui.Ansi.Cyan + "Quit\r\n" + ui.Ansi.Reset)
-
-	io.Print("\r\n " + ui.Ansi.CyanHi + "Select an option" + ui.Ansi.Reset + ": ")
 }
 
 func negotiateTelnetOptions(writer *bufio.Writer) {
@@ -705,6 +616,6 @@ func showTimeoutWarning(io *telnet.TelnetIO, secondsRemaining int) {
 func showTimeoutDisconnection(io *telnet.TelnetIO, timeoutMinutes int) {
 	io.Print(fmt.Sprintf("\r\n%s Session timeout: Disconnected due to %d minutes of inactivity.%s\r\n",
 		ui.Ansi.RedHi, timeoutMinutes, ui.Ansi.Reset))
-	io.Print("Thank you for using GHOSTnet. Goodbye!\r\n\r\n")
+	io.Print("Thank you for using Retrograde BBS. Goodbye!\r\n\r\n")
 	time.Sleep(2 * time.Second) // Give time to read message
 }

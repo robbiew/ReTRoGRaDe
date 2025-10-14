@@ -14,25 +14,15 @@ import (
 	"github.com/robbiew/retrograde/internal/logging"
 	"github.com/robbiew/retrograde/internal/security"
 	"github.com/robbiew/retrograde/internal/telnet"
+	"github.com/robbiew/retrograde/internal/ui"
+	"github.com/robbiew/retrograde/internal/util"
 )
 
 const userTimestampLayout = "2006-01-02 15:04:05"
 
-// ANSI color codes for use in this package
-const (
-	ansiReset   = "\033[0m"
-	ansiCyan    = "\033[36m"
-	ansiCyanHi  = "\033[36;1m"
-	ansiGreenHi = "\033[32;1m"
-	ansiRedHi   = "\033[31;1m"
-	ansiWhiteHi = "\033[37;1m"
-	ansiBgCyan  = "\033[46m"
-)
-
 // SanitizeFilename replaces unsafe characters in the username to make it file-system safe
 func SanitizeFilename(name string) string {
-	re := regexp.MustCompile(`[^a-zA-Z0-9]+`)
-	return re.ReplaceAllString(name, "_")
+	return util.SanitizeFilename(name)
 }
 
 // Type aliases for convenience
@@ -47,7 +37,7 @@ func CreateUser(username, password, email string, securityLevel int, userDetails
 	digest := PasswordDigest{
 		Hash:      passwordHash,
 		Algorithm: "sha256",
-		Salt:      "ghostnet_salt_2025",
+		Salt:      "retrograde_salt_2025",
 		UpdatedAt: time.Now().UTC(),
 	}
 
@@ -108,7 +98,7 @@ func AuthenticateUser(username, password string) (*UserRecord, error) {
 // HashPassword creates a SHA-256 hash of the password with salt
 func HashPassword(password string) string {
 	// Simple hash for demo - in production, use bcrypt or similar
-	salt := "ghostnet_salt_2025"
+	salt := "retrograde_salt_2025"
 	hash := sha256.Sum256([]byte(password + salt))
 	return hex.EncodeToString(hash[:])
 }
@@ -138,22 +128,22 @@ func UserExists(username string) bool {
 }
 
 // LoginPrompt handles the login process for telnet clients
-func LoginPrompt(io *telnet.TelnetIO, session *config.TelnetSession) (*UserRecord, error) {
+func LoginPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *config.Config) (*UserRecord, error) {
 	io.ClearScreen()
-	io.PrintAnsi("ghostnet", 0, 6) // Use ghostnet.ans as header
 
-	// Create full-width header bar with ESC indicator at the end (columns 2-79, width 78)
-	headerText := " User Login "
-	escText := "[ESC] Quit/Cancel"
-	middlePadding := 78 - len(headerText) - len(escText) - 1 // -1 for space after escText
-	if middlePadding < 0 {
-		middlePadding = 0
+	// Display theme file first
+	if content, err := ui.LoadAnsiArt("login"); err == nil {
+		io.Print(content)
+	} else {
+		// Fallback to original behavior if theme file doesn't exist
+		io.PrintAnsi("login", 0, 6) // Use login.ans as header
 	}
-	fullHeader := headerText + strings.Repeat(" ", middlePadding) + ansiReset + ansiBgCyan + ansiCyanHi + escText + " "
-	io.PrintAt(ansiBgCyan+ansiWhiteHi+fullHeader+ansiReset, 2, 6)
+
 	io.Print("\r\n\r\n")
 
-	io.Print(ansiCyan + " Enter your account credentials to access Retrograde.\r\n\r\n" + ansiReset)
+	io.Print(ui.Ansi.Cyan + "Enter your username or 'NEW' to apply and hit RETURN.\r\n\r\n" + ui.Ansi.Reset)
+
+	io.Print("\r\n")
 
 	// Get username with validation
 	var username string
@@ -223,7 +213,7 @@ func LoginPrompt(io *telnet.TelnetIO, session *config.TelnetSession) (*UserRecor
 
 			// Check if max attempts exceeded - force disconnection and permanent blacklist
 			if failedAttempts >= maxAttempts {
-				io.Print(ansiRedHi + "\r\n\r\n Too many login tries, hacker -- see ya!\r\n\r\n" + ansiReset)
+				io.Print(ui.Ansi.RedHi + "\r\n\r\n Too many login tries, hacker -- see ya!\r\n\r\n" + ui.Ansi.Reset)
 				logging.LogLoginFailed(session.NodeNumber, username, session.IPAddress, fmt.Sprintf("Disconnected after %d failed attempts", maxAttempts))
 
 				// Add IP to permanent blacklist
@@ -241,7 +231,7 @@ func LoginPrompt(io *telnet.TelnetIO, session *config.TelnetSession) (*UserRecor
 
 			// Use generic error message for security (don't reveal if user exists or not)
 			// Show error message synchronously to avoid goroutine interference
-			io.PrintAt(ansiRedHi+"Invalid login, try again."+ansiReset, 2, 13)
+			io.PrintAt(ui.Ansi.RedHi+"Invalid login, try again."+ui.Ansi.Reset, 2, 13)
 
 			// Wait for user to read the error message, form remains visible during display
 			time.Sleep(2 * time.Second)
@@ -278,6 +268,25 @@ func LoginPrompt(io *telnet.TelnetIO, session *config.TelnetSession) (*UserRecor
 					io.ShowTimedError("Username cannot be empty.", 2, 13)
 					io.ClearField("Username: ", 2, 10, 20)
 					continue
+				} else if username == "NEW" {
+					// Handle new user registration
+					userRecord, err := RegisterPrompt(io, session, cfg)
+					if err != nil {
+						// Registration failed or cancelled, restart login prompt
+						io.ClearScreen()
+						// Display theme file first
+						if content, err := ui.LoadAnsiArt("login"); err == nil {
+							io.Print(ui.TrimStringFromSauce(content))
+						} else {
+							// Fallback to original behavior if theme file doesn't exist
+							io.PrintAnsi("login", 0, 6) // Use login.ans as header
+						}
+						io.Print("\r\n\r\n")
+						io.Print(ui.Ansi.Cyan + "Enter your username or 'NEW' to apply and hit RETURN.\r\n\r\n" + ui.Ansi.Reset)
+						continue
+					}
+					// Registration successful, return the user
+					return userRecord, nil
 				} else {
 					break
 				}
@@ -320,7 +329,7 @@ func LoginPrompt(io *telnet.TelnetIO, session *config.TelnetSession) (*UserRecor
 	// Log successful login
 	logging.LogLogin(session.NodeNumber, user.Username, session.IPAddress)
 
-	io.Printf(ansiGreenHi+"\r\n\r\n Welcome back, %s!\r\n"+ansiReset, user.Username)
+	io.Printf(ui.Ansi.GreenHi+"\r\n\r\n Welcome back, %s!\r\n"+ui.Ansi.Reset, user.Username)
 	io.Pause()
 
 	return user, nil
@@ -329,7 +338,7 @@ func LoginPrompt(io *telnet.TelnetIO, session *config.TelnetSession) (*UserRecor
 // RegisterPrompt handles new user registration
 func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *config.Config) (*UserRecord, error) {
 	io.ClearScreen()
-	io.PrintAnsi("ghostnet", 0, 6) // Use ghostnet.ans as header
+	io.PrintAnsi("newuser", 0, 6) // Use newuser.ans as header
 
 	// Create full-width header bar with ESC indicator at the end (columns 2-79, width 78)
 	headerText := " New User Registration "
@@ -339,10 +348,10 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 		middlePadding = 0
 	}
 	fullHeader := headerText + strings.Repeat(" ", middlePadding) + escText + " "
-	io.PrintAt(ansiBgCyan+ansiWhiteHi+fullHeader+ansiReset, 2, 6)
+	io.PrintAt(ui.Ansi.BgCyan+ui.Ansi.WhiteHi+fullHeader+ui.Ansi.Reset, 2, 6)
 	io.Print("\r\n\r\n")
 
-	io.Print(ansiCyan + " This will create your account for accessing Retrograde BBS.\r\n\r\n" + ansiReset)
+	io.Print(ui.Ansi.Cyan + " This will create your account for accessing Retrograde BBS.\r\n\r\n" + ui.Ansi.Reset)
 
 	// Compile regex once for username validation
 	usernameRegex := regexp.MustCompile(`^[a-zA-Z0-9 ]+$`)
@@ -636,15 +645,15 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 	}
 
 	// Display summary and confirm
-	io.Print("\r\n\r\n" + ansiCyan + "Account Summary:" + ansiReset + "\r\n")
-	io.Printf(ansiWhiteHi+"Username: "+ansiReset+"%s\r\n", username)
-	io.Printf(ansiWhiteHi+"Password: "+ansiReset+"%s\r\n", strings.Repeat("*", len(password)))
-	io.Printf(ansiWhiteHi+"Email: "+ansiReset+"%s\r\n", email)
-	io.Printf(ansiWhiteHi+"Terminal Width: "+ansiReset+"%s\r\n", userDetails["terminal_width"])
-	io.Printf(ansiWhiteHi+"Terminal Height: "+ansiReset+"%s\r\n", userDetails["terminal_height"])
+	io.Print("\r\n\r\n" + ui.Ansi.Cyan + "Account Summary:" + ui.Ansi.Reset + "\r\n")
+	io.Printf(ui.Ansi.WhiteHi+"Username: "+ui.Ansi.Reset+"%s\r\n", username)
+	io.Printf(ui.Ansi.WhiteHi+"Password: "+ui.Ansi.Reset+"%s\r\n", strings.Repeat("*", len(password)))
+	io.Printf(ui.Ansi.WhiteHi+"Email: "+ui.Ansi.Reset+"%s\r\n", email)
+	io.Printf(ui.Ansi.WhiteHi+"Terminal Width: "+ui.Ansi.Reset+"%s\r\n", userDetails["terminal_width"])
+	io.Printf(ui.Ansi.WhiteHi+"Terminal Height: "+ui.Ansi.Reset+"%s\r\n", userDetails["terminal_height"])
 	for fieldName, value := range userDetails {
 		if fieldName != "terminal_width" && fieldName != "terminal_height" {
-			io.Printf(ansiWhiteHi+"%s: "+ansiReset+"%s\r\n", fieldName, value)
+			io.Printf(ui.Ansi.WhiteHi+"%s: "+ui.Ansi.Reset+"%s\r\n", fieldName, value)
 		}
 	}
 	io.Print("\r\n")
@@ -698,7 +707,7 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 	logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_SUCCESS", "new account created")
 	logging.LogLogin(session.NodeNumber, user.Username, session.IPAddress)
 
-	io.Printf(ansiGreenHi+"\r\n\r\n Account created successfully. Welcome, %s!"+ansiReset, username)
+	io.Printf(ui.Ansi.GreenHi+"\r\n\r\n Account created successfully. Welcome, %s!"+ui.Ansi.Reset, username)
 	io.Pause()
 
 	return user, nil

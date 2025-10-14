@@ -9,6 +9,7 @@ import (
 
 	"github.com/robbiew/retrograde/internal/database"
 	"github.com/robbiew/retrograde/internal/telnet"
+	"github.com/robbiew/retrograde/internal/ui"
 )
 
 // getTerminalDimensions returns the terminal width and height from the session,
@@ -79,7 +80,7 @@ func (e *MenuExecutor) ExecuteMenu(menuName string, ctx *ExecutionContext) error
 	for {
 		// Position prompt at bottom of terminal
 		_, height := getTerminalDimensions(ctx)
-		e.io.Printf("\033[%d;1H", height)
+		e.io.Print(ui.MoveCursorSequence(1, height))
 		e.io.Print(menu.Prompt)
 
 		// Read input (single key for now, can be expanded)
@@ -248,17 +249,18 @@ func (e *MenuExecutor) serveThemeFile(themePath string) error {
 // clearScreen clears the screen if ClearScreen is true
 func (e *MenuExecutor) clearScreen(clear bool) {
 	if clear {
-		e.io.Print("\x1b[2J\x1b[H") // ANSI clear screen and move cursor to top-left
+		e.io.Print(ui.ClearScreenSequence()) // ANSI clear screen and move cursor to top-left
 	}
 }
 
 // centerTitle centers the title text on screen
 func (e *MenuExecutor) centerTitle(title string, ctx *ExecutionContext) string {
 	width, _ := getTerminalDimensions(ctx)
-	if len(title) >= width {
+	visible := ui.StripANSI(title)
+	if len(visible) >= width {
 		return title
 	}
-	padding := (width - len(title)) / 2
+	padding := (width - len(visible)) / 2
 	return strings.Repeat(" ", padding) + title
 }
 
@@ -284,13 +286,16 @@ func (e *MenuExecutor) displayCommandsInColumns(commands []database.MenuCommand,
 	columns := 4
 
 	// ANSI color codes
-	bracketColor := e.getANSIColor(menu.GenericBracketColor)
-	commandColor := e.getANSIColor(menu.GenericCommandColor)
-	descColor := e.getANSIColor(menu.GenericDescColor)
-	resetColor := "\x1b[0m"
+	bracketColor := ui.ColorFromNumber(menu.GenericBracketColor)
+	commandColor := ui.ColorFromNumber(menu.GenericCommandColor)
+	descColor := ui.ColorFromNumber(menu.GenericDescColor)
+	resetColor := ui.Ansi.Reset
 
 	// Calculate items per column
 	itemsPerColumn := (len(displayCommands) + columns - 1) / columns
+	screenWidth, _ := getTerminalDimensions(ctx)
+	colWidth := (screenWidth - 4) / columns
+	const margin = 2
 
 	for row := 0; row < itemsPerColumn; row++ {
 		line := ""
@@ -304,12 +309,9 @@ func (e *MenuExecutor) displayCommandsInColumns(commands []database.MenuCommand,
 					commandColor, cmd.Keys, resetColor,
 					descColor, cmd.ShortDescription, resetColor)
 
-				// Calculate column width with margins (width - 2*2) / 4
-				width, _ := getTerminalDimensions(ctx)
-				colWidth := (width - 4) / 4
-				const margin = 2
-				if len(formatted) < colWidth {
-					formatted += strings.Repeat(" ", colWidth-len(formatted))
+				visibleLen := len(ui.StripANSI(formatted))
+				if visibleLen < colWidth {
+					formatted += strings.Repeat(" ", colWidth-visibleLen)
 				}
 				// Add left margin for first column, right margin for others
 				if col == 0 {
@@ -320,45 +322,5 @@ func (e *MenuExecutor) displayCommandsInColumns(commands []database.MenuCommand,
 			}
 		}
 		e.io.Printf("%s\r\n", strings.TrimRight(line, " "))
-	}
-}
-
-// getANSIColor converts color number to ANSI color code
-func (e *MenuExecutor) getANSIColor(colorNum int) string {
-	switch colorNum {
-	case 0:
-		return "\x1b[30m" // Black
-	case 1:
-		return "\x1b[31m" // Red
-	case 2:
-		return "\x1b[32m" // Green
-	case 3:
-		return "\x1b[33m" // Yellow
-	case 4:
-		return "\x1b[34m" // Blue
-	case 5:
-		return "\x1b[35m" // Magenta
-	case 6:
-		return "\x1b[36m" // Cyan
-	case 7:
-		return "\x1b[37m" // White
-	case 8:
-		return "\x1b[90m" // Bright Black
-	case 9:
-		return "\x1b[91m" // Bright Red
-	case 10:
-		return "\x1b[92m" // Bright Green
-	case 11:
-		return "\x1b[93m" // Bright Yellow
-	case 12:
-		return "\x1b[94m" // Bright Blue
-	case 13:
-		return "\x1b[95m" // Bright Magenta
-	case 14:
-		return "\x1b[96m" // Bright Cyan
-	case 15:
-		return "\x1b[97m" // Bright White
-	default:
-		return "\x1b[37m" // Default to white
 	}
 }

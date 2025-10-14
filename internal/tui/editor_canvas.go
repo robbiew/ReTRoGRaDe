@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/robbiew/retrograde/internal/ui"
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/transform"
 )
@@ -190,11 +191,7 @@ func (m *Model) overlayStringCenteredWithClear(canvas []string, str string) {
 	m.overlayString(canvas, str, startRow, startCol)
 }
 
-// overlayStringWithBorderClear clears a 1-cell border around the content box
-// and then overlays the string at the given row/col. Useful for menus/lists
-// drawn over an ANSI background.
-// overlayStringWithBorderClear clears a 1-cell border around the content box
-// then overlays the content. For finer control, use overlayStringWithClearBorder.
+// overlayStringWithBorderClear clears a 1-cell border around the content box and overlays the string at the given position. Useful for menus/lists drawn over an ANSI background. For finer control over border size, use overlayStringWithClearBorder.
 func (m *Model) overlayStringWithBorderClear(canvas []string, str string, startRow, startCol int) {
 	m.overlayStringWithClearBorder(canvas, str, startRow, startCol, 1)
 }
@@ -303,6 +300,25 @@ func (m *Model) LoadANSIArtCP437(path string) error {
 
 	// Decode CP437 -> UTF-8
 	rdr := transform.NewReader(bytes.NewReader(data), charmap.CodePage437.NewDecoder())
+	decoded, err := io.ReadAll(rdr)
+	if err != nil {
+		return err
+	}
+
+	// Normalize newlines
+	s := strings.ReplaceAll(string(decoded), "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	// Rasterize ANSI (supports SGR colors and basic cursor ops) to 80x25
+	m.ansiArtLines = rasterizeANSIToLines(s, 80, 25)
+	return nil
+}
+
+// LoadANSIArtFromContent loads ANSI art from embedded string content (CP437-encoded)
+// and stores it as padded lines on the model for rendering under the menus.
+// Lines are padded to 80 columns by visible width; no truncation is performed.
+func (m *Model) LoadANSIArtFromContent(content string) error {
+	// Decode CP437 -> UTF-8
+	rdr := transform.NewReader(strings.NewReader(content), charmap.CodePage437.NewDecoder())
 	decoded, err := io.ReadAll(rdr)
 	if err != nil {
 		return err
@@ -505,7 +521,7 @@ func rasterizeANSIToLines(s string, width, height int) []string {
 
 	// Build output lines with minimal SGR sequences
 	lines := make([]string, height)
-	resetSGR := "\x1b[0m"
+	resetSGR := ui.Ansi.Reset
 	for yy := 0; yy < height; yy++ {
 		var b strings.Builder
 		// start reset to avoid bleed
@@ -525,7 +541,7 @@ func rasterizeANSIToLines(s string, width, height int) []string {
 			if st.bg != 49 {
 				params = append(params, strconv.Itoa(st.bg))
 			}
-			b.WriteString("\x1b[" + strings.Join(params, ";") + "m")
+			b.WriteString(ui.Esc + strings.Join(params, ";") + "m")
 			out = st
 		}
 

@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/robbiew/retrograde/internal/database"
+	"github.com/robbiew/retrograde/internal/util"
 )
 
 var db database.Database
@@ -651,8 +651,7 @@ func CloseDatabase() error {
 
 // SanitizeFilename replaces unsafe characters in the username to make it file-system safe
 func SanitizeFilename(name string) string {
-	re := regexp.MustCompile(`[^a-zA-Z0-9]+`)
-	return re.ReplaceAllString(name, "_")
+	return util.SanitizeFilename(name)
 }
 
 // CheckRequiredPathsExist checks if the required directories from configuration exist

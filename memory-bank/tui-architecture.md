@@ -20,6 +20,9 @@
     - [Architecture Pattern](#architecture-pattern)
     - [Key Files](#key-files)
     - [File Organization](#file-organization)
+      - [Core Components](#core-components)
+      - [Menu System](#menu-system)
+      - [BubbleTea Implementation](#bubbletea-implementation)
   - [Navigation Modes](#navigation-modes)
     - [1. MainMenuNavigation (Level 1)](#1-mainmenunavigation-level-1)
     - [2. Level2MenuNavigation (Level 2)](#2-level2menunavigation-level-2)
@@ -262,6 +265,7 @@ func (m Model) View() string {
 - **Borders**: Rounded corners with `lipgloss.RoundedBorder()`
 - **Highlighting**: Full-width lightbar selection
 - **Typography**: Bold for active items, normal for inactive
+- **ANSI Rendering**: Shared SGR sequences with UI package constants for consistent terminal output
 
 ### Responsive Design
 

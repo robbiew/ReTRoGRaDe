@@ -610,7 +610,7 @@ func InitialModelV2(cfg *config.Config) Model {
 	}
 
 	// Try to load a default ANSI art if present (CP437 encoded). Failures are ignored.
-	_ = m.LoadANSIArtCP437(configArt)
+	_ = m.LoadANSIArtFromContent(configArt)
 
 	return m
 }

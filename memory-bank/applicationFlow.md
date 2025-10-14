@@ -1,4 +1,4 @@
-# GHOSTnet Authentication & Connection Flow
+# Retrograde Authentication & Connection Flow
 
 ## Overview
 
@@ -22,38 +22,32 @@ graph TD
     D --> E[Node Assignment]
     E --> F[Telnet Options Negotiation]
     F --> G[Session Created as Guest]
-    G --> H[Main Menu Display]
+    G --> H[Direct Login Prompt<br/>theme/login.ans Display]
 
-    H --> I{User Action}
+    H --> I{User Input}
 
-    I -->|Login L| J[Login Process]
-    I -->|Register R| K[Registration Process]
-    I -->|Other Options| H
-    I -->|Quit Q| Z[Disconnect]
+    I -->|Username| J[Password Prompt]
+    I -->|'NEW'| K[Registration Process]
+    I -->|ESC| Z[Disconnect]
 
-    J -->|Success| L[Update Session<br/>User Authenticated]
-    J -->|Failure| M{Max Attempts?}
+    J -->|Valid| L[Authentication Success<br/>Update Session]
+    J -->|Invalid| M{Max Attempts?}
     M -->|Yes| N[Blacklist IP<br/>Force Disconnect]
     M -->|No| J
-    J -->|Cancelled ESC| H
+    J -->|ESC| Z[Disconnect]
 
     K -->|Success| L
     K -->|Failure| H
     K -->|Cancelled ESC| H
 
-    L --> O[Return to Main Menu<br/>Authenticated State]
-    O --> P[Post-Login Features Available]
-
-    P -.->|Future| Q[Logon Sequence*<br/>Welcome Screens]
-    Q -.-> R[Main Menu]
+    L --> O[Load Start Menu<br/>Execute Menu System]
 
     style B fill:#ff6b6b
     style C fill:#ff6b6b
     style N fill:#ff6b6b
-    style Q fill:#95e1d3,stroke-dasharray: 5 5
 ```
 
-\*Note: Logon sequence (welcome screens) is a planned future enhancement
+**Note:** The application now bypasses the traditional main menu and proceeds directly to login/registration upon connection.
 
 ---
 
@@ -170,7 +164,18 @@ Initial session state:
 }
 ```
 
-### 2.4 Timeout Monitoring
+### 2.4 Direct Login Flow
+
+**Implementation:** [`handleConnection()`](main.go:412) bypasses main menu
+
+After telnet negotiation, the application proceeds directly to login:
+
+- **Display:** [`theme/login.ans`](theme/login.ans) ANSI art file
+- **Prompt:** "Enter your username or 'NEW' to apply and hit RETURN."
+- **Input Handling:** Username field accepts regular usernames or "NEW" for registration
+- **Flow:** No main menu display - direct authentication required
+
+### 2.5 Timeout Monitoring
 
 **Implementation:** [`monitorSessionTimeout()`](main.go:561)
 
@@ -186,15 +191,15 @@ Background goroutine monitors session activity:
 
 ## Phase 3: Authentication - Login Flow
 
-**Entry Point:** User selects [L]ogin from main menu
+**Entry Point:** Direct connection (no main menu selection required)
 
 **Implementation:** [`LoginPrompt()`](auth.go:154) in [`auth.go`](auth.go:154)
 
 ### 3.1 Login Screen Display
 
 - Clear screen
-- Display GHOSTnet header ANSI art ([`connect.ans`](theme/connect.ans))
-- Display instruction text
+- Display header ANSI art ([`theme/login.ans`](theme/login.ans))
+- Display instruction text: "Enter your username or 'NEW' to apply and hit RETURN."
 
 ### 3.2 Username Input
 
@@ -205,6 +210,13 @@ Background goroutine monitors session activity:
 - Max Length: 20 characters
 - Input Method: Character-by-character with reverse video background
 
+**Special Input Handling:**
+
+- **"NEW" Input:** Triggers registration process instead of login
+  - Case-insensitive comparison
+  - Redirects to [`RegisterPrompt()`](auth.go:349)
+  - On registration failure/cancellation, returns to login prompt
+
 **Validation:**
 
 1. **Empty Check:** Username cannot be empty
@@ -214,7 +226,7 @@ Background goroutine monitors session activity:
 **ESC Handling:**
 
 - Press ESC → Confirmation prompt: "Do you really want to quit? [Y/N]"
-- Y → Cancel login, log event, return to main menu
+- Y → Cancel login, log event, disconnect session
 - N → Clear confirmation, continue input
 
 ### 3.3 Password Input
@@ -254,7 +266,7 @@ Background goroutine monitors session activity:
 
 **Implementation:** [`VerifyPassword()`](auth.go:123)
 
-- Hash submitted password with salt: `ghostnet_salt_2025`
+- Hash submitted password with salt: `retrograde_salt_2025`
 - Compare with stored hash
 - **Security Note:** Currently uses SHA-256; production should use bcrypt
 
@@ -274,7 +286,7 @@ Background goroutine monitors session activity:
 3. **Generic Error:** Display "Invalid login, try again." (2 seconds)
 4. **Security Principle:** Don't reveal whether username or password was wrong
 5. **Clear Form:** Erase both username and password fields
-6. **Restart Input:** Begin with username input again
+6. **Restart Input:** Begin with username input again, allowing "NEW" registration option
 
 #### After 3rd Failed Attempt
 
@@ -312,7 +324,8 @@ Background goroutine monitors session activity:
    ```
 
 4. **Update Node Manager:** Change node display from "Guest" to username
-5. **Return to Main Menu:** User now sees authenticated menu options
+5. **Load Start Menu:** Execute configured start menu (default: "MAIN")
+6. **Menu System:** User enters full menu-driven interface
 
 **State Transition:** Guest → Authenticated User
 
@@ -433,7 +446,8 @@ User{
    - Update session with user data
 3. **Welcome Message:** "Account created successfully. Welcome, {username}!"
 4. **Update Node Manager:** Change node from "Guest" to username
-5. **Return to Main Menu:** User sees authenticated menu options
+5. **Load Start Menu:** Execute configured start menu (default: "MAIN")
+6. **Menu System:** User enters full menu-driven interface
 
 **State Transition:** Guest → Authenticated New User
 
@@ -445,15 +459,13 @@ User{
 
 ### 5.1 Current Implementation
 
-After successful login/registration, user returns to main menu with authenticated privileges:
+After successful login/registration, user enters the menu system with authenticated privileges:
 
-**Available Options:**
+**Menu System Entry:**
 
-- GHOSTnet information
-- Discord invitation (if configured)
-- Admin menu (if admin privileges)
-- Logout option
-- Quit option
+- **Start Menu:** Configured via `Configuration.General.StartMenu` (default: "MAIN")
+- **Menu Execution:** [`menu.NewMenuExecutor()`](menu/execution.go) loads and executes menu
+- **Context:** User context includes ID, username, IO handler, and session data
 
 **Session State:**
 
@@ -546,7 +558,7 @@ After successful login/registration, user returns to main menu with authenticate
 
 #### Termination Process
 
-1. Display: "Goodbye! Thanks for visiting GHOSTnet."
+1. Display: "Goodbye! Thanks for visiting a Retrograde BBS."
 2. Return from [`mainMenu()`](main.go:191) function
 3. Deferred cleanup executes:
    - Close TCP connection
@@ -562,7 +574,7 @@ After successful login/registration, user returns to main menu with authenticate
 **Current Implementation:**
 
 - Algorithm: SHA-256 with static salt
-- Salt Value: `ghostnet_salt_2025` (hardcoded)
+- Salt Value: `retrograde_salt_2025` (hardcoded)
 - **Risk Level:** Medium
 
 **Recommendations for Production:**
@@ -779,11 +791,11 @@ State 2: SECURITY CHECK
     ↓ [Pass] / → [Fail: Disconnect]
 State 3: NODE ASSIGNED (Guest)
     ↓ [Telnet Negotiation]
-State 4: MAIN MENU (Guest)
-    ↓ [Login/Register]
+State 4: DIRECT LOGIN PROMPT
+    ↓ [Username/'NEW']
 State 5: AUTHENTICATION IN PROGRESS
     ↓ [Success] / → [Fail: Retry or Disconnect]
-State 6: MAIN MENU (Authenticated)
+State 6: MENU SYSTEM (Authenticated)
     ↓ [Use Features]
 State 7a: LOGOUT → State 4 (Guest)
 State 7b: QUIT → State 8
@@ -794,8 +806,9 @@ State 8: DISCONNECTED
 **Critical Points:**
 
 - States 1-2: Pre-BBS security layer
-- States 3-4: Guest access (limited features)
-- States 5-6: User authentication and full access
+- State 3: Node assignment and telnet setup
+- State 4: Direct authentication required (no guest features)
+- States 5-6: User authentication and menu system access
 - State 7: Exit paths (graceful or forced)
 
 ---
@@ -992,8 +1005,8 @@ State 8: DISCONNECTED
 
 ## Documentation Maintenance
 
-**Last Updated:** 2025-10-04
-**Code Version:** Current implementation as of this date
+**Last Updated:** 2025-10-14
+**Code Version:** Direct login flow implementation
 **Author:** System Documentation
 
 **Update Triggers:**

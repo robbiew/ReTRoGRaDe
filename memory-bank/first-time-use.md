@@ -1,387 +1,136 @@
-# First-Time Use Guide
+# First-Time Use Guide: Sysop Guided Setup
 
-This document describes the complete first-time experience for Retrograde BBS, including both the initial server installation/setup and the user registration process.
+This document describes the initial server installation and guided setup process for Retrograde BBS sysops.
 
-## Part 1: Installation & Guided Setup
+## Installation & Guided Setup
 
 ### Overview
 
-When Retrograde is run for the first time (no database exists), it automatically launches a guided setup process to configure the server.
+When Retrograde is run for the first time (no database exists), it automatically launches a guided setup process using a Terminal User Interface (TUI) to configure the server. The TUI provides an interactive, visual interface for configuring paths, creating directories, and setting up the initial system configuration.
 
 ### Setup Trigger
 
 **Condition:** Database file `data/retrograde.db` does not exist
 
-**Process:** Server detects first run and launches `runGuidedSetup()`
+**Process:** Server detects first run and launches `RunGuidedSetupTUI()`
 
 ### Guided Setup Flow
 
 ```mermaid
 graph TD
-    A[First Run Detected] --> B[Display Welcome Banner]
-    B --> C{Use Guided Setup?}
-    C -->|No| D[Exit]
-    C -->|Yes| E[Configure Core Paths]
+    A[First Run Detected] --> B[Launch TUI Setup]
+    B --> C[Display ANSI Art Header]
+    C --> D[Show Configuration Fields]
 
-    E --> F[Database Path]
-    F --> G[File Base Path]
-    G --> H[Logs Path]
-    H --> I[Message Base Path]
-    I --> J[System Path]
-    J --> K[Themes Path]
+    D --> E[Field Navigation<br/>↑↓ arrows]
+    E --> F{Enter Pressed}
+    F -->|On Field| G[Enter Edit Mode<br/>Text Input]
+    F -->|On Confirm| H{Validate All Fields}
+    F -->|On Cancel| I[Set Cancelled Flag<br/>Exit]
 
-    K --> L{Directory Creation}
-    L -->|For Each Path| M{Create Directory?}
-    M -->|Yes| N[Create Directory]
-    M -->|No| O{Directory Exists?}
-    O -->|Yes| P[Continue]
-    O -->|No| Q{Warn & Confirm}
-    Q -->|Continue| P
-    Q -->|Reconsider| M
+    G --> J[Real-time Editing<br/>ESC to cancel edit]
+    J --> K[Enter to Save<br/>Move to Next]
 
-    P --> R[Initialize Database]
-    R --> S[Save Configuration]
-    S --> T{Create Sysop Account?}
-    T -->|No| U[Theme Setup Instructions]
-    T -->|Yes| V[Sysop Username Input]
-    V --> W[Sysop Password Input]
-    W --> X[Sysop Real Name]
-    X --> Y[Sysop Email]
-    Y --> Z[Sysop Location]
-    Z --> AA[Create Sysop Account]
-    AA --> U
-
-    U --> BB[Display Next Steps]
-    BB --> CC[Exit Setup]
+    H -->|Invalid| L[Show Error Message<br/>Return to Fields]
+    H -->|Valid| M[Create Directories]
+    M --> N[Return Configuration<br/>Exit TUI]
 ```
 
-### Detailed Setup Steps
+### TUI Interface Description
 
-#### 1. Welcome & Confirmation
+#### 1. Welcome Screen
 
 **Display:**
-```
-╔══════════════════════════════════════╗
-║    Welcome to Retrograde BBS Setup   ║
-╚══════════════════════════════════════╝
 
-Use Guided Setup? (Y/n):
-```
+- ANSI art header from embedded `guided.ans` file
+- Centered instructions: "Use ↑↓ arrows to navigate fields, Enter to select / edit"
+- Error messages displayed in red below instructions (if any)
 
-**Default:** Y (Yes)
+#### 2. Configuration Fields
 
-**Action:** If No, exits setup
+**Fields Configured:**
 
-#### 2. Core Paths Configuration
+- **Root:** Base directory for Retrograde installation (default: current working directory)
+- **Data:** Directory for databases and data files (default: `{root}/data`)
+- **Files:** Directory for upload/download area storage (default: `{root}/files`)
+- **Msgs:** Directory for message base files (default: `{root}/msgs`)
+- **Logs:** Directory for log files (default: `{root}/logs`)
+- **Security:** Directory for security assets, like blacklists (default: `{root}/security`)
+- **Theme:** Directory for art and text-based files (default: `{root}/theme`)
 
-**Paths Configured:**
-- Database: `data/retrograde.db` (fixed)
-- File Base: Default `files/`
-- Logs: Default `logs/`
-- Message Base: Default `msgs/`
-- System: Default `system/`
-- Themes: Default `themes/`
+**Field Navigation:**
 
-**For Each Path:**
-1. **Prompt:** `Path for {Name} [default: '{default}']:`
-2. **Input:** User can enter custom path or press Enter for default
-3. **Validation:** Path cannot be empty
-4. **Directory Creation:** `Create directory for {Name} at '{path}'? (Y/n):`
-   - Y: Creates directory with permissions 0755
-   - N: Checks if directory exists
-     - If exists: Continue
-     - If not: Warning + confirmation to continue without creating
+- **↑/↓ or k/j:** Navigate between fields
+- **Enter:** Start editing selected field or confirm/cancel
+- **ESC:** Cancel editing current field
 
-#### 3. Database Initialization
+**Field Editing:**
 
-**Actions:**
-1. Create `data/` directory if needed
-2. Open SQLite database connection
-3. Initialize database schema
-4. Save default configuration to database
+- Real-time text input with cursor
+- White text on blue background when editing
+- Character limit: 200 characters
+- All fields are editable (no read-only fields)
 
-#### 4. Sysop Account Creation (Optional)
+**Help Text System:**
 
-**Prompt:** `Create Sysop Account? (Y/n):`
+- Dynamic help text displayed at bottom for selected field
+- Context-sensitive descriptions for each configuration path
 
-**Default:** Y (Yes)
+#### 3. Confirmation Interface
 
-**If Yes:**
-- **Username:** Required, ≥3 characters
-- **Password:** Required, ≥6 characters, with confirmation
-- **Real Name:** Required
-- **Email:** Required, basic validation (@ and . required)
-- **Location:** Required
+**Navigation:**
 
-**Account Details:**
-- Security Level: 100 (Sysop)
-- Auto-creates user in database
-- Logs success message
+- After last field, navigation enters "confirm mode"
+- **↑/↓ or k/j:** Navigate between CONFIRM and CANCEL buttons
+- **←/→ or h/l:** Switch between buttons
+- **Enter:** Execute selected action
 
-#### 5. Theme Files Setup
+**Buttons:**
 
-**Instructions Displayed:**
-```
-Theme files setup:
-Please copy theme files from the 'theme' directory to '{themes_path}'
-Example: cp theme/* {themes_path}/
-(This step is optional - you can do it later)
-```
+- **CONFIRM:** Blue background when selected, validates and proceeds
+- **CANCEL:** Red background when selected, cancels setup
 
-#### 6. Completion & Next Steps
+#### 4. Directory Creation Logic
 
-**Exit Message:**
-```
-Retrograde BBS successfully installed... Next steps:
-- "retrograde config" to customize, or
-- "retrograde" to start server on port 2323
-```
+**Process:**
 
-**Action:** Exits with code 0
+1. On CONFIRM, validates all fields are non-empty
+2. Creates all configured directories with permissions 0755
+3. Continues on directory creation errors (non-fatal)
+4. Returns configuration data to caller
+
+**Error Handling:**
+
+- Empty path validation with error message: "Path cannot be empty."
+- Directory creation failures are logged but don't prevent setup completion
 
 ### Error Handling
 
-- **Path Creation Failure:** Displays error, continues
-- **Database Errors:** Setup fails, exits with error
-- **Sysop Creation Failure:** Setup fails, returns error
+- **Empty Path Validation:** Error message "Path cannot be empty." displayed in red
+- **Directory Creation Failure:** Logged but non-fatal, setup continues
+- **TUI Errors:** Setup fails, returns error to caller
+- **Cancellation:** User can cancel at any time, returns nil configuration
 
-### Configuration Defaults
+### Configuration Structure
 
-Uses `config.GetDefaultConfig()` with:
-- BBS Name: "Retrograde BBS"
-- Timeout: 10 minutes
-- Max Nodes: 10
-- Telnet Port: 2323
-- Security: Basic settings enabled
+Returns `ConfigData` struct containing:
 
-## Part 2: First-Time User Registration
+- **Root:** Base installation directory
+- **Data:** Database and data files directory
+- **Files:** File base directory
+- **Msgs:** Message base directory
+- **Logs:** Log files directory
+- **Security:** Security assets directory
+- **Theme:** Theme and art files directory
 
-## Complete First-Time User Flow Diagram
+### Color Scheme
 
-```mermaid
-graph TD
-    A[New User Connects] --> B{Security Check}
-    B -->|Pass| C[Node Assigned<br/>Guest Session]
-    B -->|Fail| D[Connection Rejected]
+**UI Colors:**
 
-    C --> E[Main Menu Display<br/>Shows Login/Register Options]
-    E --> F{User Choice}
-    F -->|Register R| G[Registration Process]
+- **Primary:** Blue (#4) for selected fields and CONFIRM button
+- **Secondary:** Light Blue (#12) for labels
+- **Text:** White (#15) for active elements, Light Gray (#7) for inactive
+- **Background:** Dark Gray (#8) for unselected fields, Gray (#240) for inactive buttons
+- **Error:** Red (#1) for error messages and CANCEL button
+- **Help Text:** Light Gray (#7) for field descriptions
 
-    G --> H[Username Input<br/>Validation Loop]
-    H --> I{Valid Username?}
-    I -->|No| H
-    I -->|Yes| J[Password Input<br/>Validation Loop]
-    J --> K{Valid Password?}
-    K -->|No| J
-    K -->|Yes| L[Confirm Password]
-    L --> M{Passwords Match?}
-    M -->|No| L
-    M -->|Yes| N[Email Input<br/>Optional]
-
-    N --> O[Additional Fields<br/>Based on Config]
-    O --> P[Account Summary Display]
-    P --> Q{User Confirms?}
-    Q -->|No| R[Registration Cancelled<br/>Return to Menu]
-    Q -->|Yes| S[Create User Account]
-
-    S --> T[Auto-Login Process]
-    T --> U[Welcome Message]
-    U --> V[Return to Main Menu<br/>Authenticated State]
-```
-
-## Detailed Registration Steps
-
-### 1. Registration Initiation
-
-**Trigger:** User selects [R]egister from main menu
-
-**Screen Display:**
-- Clear screen
-- Display GHOSTnet header ANSI art
-- Show header bar: "New User Registration [ESC] Quit/Cancel"
-- Display instruction: "This will create your account for accessing Retrograde BBS."
-
-### 2. Username Collection & Validation
-
-**Field:** "Username: " (max 20 chars)
-
-**Validation Rules:**
-1. **Required:** Cannot be empty
-   - Error: "Username cannot be empty."
-2. **Minimum Length:** ≥ 3 characters
-   - Error: "Username must be at least 3 characters."
-3. **Uniqueness:** Must not exist in database
-   - Check: `UserExists(username)`
-   - Error: "Username {name} already exists."
-4. **Character Set:** Letters, numbers, spaces only
-   - Regex: `^[a-zA-Z0-9 ]+$`
-   - Error: "Username can only contain letters, numbers, and spaces."
-
-**Loop Behavior:** On validation failure, clear field and retry. ESC cancels registration.
-
-### 3. Password Collection & Validation
-
-**Field:** "Password: " (max 20 chars, masked with *)
-
-**Validation Rules:**
-1. **Required:** Cannot be empty
-   - Error: "Password cannot be empty."
-2. **Minimum Length:** ≥ 4 characters
-   - Error: "Password must be at least 4 characters."
-
-**Loop Behavior:** On validation failure, clear field and retry. ESC cancels registration.
-
-### 4. Password Confirmation
-
-**Field:** "Confirm Password: " (max 20 chars, masked)
-
-**Validation:** Must match first password entry
-- Error: "Passwords do not match."
-
-**Loop Behavior:** On mismatch, clear field and retry. ESC cancels registration.
-
-### 5. Email Collection
-
-**Field:** "Email: " (max 30 chars, optional)
-
-**Validation:** None currently (can be empty)
-
-### 6. Additional Registration Fields
-
-**Configuration:** Based on `RegistrationFields` in config
-
-**Supported Fields:**
-- realname (max 50)
-- location (max 50)
-- phone (max 20)
-- website (max 100)
-- Custom fields (max 50)
-
-**Behavior:**
-- Required fields: Keep prompting until value provided
-- Optional fields: Single prompt, can be left empty
-- ESC cancels entire registration
-
-### 7. Account Summary & Confirmation
-
-**Display:**
-```
-Account Summary:
-Username: {username}
-Password: {****}
-Email: {email}
-{field}: {value}
-...
-```
-
-**Confirmation Prompt:** "Create an account with this info? Y/N: "
-
-**Options:**
-- Y: Proceed with creation
-- N: Cancel registration, return to menu
-- ESC: Cancel registration
-
-### 8. Account Creation
-
-**Process:**
-1. Hash password with SHA-256 + salt
-2. Create user record with default security level (10)
-3. Store in SQLite database
-4. Log registration success event
-
-**Error Handling:** On creation failure, log error and return to menu
-
-### 9. Automatic Login
-
-**Process:**
-1. Log login event for new user
-2. Update session with user data
-3. Update node manager display
-4. Display welcome message: "Account created successfully. Welcome, {username}!"
-
-### 10. Post-Registration State
-
-**Session State:**
-- Alias: username (not "Guest")
-- SecurityLevel: 10 (regular user)
-- Authenticated: true
-
-**Available Options:** All authenticated menu options
-
-## Error Handling & Edge Cases
-
-### Registration Cancellation
-
-**Triggers:** ESC pressed at any input prompt
-
-**Process:**
-1. Log "REGISTER_FAILED: registration cancelled by user"
-2. Return to main menu
-3. No account created
-
-### Validation Failures
-
-**Behavior:**
-- Display error message for 2 seconds
-- Clear input field
-- Retry same input
-- Log specific failure reason
-
-### Account Creation Failures
-
-**Possible Causes:**
-- Database connection issues
-- Duplicate username race condition
-- File system permissions
-
-**Handling:**
-- Log detailed error
-- Display generic failure message
-- Return to menu without account
-
-## Security Considerations
-
-### Input Validation
-
-- Username: Restricted character set prevents path traversal
-- Password: Minimum length requirement
-- Email: No format validation (future enhancement)
-
-### Rate Limiting
-
-- Subject to same connection-level rate limiting as all users
-- No separate registration rate limits
-
-### Logging
-
-- All validation failures logged with reason
-- Successful registration logged
-- Failed attempts tracked (but no blocking for registration specifically)
-
-## Configuration Dependencies
-
-### Required Settings
-
-- Database connection configured
-- User storage system initialized
-
-### Optional Enhancements
-
-- `RegistrationFields` configuration for additional prompts
-- Email validation (future)
-- CAPTCHA integration (future)
-
-## Performance Notes
-
-- Username uniqueness check: Database query per attempt
-- Password hashing: SHA-256 (fast, but should migrate to bcrypt)
-- File operations: Minimal I/O during registration
-
-## Future Enhancements
-
-- Email verification for account activation
-- Password strength requirements
-- Registration CAPTCHA
-- Welcome email sending
-- Account activation workflow

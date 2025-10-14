@@ -1,0 +1,4 @@
+./database.go
+./sqlite.go
+./users.go
+./users_auth_test.go

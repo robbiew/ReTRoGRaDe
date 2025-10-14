@@ -1,0 +1,6 @@
+./build_msg.go
+./echomail.go
+./jam.go
+./maintenance.go
+./netmail.go
+./scanner.go

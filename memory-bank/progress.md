@@ -1,3 +1,8 @@
+[2025-10-14 20:20:00] - Centralized UI helpers with ui.InteractiveTerminal for shared prompt/password/error/ANSI functionality, delegating TelnetIO to focus on transport-specific logic
+[2025-10-14 20:20:00] - Introduced ui.WriteAt and wired PrintStringLoc, telnet/menu cursor moves, and JAM clear-screen to shared escape helpers for consistent screen positioning
+[2025-10-14 20:20:00] - Centralized filename sanitization via util.SanitizeFilename, removing duplicate regex implementations in auth/config/ui packages
+[2025-10-14 20:20:00] - Tightened ANSI art resolution: SetArtDirectories keeps only configured paths, server seeds from config without hard-coded fallbacks, auth loads login art through ui.LoadAnsiArt with metadata trimming
+[2025-10-14 20:20:00] - Adjusted TUI ANSI renderer to import UI package and emit SGR sequences with shared constants for consistent terminal output
 [2025-10-13 14:15:00] - The ASCII normalization of mojibake glyphs throughout the TUI rendering code
 [2025-10-13 10:30:00] - The further splitting of menu structures into separate files (editor_menu_configuration.go, editor_menu_servers.go, editor_menu_editors.go, editor_menu_other.go)
 [2025-10-13 09:00:00] - The initial split of the 6447-line editor.go into multiple focused files (editor.go, editor_menu_structure.go, editor_update.go, editor_view.go, editor_canvas.go, editor_data.go)

@@ -22,7 +22,7 @@ var guidedArt string
 
 // trimStringFromSauce trims SAUCE metadata from a string (if necessary)
 func trimStringFromSauce(s string) string {
-	return trimMetadata(s, "COMNT", "SAUCE00")
+	return trimMetadata(s, "SAUCE00", "COMNT")
 }
 
 // Helper to trim metadata based on delimiters

@@ -1,0 +1,11 @@
+./editor.go
+./editor_canvas.go
+./editor_data.go
+./editor_menu_configuration.go
+./editor_menu_editors.go
+./editor_menu_other.go
+./editor_menu_servers.go
+./editor_menu_structure.go
+./editor_update.go
+./editor_view.go
+./guided_setup.go

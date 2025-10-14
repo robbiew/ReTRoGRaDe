@@ -60,7 +60,7 @@ func (m *MessageMenu) Close() error {
 }
 
 func (m *MessageMenu) clearScreen() {
-	fmt.Print("\033[2J\033[H")
+	fmt.Print(ClearScreenSequence())
 }
 
 func (m *MessageMenu) displayHeader() {
