@@ -430,11 +430,11 @@ func handleConnection(conn net.Conn, cfg *config.Config, nodeID int) {
 		fmt.Printf("Warning: Node ID mismatch - expected %d, got %d\n", nodeID, actualNodeID)
 	}
 
-	// Create a session for this connection - start as guest
+	// Create a session for this connection
 	session := &config.TelnetSession{
 		Alias:         "Guest",                   // Default for unauthenticated users
 		SecurityLevel: config.SecurityLevelGuest, // Guest security level
-		TimeLeft:      60,                        // 60 minutes
+		TimeLeft:      10,                        // 60 minutes
 		StartTime:     time.Now(),
 		LastActivity:  time.Now(),
 		NodeNumber:    nodeID,

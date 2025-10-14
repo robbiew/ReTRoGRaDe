@@ -24,12 +24,13 @@ func GetDefaultConfig() *Config {
 	cfg.Configuration.Paths.MessageBase = filepath.Join(cwd, "msgs")
 	cfg.Configuration.Paths.System = cwd // Current working directory
 	cfg.Configuration.Paths.Themes = filepath.Join(cwd, "theme")
+	cfg.Configuration.Paths.Security = filepath.Join(cwd, "security")
 
 	// Configuration.General
 	cfg.Configuration.General.BBSLocation = "Your City, State"
 	cfg.Configuration.General.BBSName = "Another Retrograde BBS"
 	cfg.Configuration.General.DefaultTheme = "default"
-	cfg.Configuration.General.StartMenu = "prelogin"
+	cfg.Configuration.General.StartMenu = "MAIN"
 	cfg.Configuration.General.SysOpName = "SysOp"
 	cfg.Configuration.General.SysOpTimeoutExempt = true
 	cfg.Configuration.General.SystemPassword = "CHANGEME"
@@ -60,7 +61,7 @@ func GetDefaultConfig() *Config {
 			Required: true,
 		},
 	}
-	cfg.Configuration.NewUsers.SysopQuestionEnabled = false
+	cfg.Configuration.NewUsers.SysopQuestionEnabled = true
 	cfg.Configuration.NewUsers.SysopFields = map[string]RegistrationFieldConfig{
 		"BBSName": {
 			Enabled:  true,
@@ -87,7 +88,6 @@ func GetDefaultConfig() *Config {
 
 	// Configuration.Auth
 	cfg.Configuration.Auth.UseSQLite = true
-	cfg.Configuration.Auth.JSONFallback = false
 	cfg.Configuration.Auth.MaxFailedAttempts = 5
 	cfg.Configuration.Auth.AccountLockMinutes = 15
 	cfg.Configuration.Auth.PasswordAlgorithm = "sha256"

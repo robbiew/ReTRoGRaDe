@@ -10,7 +10,6 @@ const (
 	SecurityLevelGuest   = 0   // Unauthenticated users
 	SecurityLevelRegular = 10  // Standard registered users
 	SecurityLevelSysOp   = 100 // System operators with full access
-	SecurityLevelAdmin   = 255 // Special admin level (legacy compatibility)
 )
 
 // Config struct to hold settings from the ini file with hierarchical structure
@@ -79,7 +78,6 @@ type NewUsersConfig struct {
 // AuthConfig holds authentication persistence and policy settings
 type AuthConfig struct {
 	UseSQLite          bool
-	JSONFallback       bool
 	MaxFailedAttempts  int
 	AccountLockMinutes int
 	PasswordAlgorithm  string
@@ -190,21 +188,6 @@ type DiscordConfig struct {
 	Title      string
 	Username   string
 	WebhookURL string
-}
-
-// Struct for storing drop file data (adapted for telnet sessions)
-type DropFileData struct {
-	CommType      int
-	CommHandle    int
-	BaudRate      int
-	BBSID         string
-	UserRecordPos int
-	RealName      string
-	Alias         string
-	SecurityLevel int
-	TimeLeft      int
-	Emulation     int
-	NodeNum       int
 }
 
 // Struct to hold details about the program's initial state

@@ -47,13 +47,13 @@ func trimLastChar(s string) string {
 // Color constants
 const (
 	ColorWhite     = "15"
-	ColorBlue      = "33"
-	ColorRed       = "196"
-	ColorGray      = "240"
-	ColorLightBlue = "39"
-	ColorLightGray = "252"
-	ColorDarkGray  = "235"
-	ColorDarkGray2 = "243"
+	ColorBlue      = "4"
+	ColorRed       = "1"
+	ColorGray      = "8"
+	ColorLightBlue = "12"
+	ColorLightGray = "7"
+	ColorDarkGray  = "0"
+	ColorDarkGray2 = "8"
 )
 
 // GuidedSetupModel represents the guided setup form state
@@ -86,7 +86,8 @@ type GuidedSetupModel struct {
 type SetupField struct {
 	Label    string
 	Value    string
-	ReadOnly bool // For database path which is fixed
+	ReadOnly bool   // For database path which is fixed
+	HelpText string // Help text displayed for the field
 }
 
 // ConfigData holds the collected configuration
@@ -113,13 +114,13 @@ func InitialGuidedSetupModel(rootDir string) GuidedSetupModel {
 	ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ColorGray)).Background(lipgloss.Color(ColorBlue))
 
 	fields := []SetupField{
-		{Label: "    Root", Value: rootDir, ReadOnly: false},
-		{Label: "    Data", Value: rootDir + "/data", ReadOnly: false},
-		{Label: "   Files", Value: rootDir + "/files", ReadOnly: false},
-		{Label: "    Msgs", Value: rootDir + "/msgs", ReadOnly: false},
-		{Label: "    Logs", Value: rootDir + "/logs", ReadOnly: false},
-		{Label: "Security", Value: rootDir + "/security", ReadOnly: false},
-		{Label: "   Theme", Value: rootDir + "/theme", ReadOnly: false},
+		{Label: "    Root", Value: rootDir, ReadOnly: false, HelpText: "Base directory for Retrograde installation"},
+		{Label: "    Data", Value: rootDir + "/data", ReadOnly: false, HelpText: "Directory for the database(s) and data files"},
+		{Label: "   Files", Value: rootDir + "/files", ReadOnly: false, HelpText: "Directory for upload/download area storage"},
+		{Label: "    Msgs", Value: rootDir + "/msgs", ReadOnly: false, HelpText: "Directory for message base files"},
+		{Label: "    Logs", Value: rootDir + "/logs", ReadOnly: false, HelpText: "Directory for log files"},
+		{Label: "Security", Value: rootDir + "/security", ReadOnly: false, HelpText: "Directory for security assets, like blacklists"},
+		{Label: "   Theme", Value: rootDir + "/theme", ReadOnly: false, HelpText: "Directory for art and text-based files"},
 	}
 
 	return GuidedSetupModel{
@@ -135,7 +136,7 @@ func InitialGuidedSetupModel(rootDir string) GuidedSetupModel {
 
 // Init implements tea.Model
 func (m GuidedSetupModel) Init() tea.Cmd {
-	// FIX #3: Focus on first field immediately
+	// Focus on first field immediately
 	m.textInput.SetValue(m.fields[0].Value)
 	m.textInput.Focus()
 	return tea.Batch(tea.ClearScreen, tea.EnterAltScreen)
@@ -221,7 +222,7 @@ func (m GuidedSetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.config.Security = m.fields[5].Value
 					m.config.Theme = m.fields[6].Value
 
-					// Create directories (FIX #3)
+					// Create directories
 					dirs := []string{
 						m.config.Root,
 						m.config.Data,
@@ -329,7 +330,7 @@ func (m GuidedSetupModel) View() string {
 	}
 
 	// Form fields
-	const valueWidth = 45 // Fixed width for consistent highlighting (FIX #4)
+	const valueWidth = 45 // Fixed width for consistent highlighting
 
 	for i, field := range m.fields {
 		isSelected := i == m.fieldIndex && !m.confirmMode
@@ -352,7 +353,7 @@ func (m GuidedSetupModel) View() string {
 
 		var valueStyle lipgloss.Style
 		if isSelected {
-			// Fixed width for consistent highlighting (FIX #4)
+			// Fixed width for consistent highlighting
 			valueStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color(ColorWhite)).
 				Background(lipgloss.Color(ColorBlue)).
@@ -421,15 +422,26 @@ func (m GuidedSetupModel) View() string {
 		Width(m.screenWidth).
 		Render(footer.String())
 
-	// Move form more to the right for better centering (FIX #2)
+	// Move form more to the right for better centering
 	formCentered := lipgloss.NewStyle().
 		Align(lipgloss.Left).
 		Width(m.screenWidth).
 		PaddingLeft((m.screenWidth - 50) / 2). // Adjusted from 60 to 50 for more centering
 		Render(formFields.String())
 
+	// Help text for selected field
+	helpText := ""
+	if !m.confirmMode && m.fieldIndex < len(m.fields) {
+		helpText = m.fields[m.fieldIndex].HelpText
+	}
+	helpSection := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(ColorLightGray)).
+		Align(lipgloss.Center).
+		Width(m.screenWidth).
+		Render(helpText)
+
 	// Combine all sections
-	finalContent := headerCentered + formCentered + footerCentered
+	finalContent := headerCentered + formCentered + footerCentered + "\n" + helpSection
 
 	// Apply height centering
 	finalStyle := lipgloss.NewStyle().
@@ -453,7 +465,7 @@ func RunGuidedSetupTUI(rootDir string) (*ConfigData, error) {
 		return nil, fmt.Errorf("unexpected model type")
 	}
 
-	// Return nil if user cancelled (FIX #1)
+	// Return nil if user cancelled
 	if setupModel.cancelled {
 		return nil, nil
 	}

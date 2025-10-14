@@ -1,11 +1,7 @@
 package config
 
 import (
-	"bufio"
-	"crypto/rand"
-	"errors"
 	"fmt"
-	"math/big"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -187,6 +183,8 @@ func mapValueToConfig(cfg *Config, v database.ConfigValue) {
 			cfg.Configuration.Paths.System = value
 		case "Themes":
 			cfg.Configuration.Paths.Themes = value
+		case "Security":
+			cfg.Configuration.Paths.Security = value
 		}
 		return
 	}
@@ -703,88 +701,3 @@ func EnsureRequiredPaths(cfg *Config) error {
 }
 
 // Note: Application management functions moved to auth package to avoid circular imports
-
-// GenerateNetworkPassword creates a random 11-character uppercase alphanumeric password
-func GenerateNetworkPassword() string {
-	const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	const length = 11
-
-	password := make([]byte, length)
-	for i := range password {
-		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
-		if err != nil {
-			// Fallback to simple method if crypto/rand fails
-			password[i] = charset[i%len(charset)]
-		} else {
-			password[i] = charset[num.Int64()]
-		}
-	}
-	return string(password)
-}
-
-// Finds the drop file in a case-insensitive way (for future BBS integration)
-func FindDropFile(path string) (string, error) {
-	files, err := os.ReadDir(path)
-	if err != nil {
-		return "", fmt.Errorf("error reading directory: %w", err)
-	}
-
-	for _, file := range files {
-		if strings.EqualFold(file.Name(), "door32.sys") {
-			return filepath.Join(path, file.Name()), nil
-		}
-	}
-
-	return "", errors.New("door32.sys file not found")
-}
-
-// Reads and parses the drop file data (for future BBS integration)
-func GetDropFileData(path string) (DropFileData, error) {
-	filePath, err := FindDropFile(path)
-	if err != nil {
-		return DropFileData{}, err
-	}
-
-	file, err := os.Open(filePath)
-	if err != nil {
-		return DropFileData{}, fmt.Errorf("error opening drop file: %w", err)
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	var text []string
-	for scanner.Scan() {
-		text = append(text, scanner.Text())
-	}
-
-	if len(text) < 11 {
-		return DropFileData{}, errors.New("drop file has insufficient lines")
-	}
-
-	// Parse each line
-	commType, _ := strconv.Atoi(text[0])
-	commHandle, _ := strconv.Atoi(text[1])
-	baudRate, _ := strconv.Atoi(text[2])
-	bbsID := text[3]
-	userRecordPos, _ := strconv.Atoi(text[4])
-	realName := text[5]
-	alias := text[6]
-	securityLevel, _ := strconv.Atoi(text[7])
-	timeLeft, _ := strconv.Atoi(text[8])
-	emulation, _ := strconv.Atoi(text[9])
-	nodeNum, _ := strconv.Atoi(text[10])
-
-	return DropFileData{
-		CommType:      commType,
-		CommHandle:    commHandle,
-		BaudRate:      baudRate,
-		BBSID:         bbsID,
-		UserRecordPos: userRecordPos,
-		RealName:      realName,
-		Alias:         alias,
-		SecurityLevel: securityLevel,
-		TimeLeft:      timeLeft,
-		Emulation:     emulation,
-		NodeNum:       nodeNum,
-	}, nil
-}

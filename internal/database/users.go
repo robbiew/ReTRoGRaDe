@@ -293,8 +293,8 @@ func (s *SQLiteDB) InitializeUserSchema() error {
 		canDeleteMsgs    bool
 		invisible        bool
 	}{
-		{"New Users", 10, 60, 15, false, false, false},
-		{"SysOps", 100, 0, 0, true, true, false},
+		{"Users", 10, 60, 5, false, false, false},
+		{"SysOps", 100, 250, 20, true, true, false},
 	}
 
 	now := time.Now().Format(sqliteTimeFormat)
