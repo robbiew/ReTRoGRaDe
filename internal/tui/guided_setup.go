@@ -1,13 +1,46 @@
 package tui
 
 import (
+	"bytes"
+	_ "embed"
 	"fmt"
+	"io"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/transform"
 )
+
+//go:embed guided.ans
+var guidedArt string
+
+// trimStringFromSauce trims SAUCE metadata from a string (if necessary)
+func trimStringFromSauce(s string) string {
+	return trimMetadata(s, "COMNT", "SAUCE00")
+}
+
+// Helper to trim metadata based on delimiters
+func trimMetadata(s string, delimiters ...string) string {
+	for _, delimiter := range delimiters {
+		if idx := strings.Index(s, delimiter); idx != -1 {
+			return trimLastChar(s[:idx])
+		}
+	}
+	return s
+}
+
+// trimLastChar trims the last character from a string
+func trimLastChar(s string) string {
+	if len(s) > 0 {
+		_, size := utf8.DecodeLastRuneInString(s)
+		return s[:len(s)-size]
+	}
+	return s
+}
 
 // Color constants
 const (
@@ -194,23 +227,31 @@ func (m GuidedSetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m GuidedSetupModel) View() string {
 	var content strings.Builder
 
-	// Header
-	header := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(ColorLightBlue)).
-		Bold(true).
-		Align(lipgloss.Center).
-		Width(75).
-		Render("Enter directories where Retrograde will be installed:")
+	// ANSI Art Header (5 rows high, 80 columns wide)
+	// Decode CP437 -> UTF-8 and rasterize to 80x5
+	rdr := transform.NewReader(bytes.NewReader([]byte(guidedArt)), charmap.CodePage437.NewDecoder())
+	decoded, err := io.ReadAll(rdr)
+	if err != nil {
+		// Fallback if decoding fails
+		content.WriteString("Retrograde Setup\n\n")
+	} else {
+		// Normalize newlines and remove SAUCE metadata
+		s := strings.ReplaceAll(string(decoded), "\r\n", "\n")
+		s = strings.ReplaceAll(s, "\r", "\n")
+		s = trimStringFromSauce(s)
+		// Rasterize ANSI to 80x5
+		artLines := rasterizeANSIToLines(s, 80, 7)
+		artHeader := strings.Join(artLines, "\n")
+		content.WriteString(artHeader)
+		content.WriteString("\n\n")
+	}
 
-	content.WriteString("\n")
-	content.WriteString(header)
-	content.WriteString("\n\n")
-
-	// Form fields
+	// Form fields - align PATHS fields
 	for i, field := range m.fields {
 		isSelected := i == m.fieldIndex && !m.confirmMode
 
-		label := fmt.Sprintf("%-8s ", field.Label+":")
+		// Simple label formatting without padding
+		label := field.Label + ": "
 
 		var valuePart string
 		if isSelected && m.textInput.Focused() {
@@ -270,7 +311,7 @@ func (m GuidedSetupModel) View() string {
 	content.WriteString("\n\n")
 
 	// Instructions
-	instructions := "Use ↑↓ arrows to navigate, Enter to edit/select, Esc to cancel editing"
+	instructions := "Use ↑↓ arrows to navigate, Enter to edit/select, Esc to cancel editing, CTLR+C to quit"
 	instStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(ColorDarkGray2)).
 		Align(lipgloss.Center).
