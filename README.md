@@ -1,6 +1,6 @@
 # Retrograde BBS
 
-Retrograde is a retro-style Bulletin Board System (BBS) implemented in Go. This project is experimental and actively under development. It is not recommended for production use unless you are contributing to its development. Please note that this is not a complete BBS implementation, but rather the initial foundation for one.
+Retrograde is a retro-style Bulletin Board System (BBS) implemented in Go. This project is experimental and actively under development. It is not recommended for production use unless you are contributing to its development. Please note that this is not a complete BBS implementation -- not even close! -- but rather the initial foundation for one.
 
 ## Learning Goals
 
@@ -55,7 +55,13 @@ chmod +x build.sh
 ./build.sh
 ```
 
-The script creates `release/retrograde` / `release/retrograde.exe` for Linux/macOS/Windows.
+On Windows, use the batch script:
+
+```batch
+build.bat
+```
+
+The script creates `release/retrograde-darwin-arm64`, `release/retrograde-linux-amd64`, etc. for Linux/macOS/Windows.
 
 ### First-Time Setup
 
@@ -82,6 +88,12 @@ Start the server:
 ```
 
 It runs on the configured telnet port (default: 2323).
+
+## Command Line Options
+
+- `./retrograde` - Run the server
+- `./retrograde config` (or -config, --config, /config) - Launch configuration editor
+- `./retrograde setup` (or install, -setup, --setup, -install, --install) - Run guided setup
 
 ## Configuration
 
@@ -160,22 +172,29 @@ retrograde/
 │   ├── security/       # Security features
 │   ├── telnet/         # Telnet I/O
 │   ├── tui/            # Configuration TUI
-│   └── ui/             # UI utilities
+│   ├── ui/             # UI utilities
+│   ├── menu/           # Menu construction system
+│   └── util/           # Utility functions
 ├── memory-bank/        # Development documentation
-├── theme/              # ANSI art assets
+├── content/            # Content assets for the BBS
+├── security/           # Security configuration files
 ├── release/            # Build artifacts
 └── docs/               # Documentation
 ```
 
 ## Requirements
 
-- Go 1.22+
-- Terminal/telnet client with ANSI support
+- Go 1.24+
+- Terminal/telnet client with ANSI support (like Syncterm, Netrunner or Icy_Term)
 
 ## Dependencies
 
 - `github.com/charmbracelet/bubbletea` - Terminal UI framework
 - `github.com/charmbracelet/lipgloss` - Terminal styling
+- `modernc.org/sqlite` - SQLite database
+- `github.com/mattn/go-isatty` - Terminal detection
+- `golang.org/x/text` - Text processing utilities
+- `github.com/google/uuid` - UUID generation
 
 ---
 
