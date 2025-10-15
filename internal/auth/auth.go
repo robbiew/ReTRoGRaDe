@@ -24,6 +24,35 @@ type Config = config.Config
 type TelnetIO = telnet.TelnetIO
 type TelnetSession = config.TelnetSession
 
+// reservedUsernames contains usernames that cannot be registered
+var reservedUsernames = map[string]bool{
+	"new":           true,
+	"sysop":         true,
+	"admin":         true,
+	"administrator": true,
+	"root":          true,
+	"system":        true,
+	"guest":         true,
+	"user":          true,
+	"moderator":     true,
+	"mod":           true,
+	"operator":      true,
+	"op":            true,
+	"bot":           true,
+	"staff":         true,
+	"support":       true,
+	"help":          true,
+	"info":          true,
+	"test":          true,
+	"demo":          true,
+	"sample":        true,
+}
+
+// IsReservedUsername checks if a username is reserved/banned (case-insensitive)
+func IsReservedUsername(username string) bool {
+	return reservedUsernames[strings.ToLower(username)]
+}
+
 // CreateUser creates a new user account
 func CreateUser(username, password, email string, securityLevel int, userDetails map[string]string) error {
 	// Hash the password
@@ -359,6 +388,11 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 			logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "username too short")
 			ui.ShowTimedErrorSimple(io, "Username must be at least 3 characters.")
 			continue
+		} else if IsReservedUsername(username) {
+			logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "username is reserved")
+			ui.ShowTimedErrorSimple(io, "Username '"+username+"' is reserved and cannot be used.")
+			continue
+
 		} else if UserExists(username) {
 			logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "username already exists")
 			ui.ShowTimedErrorSimple(io, "Username "+username+" already exists.")
