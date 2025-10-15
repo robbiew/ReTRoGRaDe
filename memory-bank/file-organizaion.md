@@ -1,17 +1,23 @@
-## colors.go - Pure definitions
+# File Organization - Memory Bank
+
+## internal/ui/colors.go - Pure definitions
 
 - Color codes
 - Escape sequences
 - Color utilities (StripANSI, ColorFromNumber)
 
-## terminal.go - Terminal operations
+## internal/ui/terminal.go - Terminal operations
 
 - Input prompts
 - Cursor movement
 - Screen clearing
 - Position-based printing
 
-## art.go - File loading
+## internal/ui/art.go - File loading
 
 - ANSI art file I/O
 - SAUCE stripping
+
+## internal/filesystem/sanitize.go - File system utilities
+
+- Safe filename generation

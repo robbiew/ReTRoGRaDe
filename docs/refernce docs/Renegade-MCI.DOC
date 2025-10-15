@@ -1,0 +1,96 @@
+1. Ones without OLD codes are (duh) new mcis.
+2. MCIs are no longer case sensitive.
+3. % was chosen as to NOT conflict with RIP or any other
+   emulation, yet still be a printable character.
+
+        @g - Account balance                        %AB
+        @F - User's address                         %AD
+        @! - Aborting off                           %AO
+        @h - Baud rate                              %BD
+        @c - BBS Name                               %BN
+        @d - BBS Phone                              %BP
+        @7 - Clear screen                           %CL
+        @4 - Current Message Number                 %CM
+        @2 - Current Conference Name                %CN
+        @l - Credits                                %CR
+        @1 - Current Conference Tag                 %CT
+             User defined answer #1                 %D1
+             User defined answer #2                 %D2
+             User defined answer #3                 %D3
+        @a - Date                                   %DA
+        @m - Debits                                 %DB
+        @j - Daily download limit                   %DD
+        @8 - Delay                                  %DE
+             Display file                           %DFfilename.ext%
+        @P - User's kbytes downloaded               %DK
+        @N - User's number of files downloaded      %DL
+        @J - User's Download Security Level         %DS
+             Time of day (morning, night, etc)      %DT
+             Date of subscription expiration        %ED
+        @n - Days left until expiration             %EX
+             User's email sent                      %ES
+             User's email waiting                   %EW
+        @Z - Current File base number               %F#
+        @Y - Current File base name                 %FB
+             User's first date on                   %FD
+        @3 - Free Kbytes in current file area       %FK
+        @C - User's first name                      %FN
+        @& - Mr. or Ms. by gender                   %GN
+        @5 - Highest Message Number Available       %HM
+             Illegal logons                         %IL
+        @k - Kbyte daily download limit             %KD
+             U/D k ratio                            %KR
+        @K - User's last call date                  %LC
+        @M - Line Feed                              %LF
+        @D - User's last name                       %LN
+        @G - User's Location (City/State)           %LO
+        @X - Current Message base number            %M#
+        @W - Current Message base name              %MB
+        @i - Time left in minutes                   %ML
+             Minutes online so far                  %MO
+        @o - Messages remaining left to read        %MR
+        @0 - Node Number                            %ND
+             U/D ratio                              %NR
+             User's terminal emulation              %O1
+             User's screen size                     %O2
+             User's screen clearing toggle          %O3
+             User's f/s editor toggle               %O4
+             User's screen pausing toggle           %O5
+             User's hotkey toggle                   %O6
+             User's expert on/off                   %O7
+             User's mail forwarding                 %O8
+             User's color on/off                    %O9
+        @9 - Pause                                  %PA
+        @f - Post/Call Ratio                        %PC
+        @E - User's phone number                    %PN
+        @# - Pausing off                            %PO
+        @R - User's number of posts                 %PS
+             User's password                        %PW
+             Batch Queue - Download #               %QD
+             Batch Queue - Upload #                 %QU
+        @B - User's Real Name                       %RN
+             SysOp defined category #1              %S1
+             SysOp defined category #2              %S2
+             SysOp defined category #3              %S3
+        @~ - Total system callers                   %SC
+        @I - User's Security Level                  %SL
+        @e - SysOp Name                             %SN
+             User's sex (Male/Female)               %SX
+             User's time bank time added today      %TA
+             User's time bank time                  %TB
+        @L - User's total calls                     %TC
+        @S - User's number of downloads today       %TD
+        @b - Time                                   %TI
+        @T - User's kbytes of downloads today       %TK
+        @V - User's Time left                       %TL
+             User's time on today                   %TO
+             User's total time on                   %TT
+             User's age                             %UA
+             User's birthdate                       %UB
+             User's calls today                     %UC
+        @Q - User's kbytes uploaded                 %UK
+        @O - User's number of files uploaded        %UL
+        @A - User's Handle                          %UN
+             User number                            %UU
+             Renegade version                       %VR
+        @H - User's Zip Code                        %ZP
