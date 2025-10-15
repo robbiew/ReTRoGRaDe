@@ -97,6 +97,52 @@ func (t *TelnetIO) PrintAt(text string, x, y int) error {
 		return err
 	}
 	return t.Writer.Flush()
+} // ColorPrint sends colored text to the telnet client
+// fgColor: foreground color (e.g., ui.Ansi.Cyan)
+// bgColor: background color (e.g., ui.Ansi.BgBlue) - use "" for no background
+func (t *TelnetIO) ColorPrint(text string, fgColor, bgColor string) error {
+	// Build the colored output
+	output := ""
+	if fgColor != "" {
+		output += fgColor
+	}
+	if bgColor != "" {
+		output += bgColor
+	}
+	output += text
+	if fgColor != "" || bgColor != "" {
+		output += ui.Ansi.Reset
+	}
+
+	return t.Print(output)
+}
+
+// ColorPrintf sends formatted colored text to the telnet client
+// fgColor: foreground color (e.g., ui.Ansi.Cyan)
+// bgColor: background color (e.g., ui.Ansi.BgBlue) - use "" for no background
+func (t *TelnetIO) ColorPrintf(format string, fgColor, bgColor string, args ...interface{}) error {
+	text := fmt.Sprintf(format, args...)
+	return t.ColorPrint(text, fgColor, bgColor)
+}
+
+// PrintSuccess prints a success message with default success colors
+func (t *TelnetIO) PrintSuccess(text string) error {
+	return t.ColorPrint(text, ui.Ansi.GreenHi, "")
+}
+
+// PrintError prints an error message with default error colors
+func (t *TelnetIO) PrintError(text string) error {
+	return t.ColorPrint(text, ui.Ansi.RedHi, "")
+}
+
+// PrintWarning prints a warning message with default warning colors
+func (t *TelnetIO) PrintWarning(text string) error {
+	return t.ColorPrint(text, ui.Ansi.YellowHi, "")
+}
+
+// PrintInfo prints an info message with default info colors
+func (t *TelnetIO) PrintInfo(text string) error {
+	return t.ColorPrint(text, ui.Ansi.Cyan, "")
 }
 
 // ClearScreen clears the telnet client screen
