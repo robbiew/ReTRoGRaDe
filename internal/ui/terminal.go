@@ -16,11 +16,20 @@ type InteractiveTerminal interface {
 	GetKeyPress() (byte, error)
 }
 
+// PadRight pads a string with spaces to the specified width
+func PadRight(s string, width int) string {
+	if len(s) >= width {
+		return s[:width]
+	}
+	return s + strings.Repeat(" ", width-len(s))
+}
+
 // PromptSimple collects string input without specific positioning
 // labelColor: color for the label text
 // fgColor: color for the input text
 // bgColor: background color for the input field
-func PromptSimple(term InteractiveTerminal, label string, width int, labelColor, fgColor, bgColor string) (string, error) {
+// initialValue: pre-filled value (can be empty string)
+func PromptSimple(term InteractiveTerminal, label string, width int, labelColor, fgColor, bgColor string, initialValue string) (string, error) {
 	var input strings.Builder
 
 	// Set defaults if not provided
@@ -34,18 +43,28 @@ func PromptSimple(term InteractiveTerminal, label string, width int, labelColor,
 		bgColor = Ansi.BgBlue
 	}
 
+	// Pre-fill with initial value if provided
+	if initialValue != "" {
+		input.WriteString(initialValue)
+	}
+
 	// Print the label with color
 	if err := term.Print(Ansi.Reset + labelColor + label + Ansi.Reset); err != nil {
 		return "", err
 	}
 
-	// Start with background and empty field
-	if err := term.Print(bgColor + strings.Repeat(" ", width) + Ansi.Reset); err != nil {
+	// Start with background and display initial value
+	display := PadRight(input.String(), width)
+	if err := term.Print(fgColor + bgColor + display + Ansi.Reset); err != nil {
 		return "", err
 	}
-	// Move cursor back to start of input field
-	if err := term.Print(strings.Repeat("\x08", width)); err != nil {
-		return "", err
+
+	// Move cursor to end of initial value
+	if input.Len() < width {
+		backspaces := width - input.Len()
+		if err := term.Print(strings.Repeat("\x08", backspaces)); err != nil {
+			return "", err
+		}
 	}
 
 	for {

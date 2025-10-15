@@ -442,6 +442,8 @@ func handleConnection(conn net.Conn, cfg *config.Config, nodeID int) {
 		IPAddress:     ipAddr,
 		Connected:     true,
 		Conn:          conn, // Store connection reference for timeout handling
+		Width:         80,   // Default width
+		Height:        25,   // Default height
 	}
 
 	// Create TelnetIO wrapper with session reference
@@ -542,7 +544,7 @@ func negotiateTelnetOptions(writer *bufio.Writer) {
 	writer.Flush()
 
 	// Give client time to process negotiations
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 
 	fmt.Println("Sent telnet option negotiations")
 }

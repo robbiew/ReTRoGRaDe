@@ -175,7 +175,7 @@ func LoginPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *config
 		var username string
 		for {
 			var err error
-			username, err = ui.PromptSimple(io, " Username: ", 20, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
+			username, err = ui.PromptSimple(io, " Username: ", 20, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan, "")
 			if err != nil {
 				if err.Error() == "ESC_PRESSED" {
 					if ui.HandleEscQuit(io) {
@@ -208,7 +208,6 @@ func LoginPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *config
 				return userRecord, nil
 			} else if !UserExists(username) {
 				// USERNAME NOT FOUND - OFFER TO CREATE ACCOUNT
-				io.Print("\r\n")
 				io.Print(ui.Ansi.YellowHi + " User not found. Create an account? (Y/N): " + ui.Ansi.Reset)
 
 				createAccount := false
@@ -338,37 +337,37 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 	var username string
 	for {
 		var err error
-		username, err = ui.PromptSimple(io, " Desired Username: ", 20, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
+		username, err = ui.PromptSimple(io, " Desired Username: ", 20, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan, "")
 		if err != nil {
 			if err.Error() == "ESC_PRESSED" {
 				if ui.HandleEscQuit(io) {
 					logging.LogEvent(session.NodeNumber, "Unknown", session.IPAddress, "REGISTER_FAILED", "registration cancelled by user")
 					return nil, fmt.Errorf("registration cancelled")
 				}
-				ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Registration cancelled.", 3)
+				ui.ShowErrorAndClearMultiplePrompts(io, " Registration cancelled.", 2)
 				continue
 			}
 			return nil, err
 		}
 
 		if username == "" {
-			ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Username cannot be empty.", 3)
+			ui.ShowErrorAndClearMultiplePrompts(io, " Username cannot be empty.", 2)
 			continue
 		} else if len(username) < 3 {
 			logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "username too short")
-			ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Username must be at least 3 characters.", 3)
+			ui.ShowErrorAndClearMultiplePrompts(io, " Username must be at least 3 characters.", 2)
 			continue
 		} else if IsReservedUsername(username) {
 			logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "username is reserved")
-			ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Username '"+username+"' is reserved and cannot be used.", 3)
+			ui.ShowErrorAndClearMultiplePrompts(io, " Username '"+username+"' is reserved and cannot be used.", 2)
 			continue
 		} else if UserExists(username) {
 			logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "username already exists")
-			ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Username '"+username+"' already exists.", 3)
+			ui.ShowErrorAndClearMultiplePrompts(io, " Username '"+username+"' already exists.", 2)
 			continue
 		} else if !usernameRegex.MatchString(username) {
 			logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "username contains illegal characters")
-			ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Username can only contain letters, numbers, and spaces.", 3)
+			ui.ShowErrorAndClearMultiplePrompts(io, " Username can only contain letters, numbers, and spaces.", 2)
 			continue
 		} else {
 			break
@@ -427,7 +426,7 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 
 			if confirmPassword != password {
 				// Passwords don't match - clear both prompts and restart from password
-				ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Passwords do not match.", 4)
+				ui.ShowErrorAndClearMultiplePrompts(io, " Passwords do not match.", 3)
 				break // Break inner loop to restart outer loop
 			} else {
 				// Passwords match!
@@ -446,21 +445,21 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 	var email string
 	for {
 		var err error
-		email, err = ui.PromptSimple(io, " Email Address: ", 30, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
+		email, err = ui.PromptSimple(io, "    Email Address: ", 30, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan, "")
 		if err != nil {
 			if err.Error() == "ESC_PRESSED" {
 				if ui.HandleEscQuit(io) {
 					logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "registration cancelled by user")
 					return nil, fmt.Errorf("registration cancelled")
 				}
-				ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Registration cancelled.", 3)
+				ui.ShowErrorAndClearMultiplePrompts(io, " Registration cancelled.", 2)
 				continue
 			}
 			return nil, err
 		}
 
 		if email == "" {
-			ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Email is required.", 3)
+			ui.ShowErrorAndClearMultiplePrompts(io, " Email is required.", 2)
 			continue
 		} else {
 			break
@@ -472,29 +471,41 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 
 	// Get terminal width preference
 	var terminalWidth int
+	widthDefault := 80
+	if session.Width > 0 && session.Width <= 255 {
+		widthDefault = session.Width
+	}
+
+	// Show helpful message
+	if session.Width > 0 {
+		io.Print(ui.Ansi.BlackHi + fmt.Sprintf("\r\n Detected terminal size: %dx%d (press Enter to accept or edit)\r\n", session.Width, session.Height-1) + ui.Ansi.Reset)
+	} else {
+		io.Print(ui.Ansi.YellowHi + " Unable to detect terminal size. Using defaults (press Enter to accept)\r\n" + ui.Ansi.Reset)
+	}
+
 	for {
 		var err error
-		widthStr, err := ui.PromptSimple(io, "Terminal Width (80): ", 3, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
+		widthStr, err := ui.PromptSimple(io, "   Terminal Width: ", 3, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan, strconv.Itoa(widthDefault))
 		if err != nil {
 			if err.Error() == "ESC_PRESSED" {
 				if ui.HandleEscQuit(io) {
 					logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "registration cancelled by user")
 					return nil, fmt.Errorf("registration cancelled")
 				}
-				ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Registration cancelled.", 3)
+				ui.ShowErrorAndClearMultiplePrompts(io, " Registration cancelled.", 2)
 				continue
 			}
 			return nil, err
 		}
 
 		if widthStr == "" {
-			terminalWidth = 80
+			terminalWidth = widthDefault
 			break
 		}
 
 		width, err := strconv.Atoi(widthStr)
 		if err != nil || width < 1 || width > 80 {
-			ui.ShowErrorAndClearMultiplePrompts(io, "Width must be between 1 and 80.", 3)
+			ui.ShowErrorAndClearMultiplePrompts(io, " Width must be between 1 and 80.", 2)
 			continue
 		}
 
@@ -502,31 +513,39 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 		break
 	}
 
-	// Get terminal height preference
+	// Get terminal height preference - always prompt, show detected value in label
 	var terminalHeight int
+	heightDefault := 24 // In case Syncterm Staus bar is on
+	if session.Height > 0 {
+		heightDefault = session.Height
+		if heightDefault > 24 {
+			heightDefault = 24
+		}
+	}
 	for {
 		var err error
-		heightStr, err := ui.PromptSimple(io, "Terminal Height (25): ", 3, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
+
+		heightStr, err := ui.PromptSimple(io, "  Terminal Height: ", 3, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan, strconv.Itoa(heightDefault))
 		if err != nil {
 			if err.Error() == "ESC_PRESSED" {
 				if ui.HandleEscQuit(io) {
 					logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "registration cancelled by user")
 					return nil, fmt.Errorf("registration cancelled")
 				}
-				ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Registration cancelled.", 3)
+				ui.ShowErrorAndClearMultiplePrompts(io, " Registration cancelled.", 2)
 				continue
 			}
 			return nil, err
 		}
 
 		if heightStr == "" {
-			terminalHeight = 25
+			terminalHeight = heightDefault
 			break
 		}
 
 		height, err := strconv.Atoi(heightStr)
 		if err != nil || height < 1 || height > 25 {
-			ui.ShowErrorAndClearMultiplePrompts(io, "Height must be between 1 and 25.", 3)
+			ui.ShowErrorAndClearMultiplePrompts(io, " Height must be between 1 and 25.", 2)
 			continue
 		}
 
@@ -551,21 +570,19 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 
 				// Customize prompt based on field name
 				switch strings.ToLower(fieldName) {
-				case "realname":
-					promptText = "Real Name: "
-					maxLength = 50
+				case "firstname":
+					promptText = " First Name: "
+					maxLength = 30
+				case "lastname":
+					promptText = "  Last Name: "
+					maxLength = 30
 				case "location":
-					promptText = "Location: "
-					maxLength = 50
-				case "phone":
-					promptText = "Phone: "
-					maxLength = 20
-				case "website":
-					promptText = "Website: "
-					maxLength = 100
+					io.Print(ui.Ansi.BlackHi + "\r\n Location can be used to show your city/state or other info.\r\n" + ui.Ansi.Reset)
+					promptText = "          Location: "
+					maxLength = 30
 				default:
 					promptText = fieldName + ": "
-					maxLength = 50
+					maxLength = 30
 				}
 
 				var value string
@@ -573,7 +590,7 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 					// Required field - keep prompting until we get a value
 					for {
 						var err error
-						value, err = ui.PromptSimple(io, promptText, maxLength, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
+						value, err = ui.PromptSimple(io, promptText, maxLength, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan, "")
 						if err != nil {
 							if err.Error() == "ESC_PRESSED" {
 								if ui.HandleEscQuit(io) {
@@ -596,7 +613,7 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 				} else {
 					// Optional field
 					var err error
-					value, err = ui.PromptSimple(io, promptText, maxLength, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
+					value, err = ui.PromptSimple(io, promptText, maxLength, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan, "")
 					if err != nil {
 						if err.Error() == "ESC_PRESSED" {
 							if ui.HandleEscQuit(io) {
@@ -635,7 +652,7 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 	var confirm string
 	for {
 		var err error
-		confirm, err = ui.PromptSimple(io, "Create account with this info? (Y/N): ", 1, ui.Ansi.Yellow, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
+		confirm, err = ui.PromptSimple(io, "Create account with this info? (Y/N): ", 1, ui.Ansi.Yellow, ui.Ansi.WhiteHi, ui.Ansi.BgCyan, "")
 		if err != nil {
 			if err.Error() == "ESC_PRESSED" {
 				if ui.HandleEscQuit(io) {

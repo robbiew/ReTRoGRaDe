@@ -97,52 +97,6 @@ func (t *TelnetIO) PrintAt(text string, x, y int) error {
 		return err
 	}
 	return t.Writer.Flush()
-} // ColorPrint sends colored text to the telnet client
-// fgColor: foreground color (e.g., ui.Ansi.Cyan)
-// bgColor: background color (e.g., ui.Ansi.BgBlue) - use "" for no background
-func (t *TelnetIO) ColorPrint(text string, fgColor, bgColor string) error {
-	// Build the colored output
-	output := ""
-	if fgColor != "" {
-		output += fgColor
-	}
-	if bgColor != "" {
-		output += bgColor
-	}
-	output += text
-	if fgColor != "" || bgColor != "" {
-		output += ui.Ansi.Reset
-	}
-
-	return t.Print(output)
-}
-
-// ColorPrintf sends formatted colored text to the telnet client
-// fgColor: foreground color (e.g., ui.Ansi.Cyan)
-// bgColor: background color (e.g., ui.Ansi.BgBlue) - use "" for no background
-func (t *TelnetIO) ColorPrintf(format string, fgColor, bgColor string, args ...interface{}) error {
-	text := fmt.Sprintf(format, args...)
-	return t.ColorPrint(text, fgColor, bgColor)
-}
-
-// PrintSuccess prints a success message with default success colors
-func (t *TelnetIO) PrintSuccess(text string) error {
-	return t.ColorPrint(text, ui.Ansi.GreenHi, "")
-}
-
-// PrintError prints an error message with default error colors
-func (t *TelnetIO) PrintError(text string) error {
-	return t.ColorPrint(text, ui.Ansi.RedHi, "")
-}
-
-// PrintWarning prints a warning message with default warning colors
-func (t *TelnetIO) PrintWarning(text string) error {
-	return t.ColorPrint(text, ui.Ansi.YellowHi, "")
-}
-
-// PrintInfo prints an info message with default info colors
-func (t *TelnetIO) PrintInfo(text string) error {
-	return t.ColorPrint(text, ui.Ansi.Cyan, "")
 }
 
 // ClearScreen clears the telnet client screen
@@ -184,10 +138,8 @@ func (t *TelnetIO) handleTelnetCommand() {
 	}
 }
 
-// handleNAWSSubnegotiation parses NAWS (Negotiate About Window Size) responses
 func (t *TelnetIO) handleNAWSSubnegotiation() {
 	// Read the subnegotiation data: IAC SB NAWS <width-high> <width-low> <height-high> <height-low> IAC SE
-	// Skip the IAC and SB bytes that were already consumed
 
 	// Read width high byte
 	widthHigh, err := t.Reader.ReadByte()
@@ -217,12 +169,20 @@ func (t *TelnetIO) handleNAWSSubnegotiation() {
 	width := int(widthHigh)<<8 | int(widthLow)
 	height := int(heightHigh)<<8 | int(heightLow)
 
-	// Cap at 80x25 maximum as specified
+	fmt.Printf("DEBUG: NAWS received - Width: %d, Height: %d\n", width, height)
+
+	// If NAWS returned invalid values, use defaults
+	if width <= 0 || height <= 0 || width > 255 || height > 255 {
+		height, width = getDefaultTermSize()
+		fmt.Printf("DEBUG: NAWS invalid, using defaults - Width: %d, Height: %d\n", width, height)
+	}
+
+	// Cap at reasonable maximums
 	if width > 80 {
 		width = 80
 	}
-	if height > 25 {
-		height = 25
+	if height > 24 {
+		height = 24
 	}
 
 	// Store dimensions in session
@@ -230,4 +190,9 @@ func (t *TelnetIO) handleNAWSSubnegotiation() {
 		t.Session.Width = width
 		t.Session.Height = height
 	}
+}
+
+// getDefaultTermSize returns safe default terminal dimensions
+func getDefaultTermSize() (height, width int) {
+	return 25, 80 // Standard BBS terminal size
 }
