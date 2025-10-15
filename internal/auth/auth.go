@@ -15,15 +15,9 @@ import (
 	"github.com/robbiew/retrograde/internal/security"
 	"github.com/robbiew/retrograde/internal/telnet"
 	"github.com/robbiew/retrograde/internal/ui"
-	"github.com/robbiew/retrograde/internal/util"
 )
 
 const userTimestampLayout = "2006-01-02 15:04:05"
-
-// SanitizeFilename replaces unsafe characters in the username to make it file-system safe
-func SanitizeFilename(name string) string {
-	return util.SanitizeFilename(name)
-}
 
 // Type aliases for convenience
 type Config = config.Config

@@ -9,15 +9,9 @@ import (
 	"strings"
 
 	"github.com/robbiew/retrograde/internal/database"
-	"github.com/robbiew/retrograde/internal/util"
 )
 
 var db database.Database
-
-// SetDatabase sets the global database instance
-func SetDatabase(d database.Database) {
-	db = d
-}
 
 // LoadConfig loads configuration from SQLite database
 // If database doesn't exist, creates it with default values
@@ -644,11 +638,6 @@ func CloseDatabase() error {
 		return err
 	}
 	return nil
-}
-
-// SanitizeFilename replaces unsafe characters in the username to make it file-system safe
-func SanitizeFilename(name string) string {
-	return util.SanitizeFilename(name)
 }
 
 // CheckRequiredPathsExist checks if the required directories from configuration exist
