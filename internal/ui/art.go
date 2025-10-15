@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 )
 
@@ -29,6 +30,31 @@ func getThemeDirectory() string {
 	config.mu.RLock()
 	defer config.mu.RUnlock()
 	return config.ThemeDirectory
+}
+
+// PrintAnsiTerminal displays ANSI art content with optional line delay and height limit
+func PrintAnsiTerminal(term InteractiveTerminal, artName string, delay, height int) error {
+	lines, err := LoadAnsiLines(artName)
+	if err != nil {
+		return fmt.Errorf("error: ANSI art '%s' not found", artName)
+	}
+
+	delayDuration := time.Duration(delay) * time.Millisecond
+	printed := 0
+
+	for _, line := range lines {
+		if height > 0 && printed >= height {
+			break
+		}
+		if err := term.Print(line + "\r\n"); err != nil {
+			return err
+		}
+		if delay > 0 {
+			time.Sleep(delayDuration)
+		}
+		printed++
+	}
+	return nil
 }
 
 // PrintAnsiArt loads and displays an ANSI art file to the terminal

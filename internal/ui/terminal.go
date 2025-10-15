@@ -2,6 +2,8 @@ package ui
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"strings"
 	"time"
 )
@@ -219,194 +221,6 @@ func FlushInput(term InteractiveTerminal) {
 	time.Sleep(50 * time.Millisecond)
 }
 
-// Prompt collects string input within a defined width with ESC key detection.
-func Prompt(term InteractiveTerminal, label string, x, y, width int) (string, error) {
-	var input strings.Builder
-	labelX := x
-	inputFieldX := labelX + len(label)
-
-	// Draw the label and initialize the input field with reverse background.
-	if err := term.PrintAt(label, labelX, y); err != nil {
-		return "", err
-	}
-	if err := term.PrintAt(ReverseText+PadRight("", width)+ResetText, inputFieldX, y); err != nil {
-		return "", err
-	}
-	if err := term.MoveCursor(inputFieldX, y); err != nil {
-		return "", err
-	}
-
-	for {
-		key, err := term.GetKeyPress()
-		if err != nil {
-			return "", err
-		}
-
-		switch key {
-		case 13: // Enter key
-			if err := term.PrintAt(" "+PadRight("", width)+" ", inputFieldX, y); err != nil {
-				return "", err
-			}
-			if err := term.PrintAt(Ansi.Cyan+label+Ansi.Reset, labelX, y); err != nil {
-				return "", err
-			}
-			if err := term.PrintAt(PadRight(input.String(), width), inputFieldX, y); err != nil {
-				return "", err
-			}
-			return strings.TrimSpace(input.String()), nil
-
-		case 27: // ESC key
-			return "", fmt.Errorf("ESC_PRESSED")
-
-		case 8, 127: // Backspace
-			if input.Len() > 0 {
-				inputStr := input.String()
-				input.Reset()
-				input.WriteString(inputStr[:len(inputStr)-1])
-				if err := term.PrintAt(" "+PadRight("", width)+" ", inputFieldX, y); err != nil {
-					return "", err
-				}
-				if err := term.PrintAt(ReverseText+PadRight(input.String(), width)+ResetText, inputFieldX, y); err != nil {
-					return "", err
-				}
-				if err := term.MoveCursor(inputFieldX+input.Len(), y); err != nil {
-					return "", err
-				}
-			}
-
-		case 32: // Space
-			if input.Len() < width {
-				input.WriteString(" ")
-				if err := term.PrintAt(" "+PadRight("", width)+" ", inputFieldX, y); err != nil {
-					return "", err
-				}
-				if err := term.PrintAt(ReverseText+PadRight(input.String(), width)+ResetText, inputFieldX, y); err != nil {
-					return "", err
-				}
-				if err := term.MoveCursor(inputFieldX+input.Len(), y); err != nil {
-					return "", err
-				}
-			}
-
-		default:
-			if input.Len() < width && key >= 32 && key <= 126 {
-				input.WriteByte(key)
-				if err := term.PrintAt(" "+PadRight("", width)+" ", inputFieldX, y); err != nil {
-					return "", err
-				}
-				if err := term.PrintAt(ReverseText+PadRight(input.String(), width)+ResetText, inputFieldX, y); err != nil {
-					return "", err
-				}
-				if err := term.MoveCursor(inputFieldX+input.Len(), y); err != nil {
-					return "", err
-				}
-			}
-		}
-	}
-}
-
-// PromptPassword collects password input with asterisk masking and ESC detection.
-func PromptPassword(term InteractiveTerminal, label string, x, y, width int) (string, error) {
-	var input strings.Builder
-	labelX := x
-	inputFieldX := labelX + len(label)
-
-	if err := term.PrintAt(label, labelX, y); err != nil {
-		return "", err
-	}
-	if err := term.PrintAt(ReverseText+PadRight("", width)+ResetText, inputFieldX, y); err != nil {
-		return "", err
-	}
-	if err := term.MoveCursor(inputFieldX, y); err != nil {
-		return "", err
-	}
-
-	for {
-		key, err := term.GetKeyPress()
-		if err != nil {
-			return "", err
-		}
-
-		switch key {
-		case 13: // Enter key
-			if err := term.PrintAt(" "+PadRight("", width)+" ", inputFieldX, y); err != nil {
-				return "", err
-			}
-			if err := term.PrintAt(Ansi.Cyan+label+Ansi.Reset, labelX, y); err != nil {
-				return "", err
-			}
-			asterisks := strings.Repeat("*", input.Len())
-			if err := term.PrintAt(PadRight(asterisks, width), inputFieldX, y); err != nil {
-				return "", err
-			}
-			return strings.TrimSpace(input.String()), nil
-
-		case 27: // ESC key
-			return "", fmt.Errorf("ESC_PRESSED")
-
-		case 8, 127: // Backspace
-			if input.Len() > 0 {
-				inputStr := input.String()
-				input.Reset()
-				input.WriteString(inputStr[:len(inputStr)-1])
-				if err := term.PrintAt(" "+PadRight("", width)+" ", inputFieldX, y); err != nil {
-					return "", err
-				}
-				asterisks := strings.Repeat("*", input.Len())
-				if err := term.PrintAt(ReverseText+PadRight(asterisks, width)+ResetText, inputFieldX, y); err != nil {
-					return "", err
-				}
-				if err := term.MoveCursor(inputFieldX+input.Len(), y); err != nil {
-					return "", err
-				}
-			}
-
-		case 32: // Space
-			if input.Len() < width {
-				input.WriteString(" ")
-				if err := term.PrintAt(" "+PadRight("", width)+" ", inputFieldX, y); err != nil {
-					return "", err
-				}
-				asterisks := strings.Repeat("*", input.Len())
-				if err := term.PrintAt(ReverseText+PadRight(asterisks, width)+ResetText, inputFieldX, y); err != nil {
-					return "", err
-				}
-				if err := term.MoveCursor(inputFieldX+input.Len(), y); err != nil {
-					return "", err
-				}
-			}
-
-		default:
-			if input.Len() < width && key >= 32 && key <= 126 {
-				input.WriteByte(key)
-				if err := term.PrintAt(" "+PadRight("", width)+" ", inputFieldX, y); err != nil {
-					return "", err
-				}
-				asterisks := strings.Repeat("*", input.Len())
-				if err := term.PrintAt(ReverseText+PadRight(asterisks, width)+ResetText, inputFieldX, y); err != nil {
-					return "", err
-				}
-				if err := term.MoveCursor(inputFieldX+input.Len(), y); err != nil {
-					return "", err
-				}
-			}
-		}
-	}
-}
-
-// ShowTimedError displays an error message for a short duration then clears it.
-func ShowTimedError(term InteractiveTerminal, message string, x, y int) {
-	if err := term.PrintAt(Ansi.RedHi+message+Ansi.Reset, x, y); err != nil {
-		return
-	}
-
-	go func() {
-		time.Sleep(2 * time.Second)
-		clearLine := strings.Repeat(" ", len(message)+10)
-		_ = term.PrintAt(clearLine, x, y)
-	}()
-}
-
 // HandleEscQuit shows quit confirmation and returns true if the user confirms.
 func HandleEscQuit(term InteractiveTerminal) bool {
 	if err := term.Print(Ansi.YellowHi + "\r\n\r\n Do you really want to quit? [Y/N]: " + Ansi.Reset); err != nil {
@@ -429,22 +243,6 @@ func HandleEscQuit(term InteractiveTerminal) bool {
 	}
 }
 
-// ClearField clears a form field and resets cursor position.
-func ClearField(term InteractiveTerminal, label string, x, y, width int) {
-	labelX := x
-	inputFieldX := labelX + len(label)
-
-	_ = term.PrintAt(" "+PadRight("", width+len(label)+2)+" ", labelX, y)
-	_ = term.PrintAt(label, labelX, y)
-	_ = term.PrintAt(ReverseText+PadRight("", width)+ResetText, inputFieldX, y)
-	_ = term.MoveCursor(inputFieldX, y)
-}
-
-// ShowPersistentEscIndicator displays a persistent ESC quit option.
-func ShowPersistentEscIndicator(term InteractiveTerminal, x, y int) {
-	_ = term.PrintAt(Ansi.BlackHi+" [ESC] Quit/Cancel "+Ansi.Reset, x, y)
-}
-
 // Pause waits for any key press and shows centered message.
 func Pause(term InteractiveTerminal) error {
 	const message = " [ PRESS A KEY TO CONTINUE ] "
@@ -458,34 +256,39 @@ func Pause(term InteractiveTerminal) error {
 	return err
 }
 
-// PrintAnsiTerminal displays ANSI art content on the provided terminal.
-func PrintAnsiTerminal(term InteractiveTerminal, artName string, delay, height int) error {
-	lines, err := LoadAnsiLines(artName)
-	if err != nil {
-		return fmt.Errorf("error: ANSI art '%s' not found", artName)
-	}
-
-	delayDuration := time.Duration(delay) * time.Millisecond
-	printed := 0
-
-	for _, line := range lines {
-		if height > 0 && printed >= height {
-			break
-		}
-		if err := term.Print(line + "\r\n"); err != nil {
-			return err
-		}
-		if delay > 0 {
-			time.Sleep(delayDuration)
-		}
-		printed++
-	}
-	return nil
-}
-
 func toUpperASCII(b byte) byte {
 	if b >= 'a' && b <= 'z' {
 		return b - 32
 	}
 	return b
+}
+
+// ClearScreenSequence returns the escape sequence to clear the screen and move the cursor to the top-left.
+func ClearScreenSequence() string {
+	return Ansi.EraseScreen + Ansi.CursorTopLeft
+}
+
+// MoveCursorSequence returns the escape sequence to move the cursor to the specified coordinates.
+func MoveCursorSequence(x, y int) string {
+	return fmt.Sprintf(Esc+"%d;%df", y, x)
+}
+
+// GetTermSize retrieves the terminal's current height and width - for telnet we'll use defaults.
+func GetTermSize() (int, int) {
+	// For telnet connections, we'll use standard terminal size
+	// This can be enhanced later to negotiate terminal size via telnet options
+	return 24, 80 // height, width
+}
+
+// PrintStringLoc prints text at a specific X, Y location.
+func PrintStringLoc(text string, x int, y int) {
+	WriteAt(os.Stdout, text, x, y) // ignore error for stdout printing
+}
+
+// WriteAt writes text to the provided writer after moving the cursor to X, Y.
+func WriteAt(w io.Writer, text string, x int, y int) (int, error) {
+	if w == nil {
+		return 0, fmt.Errorf("nil writer")
+	}
+	return fmt.Fprint(w, MoveCursorSequence(x, y)+text)
 }

@@ -104,62 +104,14 @@ func (t *TelnetIO) ClearScreen() error {
 	return t.Print(ui.ClearScreenSequence())
 }
 
-// ShowCursor shows the cursor
-func (t *TelnetIO) ShowCursor() error {
-	return t.Print(ui.Ansi.CursorShow)
-}
-
-// HideCursor hides the cursor
-func (t *TelnetIO) HideCursor() error {
-	return t.Print(ui.Ansi.CursorHide)
-}
-
 // MoveCursor moves cursor to specific position
 func (t *TelnetIO) MoveCursor(x, y int) error {
 	return t.Printf("%s", ui.MoveCursorSequence(x, y))
 }
 
-// Prompt collects string input within a defined width for telnet with ESC key detection
-func (t *TelnetIO) Prompt(label string, x, y, width int) (string, error) {
-	return ui.Prompt(t, label, x, y, width)
-}
-
-// PromptPassword collects password input with asterisk masking for telnet with ESC key detection
-func (t *TelnetIO) PromptPassword(label string, x, y, width int) (string, error) {
-	return ui.PromptPassword(t, label, x, y, width)
-}
-
-// ShowTimedError displays an error message for 5 seconds then clears it
-func (t *TelnetIO) ShowTimedError(message string, x, y int) {
-	ui.ShowTimedError(t, message, x, y)
-}
-
-// HandleEscQuit shows quit confirmation and returns true if user wants to quit
-func (t *TelnetIO) HandleEscQuit() bool {
-	return ui.HandleEscQuit(t)
-}
-
-// ClearField clears a form field and resets cursor position
-func (t *TelnetIO) ClearField(label string, x, y, width int) {
-	ui.ClearField(t, label, x, y, width)
-}
-
-// ShowPersistentEscIndicator displays persistent ESC quit option
-func (t *TelnetIO) ShowPersistentEscIndicator(x, y int) {
-	ui.ShowPersistentEscIndicator(t, x, y)
-}
-
 // Pause waits for any key press and shows centered message
 func (t *TelnetIO) Pause() error {
 	return ui.Pause(t)
-}
-
-// PrintAnsi displays embedded ANSI art content to telnet client
-func (t *TelnetIO) PrintAnsi(artName string, delay int, height int) error {
-	if err := ui.PrintAnsiTerminal(t, artName, delay, height); err != nil {
-		return t.Printf("%s\r\n", err.Error())
-	}
-	return nil
 }
 
 // Handle telnet command sequences
