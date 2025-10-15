@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/robbiew/retrograde/internal/util"
 )
@@ -241,20 +240,20 @@ func LoadAnsiArt(artName string) (string, error) {
 }
 
 // LoadAnsiLines returns ANSI art content split into lines (without trailing carriage returns).
-func LoadAnsiLines(artName string) ([]string, error) {
-	content, err := LoadAnsiArt(artName)
-	if err != nil {
-		return nil, err
-	}
+// func LoadAnsiLines(artName string) ([]string, error) {
+// 	content, err := LoadAnsiArt(artName)
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	trimmedContent := TrimStringFromSauce(content)
-	rawLines := strings.Split(trimmedContent, "\n")
-	lines := make([]string, 0, len(rawLines))
-	for _, line := range rawLines {
-		lines = append(lines, strings.TrimRight(line, "\r"))
-	}
-	return lines, nil
-}
+// 	trimmedContent := TrimStringFromSauce(content)
+// 	rawLines := strings.Split(trimmedContent, "\n")
+// 	lines := make([]string, 0, len(rawLines))
+// 	for _, line := range rawLines {
+// 		lines = append(lines, strings.TrimRight(line, "\r"))
+// 	}
+// 	return lines, nil
+// }
 
 // ClearScreen clears the terminal screen.
 func ClearScreen() {
@@ -355,13 +354,13 @@ func trimMetadata(s string, delimiters ...string) string {
 }
 
 // trimLastChar trims the last character from a string.
-func trimLastChar(s string) string {
-	if len(s) > 0 {
-		_, size := utf8.DecodeLastRuneInString(s)
-		return s[:len(s)-size]
-	}
-	return s
-}
+// func trimLastChar(s string) string {
+// 	if len(s) > 0 {
+// 		_, size := utf8.DecodeLastRuneInString(s)
+// 		return s[:len(s)-size]
+// 	}
+// 	return s
+// }
 
 // MoveCursor moves the cursor to X, Y location.
 func MoveCursor(x int, y int) {

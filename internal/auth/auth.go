@@ -131,14 +131,12 @@ func UserExists(username string) bool {
 func LoginPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *config.Config) (*UserRecord, error) {
 	io.ClearScreen()
 
-	// Display theme file first
-	if content, err := ui.LoadAnsiArt("login"); err == nil {
-		io.Print(content)
-	} else {
-		// Fallback to original behavior if theme file doesn't exist
-		io.PrintAnsi("login", 0, 6) // Use login.ans as header
+	// Simple one-liner to display login art
+	if err := ui.PrintAnsiArt(io, "login.ans"); err != nil {
+		// Log the actual error so we can see what's wrong
+		fmt.Printf("DEBUG: Failed to load login art: %v\n", err)
+		io.Print("Welcome to the BBS\r\n")
 	}
-
 	io.Print("\r\n\r\n")
 
 	io.Print(ui.Ansi.Cyan + "Enter your username or 'NEW' to apply and hit RETURN.\r\n\r\n" + ui.Ansi.Reset)

@@ -327,11 +327,7 @@ func runServer() {
 		os.Exit(1)
 	}
 
-	ui.SetArtDirectories(
-		cfg.Configuration.Paths.Themes,
-		filepath.Join(cfg.Configuration.Paths.System, "theme"),
-	)
-
+	ui.SetThemeDirectory(cfg.Configuration.Paths.Themes)
 	defer config.CloseDatabase()
 
 	// Check if required paths exist, if not, launch config editor
@@ -352,12 +348,7 @@ func runServer() {
 			fmt.Printf("Error reloading configuration: %v\n", err)
 			os.Exit(1)
 		}
-
-		ui.SetArtDirectories(
-			cfg.Configuration.Paths.Themes,
-			filepath.Join(cfg.Configuration.Paths.System, "theme"),
-			filepath.Join(cfg.Configuration.Paths.System, "artfiles"),
-		)
+		ui.SetThemeDirectory(cfg.Configuration.Paths.Themes)
 
 		// Try to create missing directories
 		if err := config.EnsureRequiredPaths(cfg); err != nil {

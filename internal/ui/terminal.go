@@ -257,7 +257,7 @@ func Pause(term InteractiveTerminal) error {
 func PrintAnsiTerminal(term InteractiveTerminal, artName string, delay, height int) error {
 	lines, err := LoadAnsiLines(artName)
 	if err != nil {
-		return fmt.Errorf("Error: ANSI art '%s' not found", artName)
+		return fmt.Errorf("error: ANSI art '%s' not found", artName)
 	}
 
 	delayDuration := time.Duration(delay) * time.Millisecond
