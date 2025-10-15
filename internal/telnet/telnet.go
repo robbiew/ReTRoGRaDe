@@ -16,6 +16,29 @@ type TelnetIO struct {
 	Session *config.TelnetSession // Reference to session for activity tracking
 }
 
+// FlushInput clears any buffered input from the reader
+func (t *TelnetIO) FlushInput() {
+	// Read and discard any available bytes
+	if t.Reader != nil {
+		// Set a very short read deadline to avoid blocking
+		if conn, ok := t.Session.Conn.(interface{ SetReadDeadline(time.Time) error }); ok {
+			conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+
+			// Read and discard bytes
+			buf := make([]byte, 1024)
+			for {
+				_, err := t.Reader.Read(buf)
+				if err != nil {
+					break
+				}
+			}
+
+			// Reset deadline to no timeout
+			conn.SetReadDeadline(time.Time{})
+		}
+	}
+}
+
 // GetKeyPress reads a single key press from telnet connection
 func (t *TelnetIO) GetKeyPress() (byte, error) {
 	b, err := t.Reader.ReadByte()
