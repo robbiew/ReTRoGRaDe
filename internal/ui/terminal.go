@@ -35,7 +35,7 @@ func PromptSimple(term InteractiveTerminal, label string, width int, labelColor,
 	}
 
 	// Print the label with color
-	if err := term.Print(labelColor + label + Ansi.Reset); err != nil {
+	if err := term.Print(Ansi.Reset + labelColor + label + Ansi.Reset); err != nil {
 		return "", err
 	}
 
@@ -206,6 +206,39 @@ func ClearFieldSimple(term InteractiveTerminal, label string, width int) error {
 	return term.Print(label)
 }
 
+// ShowErrorAndClearMultiplePrompts shows an error, waits, then clears back N lines
+func ShowErrorAndClearMultiplePrompts(term InteractiveTerminal, message string, linesToClear int) error {
+	// Hide cursor during error display
+	if err := term.Print(Ansi.CursorHide); err != nil {
+		return err
+	}
+
+	// Show error on new line
+	if err := term.Print(Ansi.RedHi + message + Ansi.Reset + "\r\n"); err != nil {
+		return err
+	}
+
+	// Wait for user to read it
+	time.Sleep(2 * time.Second)
+
+	// Move cursor up N lines (back to first prompt)
+	if err := term.Print(fmt.Sprintf("\x1b[%dA", linesToClear)); err != nil {
+		return err
+	}
+
+	// Clear from cursor to end of screen
+	if err := term.Print("\x1b[J"); err != nil {
+		return err
+	}
+
+	// Show cursor again for next input
+	if err := term.Print(Ansi.CursorShow); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // ShowTimedErrorSimple displays an error message for a short duration (simpler version)
 func ShowTimedErrorSimple(term InteractiveTerminal, message string) {
 	if err := term.Print(Ansi.RedHi + message + Ansi.Reset + "\r\n"); err != nil {
@@ -241,6 +274,39 @@ func HandleEscQuit(term InteractiveTerminal) bool {
 			return false
 		}
 	}
+}
+
+// ShowErrorAndClearPrompt shows an error message, waits, then clears both the error and prompt line
+func ShowErrorAndClearPrompt(term InteractiveTerminal, message string) error {
+	// Hide cursor during error display
+	if err := term.Print(Ansi.CursorHide); err != nil {
+		return err
+	}
+
+	// Show error on new line
+	if err := term.Print(Ansi.RedHi + message + Ansi.Reset + "\r\n"); err != nil {
+		return err
+	}
+
+	// Wait for user to read it
+	time.Sleep(2 * time.Second)
+
+	// Move cursor up 2 lines (back to where the input prompt was)
+	if err := term.Print("\x1b[2A"); err != nil {
+		return err
+	}
+
+	// Clear from cursor to end of screen (removes both input line and error line)
+	if err := term.Print("\x1b[J"); err != nil {
+		return err
+	}
+
+	// Show cursor again for next input
+	if err := term.Print(Ansi.CursorShow); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Pause waits for any key press and shows centered message.

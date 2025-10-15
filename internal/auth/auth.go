@@ -155,90 +155,132 @@ func LoginPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *config
 	io.ClearScreen()
 
 	// Display login art
-	if err := ui.PrintAnsiArt(io, "login.ans"); err != nil {
-		// Log the actual error so we can see what's wrong
-		fmt.Printf("Failed to load login art: %v\n", err)
+	if err := ui.PrintAnsiArt(io, "login"); err != nil {
+		io.Print(" Welcome to the BBS\r\n")
 	}
 
-	io.Print("\r\n\r\n")
+	io.Print("\r\n")
+	io.Print(ui.Ansi.Cyan + " Enter your username or 'NEW'.\r\n\r\n" + ui.Ansi.Reset)
 
+	// Flush any stray input
 	io.FlushInput()
 
-	// Get username with validation
-	var username string
-	for {
-		var err error
-		username, err = ui.PromptSimple(io, " Username: ", 20, ui.Ansi.WhiteHi, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
-		if err != nil {
-			if err.Error() == "ESC_PRESSED" {
-				if ui.HandleEscQuit(io) {
-					logging.LogLoginFailed(session.NodeNumber, "Unknown", session.IPAddress, "login cancelled by user")
-					return nil, fmt.Errorf("login cancelled")
-				}
-				// User chose to continue, clear field and retry
-				io.Print("\r\n")
-				continue
-			}
-			return nil, err
-		}
-
-		if username == "" {
-			ui.ShowTimedErrorSimple(io, " Username cannot be empty.")
-			continue
-		} else if strings.EqualFold(username, "NEW") {
-			// Handle new user registration
-			userRecord, err := RegisterPrompt(io, session, cfg)
-			if err != nil {
-				// Registration failed or cancelled, restart login prompt
-				io.ClearScreen()
-				if err := ui.PrintAnsiArt(io, "login"); err != nil {
-					io.Print(" Welcome to the BBS\r\n")
-				}
-				io.Print("\r\n\r\n")
-				io.Print(ui.Ansi.Cyan + " Enter your username or 'NEW' to apply.\r\n\r\n" + ui.Ansi.Reset)
-				continue
-			}
-			// Registration successful, return the user
-			return userRecord, nil
-		} else {
-			break
-		}
-	}
-
-	// Get password with validation
-	var password string
-	for {
-		var err error
-		password, err = ui.PromptPasswordSimple(io, " Password: ", 20, ui.Ansi.WhiteHi, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
-		if err != nil {
-			if err.Error() == "ESC_PRESSED" {
-				if ui.HandleEscQuit(io) {
-					logging.LogLoginFailed(session.NodeNumber, username, session.IPAddress, "login cancelled by user")
-					return nil, fmt.Errorf("login cancelled")
-				}
-				// User chose to continue, clear field and retry
-				io.Print("\r\n")
-				continue
-			}
-			return nil, err
-		}
-
-		if password == "" {
-			ui.ShowTimedErrorSimple(io, " Password cannot be empty.")
-			continue
-		} else {
-			break
-		}
-	}
-
-	// Authenticate user - use a loop to handle "user not found" errors properly
-	var user *UserRecord
+	// Track failed login attempts across all retries
 	failedAttempts := 0
 	maxAttempts := 3
 
+	// Main login loop
 	for {
-		var err error
-		user, err = AuthenticateUser(username, password)
+		// Get username with validation
+		var username string
+		for {
+			var err error
+			username, err = ui.PromptSimple(io, " Username: ", 20, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
+			if err != nil {
+				if err.Error() == "ESC_PRESSED" {
+					if ui.HandleEscQuit(io) {
+						logging.LogLoginFailed(session.NodeNumber, "Unknown", session.IPAddress, "login cancelled by user")
+						return nil, fmt.Errorf("login cancelled")
+					}
+					io.Print("\r\n")
+					continue
+				}
+				return nil, err
+			}
+
+			if username == "" {
+				ui.ShowErrorAndClearPrompt(io, " Username cannot be empty.")
+				continue
+			} else if strings.EqualFold(username, "NEW") {
+				// Handle new user registration
+				userRecord, err := RegisterPrompt(io, session, cfg)
+				if err != nil {
+					// Registration failed or cancelled, restart login prompt
+					io.ClearScreen()
+					if err := ui.PrintAnsiArt(io, "login"); err != nil {
+						io.Print(" Welcome to the BBS\r\n")
+					}
+					io.Print("\r\n\r\n")
+					io.Print(ui.Ansi.Cyan + " Enter your username or 'NEW'.\r\n\r\n" + ui.Ansi.Reset)
+					continue
+				}
+				// Registration successful, return the user
+				return userRecord, nil
+			} else if !UserExists(username) {
+				// USERNAME NOT FOUND - OFFER TO CREATE ACCOUNT
+				io.Print("\r\n")
+				io.Print(ui.Ansi.YellowHi + " User not found. Create an account? (Y/N): " + ui.Ansi.Reset)
+
+				createAccount := false
+				for {
+					key, err := io.GetKeyPress()
+					if err != nil {
+						return nil, err
+					}
+
+					if key == 'Y' || key == 'y' {
+						io.Print("Y\r\n\r\n")
+						createAccount = true
+						break
+					} else if key == 'N' || key == 'n' {
+						io.Print("N\r\n")
+						break
+					}
+					// Ignore other keys, keep waiting for Y/N
+				}
+
+				if createAccount {
+					// Start registration process
+					userRecord, err := RegisterPrompt(io, session, cfg)
+					if err != nil {
+						// Registration failed or cancelled, restart login prompt
+						io.ClearScreen()
+						if err := ui.PrintAnsiArt(io, "login"); err != nil {
+							io.Print(" Welcome to the BBS\r\n")
+						}
+						io.Print("\r\n\r\n")
+						io.Print(ui.Ansi.Cyan + " Enter your username or 'NEW'.\r\n\r\n" + ui.Ansi.Reset)
+						continue
+					}
+					// Registration successful, return the user
+					return userRecord, nil
+				} else {
+					// User chose not to create account, clear and restart
+					ui.ShowErrorAndClearMultiplePrompts(io, "\r\n OK, try your Username again!", 5)
+					continue
+				}
+			} else {
+				break // User exists, continue to password prompt
+			}
+		}
+
+		// Get password with validation (only reached if user exists)
+		var password string
+		for {
+			var err error
+			password, err = ui.PromptPasswordSimple(io, " Password: ", 20, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
+			if err != nil {
+				if err.Error() == "ESC_PRESSED" {
+					if ui.HandleEscQuit(io) {
+						logging.LogLoginFailed(session.NodeNumber, username, session.IPAddress, "login cancelled by user")
+						return nil, fmt.Errorf("login cancelled")
+					}
+					io.Print("\r\n")
+					continue
+				}
+				return nil, err
+			}
+
+			if password == "" {
+				ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Password cannot be empty.", 3)
+				continue
+			} else {
+				break
+			}
+		}
+
+		// Authenticate user
+		user, err := AuthenticateUser(username, password)
 		if err != nil {
 			failedAttempts++
 			logging.LogLoginFailed(session.NodeNumber, username, session.IPAddress, fmt.Sprintf("Attempt %d: %s", failedAttempts, err.Error()))
@@ -261,92 +303,20 @@ func LoginPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *config
 				return nil, fmt.Errorf("too many login attempts - disconnected")
 			}
 
-			// Show error message
-			io.Print(ui.Ansi.RedHi + "\r\n Invalid login, try again.\r\n\r\n" + ui.Ansi.Reset)
-			time.Sleep(2 * time.Second)
+			// Incorrect password - clear both prompts and restart from username
+			ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Incorrect password, please try again.", 4)
 
-			// Reset credentials and prompt again
-			username = ""
-			password = ""
-
-			// Get username again
-			for {
-				var err error
-				username, err = ui.PromptSimple(io, " Username: ", 20, ui.Ansi.WhiteHi, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
-				if err != nil {
-					if err.Error() == "ESC_PRESSED" {
-						if ui.HandleEscQuit(io) {
-							logging.LogLoginFailed(session.NodeNumber, "Unknown", session.IPAddress, "login cancelled by user")
-							return nil, fmt.Errorf("login cancelled")
-						}
-						io.Print("\r\n")
-						continue
-					}
-					return nil, err
-				}
-
-				if username == "" {
-					ui.ShowTimedErrorSimple(io, "Username cannot be empty.")
-					continue
-				} else if username == "NEW" {
-					// Handle new user registration
-					userRecord, err := RegisterPrompt(io, session, cfg)
-					if err != nil {
-						// Registration failed or cancelled, restart login prompt
-						io.ClearScreen()
-						if err := ui.PrintAnsiArt(io, "login"); err != nil {
-							io.Print(" Welcome to the BBS\r\n")
-						}
-						io.Print("\r\n\r\n")
-						io.Print(ui.Ansi.Cyan + " Enter your username or 'NEW' to apply and hit RETURN.\r\n\r\n" + ui.Ansi.Reset)
-						continue
-					}
-					// Registration successful, return the user
-					return userRecord, nil
-				} else {
-					break
-				}
-			}
-
-			// Get password again
-			for {
-				var err error
-				password, err = ui.PromptPasswordSimple(io, " Password: ", 20, ui.Ansi.WhiteHi, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
-				if err != nil {
-					if err.Error() == "ESC_PRESSED" {
-						if ui.HandleEscQuit(io) {
-							logging.LogLoginFailed(session.NodeNumber, username, session.IPAddress, "login cancelled by user")
-							return nil, fmt.Errorf("login cancelled")
-						}
-						io.Print("\r\n")
-						continue
-					}
-					return nil, err
-				}
-
-				if password == "" {
-					ui.ShowTimedErrorSimple(io, " Password cannot be empty.")
-					continue
-				} else {
-					break
-				}
-			}
-
-			// Continue the loop to try authentication again with new credentials
+			// Continue outer loop to restart from username prompt
 			continue
-		} else {
-			// Authentication successful, break out of the loop
-			break
 		}
+
+		// Authentication successful!
+		logging.LogLogin(session.NodeNumber, user.Username, session.IPAddress)
+		io.Printf(ui.Ansi.GreenHi+"\r\n\r\n Welcome back, %s!\r\n"+ui.Ansi.Reset, user.Username)
+		ui.Pause(io)
+
+		return user, nil
 	}
-
-	// Log successful login
-	logging.LogLogin(session.NodeNumber, user.Username, session.IPAddress)
-
-	io.Printf(ui.Ansi.GreenHi+"\r\n\r\n Welcome back, %s!\r\n"+ui.Ansi.Reset, user.Username)
-	ui.Pause(io)
-
-	return user, nil
 }
 
 // RegisterPrompt handles new user registration
@@ -359,7 +329,7 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 		fmt.Printf("Failed to load art: %v\n", err)
 	}
 
-	io.Print("\r\n\r\n")
+	io.Print("\r\n")
 
 	// Compile regex once for username validation
 	usernameRegex := regexp.MustCompile(`^[a-zA-Z0-9 ]+$`)
@@ -368,117 +338,129 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 	var username string
 	for {
 		var err error
-		username, err = ui.PromptSimple(io, " Username: ", 20, ui.Ansi.Cyan, ui.Ansi.White, ui.Ansi.BgCyan)
+		username, err = ui.PromptSimple(io, " Desired Username: ", 20, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
 		if err != nil {
 			if err.Error() == "ESC_PRESSED" {
 				if ui.HandleEscQuit(io) {
 					logging.LogEvent(session.NodeNumber, "Unknown", session.IPAddress, "REGISTER_FAILED", "registration cancelled by user")
 					return nil, fmt.Errorf("registration cancelled")
 				}
-				io.Print("\r\n")
+				ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Registration cancelled.", 3)
 				continue
 			}
 			return nil, err
 		}
 
 		if username == "" {
-			ui.ShowTimedErrorSimple(io, "Username cannot be empty.")
+			ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Username cannot be empty.", 3)
 			continue
 		} else if len(username) < 3 {
 			logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "username too short")
-			ui.ShowTimedErrorSimple(io, "Username must be at least 3 characters.")
+			ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Username must be at least 3 characters.", 3)
 			continue
 		} else if IsReservedUsername(username) {
 			logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "username is reserved")
-			ui.ShowTimedErrorSimple(io, "Username '"+username+"' is reserved and cannot be used.")
+			ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Username '"+username+"' is reserved and cannot be used.", 3)
 			continue
-
 		} else if UserExists(username) {
 			logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "username already exists")
-			ui.ShowTimedErrorSimple(io, "Username "+username+" already exists.")
+			ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Username '"+username+"' already exists.", 3)
 			continue
 		} else if !usernameRegex.MatchString(username) {
 			logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "username contains illegal characters")
-			ui.ShowTimedErrorSimple(io, "Username can only contain letters, numbers, and spaces.")
+			ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Username can only contain letters, numbers, and spaces.", 3)
 			continue
 		} else {
 			break
 		}
 	}
 
-	// Get password with validation
+	// Outer loop for password + confirmation
 	var password string
-	for {
-		var err error
-		password, err = ui.PromptPasswordSimple(io, "Password: ", 20, ui.Ansi.Cyan, ui.Ansi.White, ui.Ansi.BgCyan)
-		if err != nil {
-			if err.Error() == "ESC_PRESSED" {
-				if ui.HandleEscQuit(io) {
-					logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "registration cancelled by user")
-					return nil, fmt.Errorf("registration cancelled")
-				}
-				io.Print("\r\n")
-				continue
-			}
-			return nil, err
-		}
-
-		if password == "" {
-			ui.ShowTimedErrorSimple(io, "Password cannot be empty.")
-			continue
-		} else if len(password) < 4 {
-			logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "password too short")
-			ui.ShowTimedErrorSimple(io, "Password must be at least 4 characters.")
-			continue
-		} else {
-			break
-		}
-	}
-
-	// Confirm password
 	var confirmPassword string
 	for {
-		var err error
-		confirmPassword, err = ui.PromptPasswordSimple(io, "Confirm Password: ", 20, ui.Ansi.Cyan, ui.Ansi.White, ui.Ansi.BgCyan)
-		if err != nil {
-			if err.Error() == "ESC_PRESSED" {
-				if ui.HandleEscQuit(io) {
-					logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "registration cancelled by user")
-					return nil, fmt.Errorf("registration cancelled")
+		// Get password with validation
+		password = "" // Reset at start of outer loop
+		for {
+			var err error
+			password, err = ui.PromptPasswordSimple(io, " Desired Password: ", 20, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
+			if err != nil {
+				if err.Error() == "ESC_PRESSED" {
+					if ui.HandleEscQuit(io) {
+						logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "registration cancelled by user")
+						return nil, fmt.Errorf("registration cancelled")
+					}
+					ui.ShowErrorAndClearPrompt(io, " Registration cancelled.")
+					continue
 				}
-				io.Print("\r\n")
-				continue
+				return nil, err
 			}
-			return nil, err
+
+			if password == "" {
+				ui.ShowErrorAndClearPrompt(io, " Password cannot be empty.")
+				continue
+			} else if len(password) < 4 {
+				logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "password too short")
+				ui.ShowErrorAndClearPrompt(io, " Password must be at least 4 characters.")
+				continue
+			} else {
+				break // Password is valid, move to confirmation
+			}
 		}
 
-		if confirmPassword != password {
-			ui.ShowTimedErrorSimple(io, "Passwords do not match.")
-			continue
-		} else {
-			break
+		// Confirm password
+		confirmPassword = "" // Reset
+		for {
+			var err error
+			confirmPassword, err = ui.PromptPasswordSimple(io, " Confirm Password: ", 20, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
+			if err != nil {
+				if err.Error() == "ESC_PRESSED" {
+					if ui.HandleEscQuit(io) {
+						logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "registration cancelled by user")
+						return nil, fmt.Errorf("registration cancelled")
+					}
+					ui.ShowErrorAndClearPrompt(io, " Registration cancelled.")
+					continue
+				}
+				return nil, err
+			}
+
+			if confirmPassword != password {
+				// Passwords don't match - clear both prompts and restart from password
+				ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Passwords do not match.", 4)
+				break // Break inner loop to restart outer loop
+			} else {
+				// Passwords match!
+				break
+			}
 		}
+
+		// Check if passwords matched
+		if confirmPassword == password {
+			break // Exit outer loop - we're done with passwords
+		}
+		// Otherwise, outer loop continues and re-prompts for password
 	}
 
 	// Get email with validation (required)
 	var email string
 	for {
 		var err error
-		email, err = ui.PromptSimple(io, "Email: ", 30, ui.Ansi.Cyan, ui.Ansi.White, ui.Ansi.BgCyan)
+		email, err = ui.PromptSimple(io, " Email Address: ", 30, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
 		if err != nil {
 			if err.Error() == "ESC_PRESSED" {
 				if ui.HandleEscQuit(io) {
 					logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "registration cancelled by user")
 					return nil, fmt.Errorf("registration cancelled")
 				}
-				io.Print("\r\n")
+				ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Registration cancelled.", 3)
 				continue
 			}
 			return nil, err
 		}
 
 		if email == "" {
-			ui.ShowTimedErrorSimple(io, "Email is required.")
+			ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Email is required.", 3)
 			continue
 		} else {
 			break
@@ -492,14 +474,14 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 	var terminalWidth int
 	for {
 		var err error
-		widthStr, err := ui.PromptSimple(io, "Terminal Width (80): ", 3, ui.Ansi.Cyan, ui.Ansi.White, ui.Ansi.BgCyan)
+		widthStr, err := ui.PromptSimple(io, "Terminal Width (80): ", 3, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
 		if err != nil {
 			if err.Error() == "ESC_PRESSED" {
 				if ui.HandleEscQuit(io) {
 					logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "registration cancelled by user")
 					return nil, fmt.Errorf("registration cancelled")
 				}
-				io.Print("\r\n")
+				ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Registration cancelled.", 3)
 				continue
 			}
 			return nil, err
@@ -512,7 +494,7 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 
 		width, err := strconv.Atoi(widthStr)
 		if err != nil || width < 1 || width > 80 {
-			ui.ShowTimedErrorSimple(io, "Width must be between 1 and 80.")
+			ui.ShowErrorAndClearMultiplePrompts(io, "Width must be between 1 and 80.", 3)
 			continue
 		}
 
@@ -524,14 +506,14 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 	var terminalHeight int
 	for {
 		var err error
-		heightStr, err := ui.PromptSimple(io, "Terminal Height (25): ", 3, ui.Ansi.Cyan, ui.Ansi.White, ui.Ansi.BgCyan)
+		heightStr, err := ui.PromptSimple(io, "Terminal Height (25): ", 3, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
 		if err != nil {
 			if err.Error() == "ESC_PRESSED" {
 				if ui.HandleEscQuit(io) {
 					logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "registration cancelled by user")
 					return nil, fmt.Errorf("registration cancelled")
 				}
-				io.Print("\r\n")
+				ui.ShowErrorAndClearMultiplePrompts(io, "\r\n Registration cancelled.", 3)
 				continue
 			}
 			return nil, err
@@ -544,7 +526,7 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 
 		height, err := strconv.Atoi(heightStr)
 		if err != nil || height < 1 || height > 25 {
-			ui.ShowTimedErrorSimple(io, "Height must be between 1 and 25.")
+			ui.ShowErrorAndClearMultiplePrompts(io, "Height must be between 1 and 25.", 3)
 			continue
 		}
 
@@ -591,21 +573,21 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 					// Required field - keep prompting until we get a value
 					for {
 						var err error
-						value, err = ui.PromptSimple(io, promptText, maxLength, ui.Ansi.Cyan, ui.Ansi.White, ui.Ansi.BgBlue)
+						value, err = ui.PromptSimple(io, promptText, maxLength, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
 						if err != nil {
 							if err.Error() == "ESC_PRESSED" {
 								if ui.HandleEscQuit(io) {
 									logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "registration cancelled by user")
 									return nil, fmt.Errorf("registration cancelled")
 								}
-								io.Print("\r\n")
+								ui.ShowErrorAndClearPrompt(io, "Registration cancelled.")
 								continue
 							}
 							return nil, err
 						}
 
 						if value == "" {
-							ui.ShowTimedErrorSimple(io, fieldName+" is required.")
+							ui.ShowErrorAndClearPrompt(io, fieldName+" is required.")
 							continue
 						} else {
 							break
@@ -614,14 +596,14 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 				} else {
 					// Optional field
 					var err error
-					value, err = ui.PromptSimple(io, promptText, maxLength, ui.Ansi.Cyan, ui.Ansi.White, ui.Ansi.BgCyan)
+					value, err = ui.PromptSimple(io, promptText, maxLength, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
 					if err != nil {
 						if err.Error() == "ESC_PRESSED" {
 							if ui.HandleEscQuit(io) {
 								logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "registration cancelled by user")
 								return nil, fmt.Errorf("registration cancelled")
 							}
-							io.Print("\r\n")
+							ui.ShowErrorAndClearPrompt(io, "Registration cancelled.")
 							continue
 						}
 						return nil, err
@@ -636,12 +618,12 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 	}
 
 	// Display summary and confirm
-	io.Print("\r\n\r\n" + ui.Ansi.Cyan + "Account Summary:" + ui.Ansi.Reset + "\r\n")
-	io.Printf(ui.Ansi.WhiteHi+"Username: "+ui.Ansi.Reset+"%s\r\n", username)
-	io.Printf(ui.Ansi.WhiteHi+"Password: "+ui.Ansi.Reset+"%s\r\n", strings.Repeat("*", len(password)))
-	io.Printf(ui.Ansi.WhiteHi+"Email: "+ui.Ansi.Reset+"%s\r\n", email)
-	io.Printf(ui.Ansi.WhiteHi+"Terminal Width: "+ui.Ansi.Reset+"%s\r\n", userDetails["terminal_width"])
-	io.Printf(ui.Ansi.WhiteHi+"Terminal Height: "+ui.Ansi.Reset+"%s\r\n", userDetails["terminal_height"])
+	io.Print("\r\n\r\n" + ui.Ansi.Cyan + " Account Summary:" + ui.Ansi.Reset + "\r\n")
+	io.Printf(ui.Ansi.WhiteHi+" Username: "+ui.Ansi.Reset+"%s\r\n", username)
+	io.Printf(ui.Ansi.WhiteHi+" Password: "+ui.Ansi.Reset+"%s\r\n", strings.Repeat("*", len(password)))
+	io.Printf(ui.Ansi.WhiteHi+" Email: "+ui.Ansi.Reset+"%s\r\n", email)
+	io.Printf(ui.Ansi.WhiteHi+" Terminal Width: "+ui.Ansi.Reset+"%s\r\n", userDetails["terminal_width"])
+	io.Printf(ui.Ansi.WhiteHi+" Terminal Height: "+ui.Ansi.Reset+"%s\r\n", userDetails["terminal_height"])
 	for fieldName, value := range userDetails {
 		if fieldName != "terminal_width" && fieldName != "terminal_height" {
 			io.Printf(ui.Ansi.WhiteHi+"%s: "+ui.Ansi.Reset+"%s\r\n", fieldName, value)
@@ -653,14 +635,14 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 	var confirm string
 	for {
 		var err error
-		confirm, err = ui.PromptSimple(io, "Create account with this info? (Y/N): ", 1, ui.Ansi.Yellow, ui.Ansi.White, ui.Ansi.BgCyan)
+		confirm, err = ui.PromptSimple(io, "Create account with this info? (Y/N): ", 1, ui.Ansi.Yellow, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
 		if err != nil {
 			if err.Error() == "ESC_PRESSED" {
 				if ui.HandleEscQuit(io) {
 					logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "registration cancelled by user")
 					return nil, fmt.Errorf("registration cancelled")
 				}
-				io.Print("\r\n")
+				ui.ShowErrorAndClearPrompt(io, "Registration cancelled.")
 				continue
 			}
 			return nil, err
@@ -673,7 +655,7 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 			logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "registration cancelled by user")
 			return nil, fmt.Errorf("registration cancelled")
 		} else {
-			ui.ShowTimedErrorSimple(io, "Please enter Y or N.")
+			ui.ShowErrorAndClearPrompt(io, "Please enter Y or N.")
 			continue
 		}
 	}
