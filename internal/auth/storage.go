@@ -12,6 +12,8 @@ type Storage interface {
 	// Returns ErrUserExists when the username already exists.
 	CreateUser(params CreateUserParams) (*UserRecord, error)
 
+	// GetUserByEmail fetches a user by their canonical email address (case insensitive).
+	GetUserByEmail(email string) (*UserRecord, error)
 	// GetUserByUsername fetches a user by their canonical username (case insensitive).
 	GetUserByUsername(username string) (*UserRecord, error)
 
@@ -45,6 +47,9 @@ var (
 	// ErrUserExists is returned when attempting to create a duplicate username.
 	ErrUserExists = errors.New("auth: user already exists")
 
+	// ErrEmailExists is returned when attempting to create a user with an email that already exists.
+	ErrEmailExists = errors.New("auth: email already exists")
+
 	// ErrUserNotFound indicates that the requested user does not exist.
 	ErrUserNotFound = errors.New("auth: user not found")
 
@@ -59,6 +64,9 @@ type CreateUserParams struct {
 	SecurityLevel int
 	Email         string
 	CreatedAt     time.Time
+	FirstName     string
+	LastName      string
+	Location      string
 }
 
 // PasswordDigest holds password hash metadata.

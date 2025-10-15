@@ -416,7 +416,7 @@ func (s *SQLiteDB) SetConfig(section, subsection, key, value, valueType, modifie
 // GetAllUsers retrieves all user records
 func (s *SQLiteDB) GetAllUsers() ([]UserRecord, error) {
 	rows, err := s.db.Query(`
-		SELECT id, username, first_name, last_name, password_hash, password_salt, password_algo, password_updated_at, failed_attempts, locked_until, security_level, created_date, last_login, email, country, locations
+		SELECT id, username, first_name, last_name, password_hash, password_salt, password_algo, password_updated_at, failed_attempts, locked_until, security_level, created_date, last_login, email, locations
 		FROM users
 		ORDER BY username`)
 	if err != nil {
@@ -442,7 +442,6 @@ func (s *SQLiteDB) GetAllUsers() ([]UserRecord, error) {
 			&user.CreatedDate,
 			&user.LastLogin,
 			&user.Email,
-			&user.Country,
 			&user.Locations,
 		)
 		if err != nil {

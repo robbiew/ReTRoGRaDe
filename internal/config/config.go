@@ -221,8 +221,10 @@ func mapValueToConfig(cfg *Config, v database.ConfigValue) {
 			cfg.Configuration.NewUsers.AllowNew = parseBoolValue(value)
 		case key == "Ask_Location":
 			cfg.Configuration.NewUsers.AskLocation = parseBoolValue(value)
-		case key == "Ask_Real_Name":
-			cfg.Configuration.NewUsers.AskRealName = parseBoolValue(value)
+		case key == "Ask_First_Name":
+			cfg.Configuration.NewUsers.AskFirstName = parseBoolValue(value)
+		case key == "Ask_Last_Name":
+			cfg.Configuration.NewUsers.AskLastName = parseBoolValue(value)
 		case key == "RegistrationFormEnabledFields":
 			cfg.Configuration.NewUsers.RegistrationFormEnabledFields = parseListValue(value)
 		case key == "SysopQuestionEnabled":
@@ -413,7 +415,8 @@ func configToValues(cfg *Config) []database.ConfigValue {
 	values = append(values,
 		database.ConfigValue{Section: "Configuration.New_Users", Key: "Allow_New", Value: formatBoolValue(cfg.Configuration.NewUsers.AllowNew), ValueType: "bool"},
 		database.ConfigValue{Section: "Configuration.New_Users", Key: "Ask_Location", Value: formatBoolValue(cfg.Configuration.NewUsers.AskLocation), ValueType: "bool"},
-		database.ConfigValue{Section: "Configuration.New_Users", Key: "Ask_Real_Name", Value: formatBoolValue(cfg.Configuration.NewUsers.AskRealName), ValueType: "bool"},
+		database.ConfigValue{Section: "Configuration.New_Users", Key: "Ask_First_Name", Value: formatBoolValue(cfg.Configuration.NewUsers.AskFirstName), ValueType: "bool"},
+		database.ConfigValue{Section: "Configuration.New_Users", Key: "Ask_Last_Name", Value: formatBoolValue(cfg.Configuration.NewUsers.AskLastName), ValueType: "bool"},
 		database.ConfigValue{Section: "Configuration.New_Users", Key: "RegistrationFormEnabledFields", Value: formatListValue(cfg.Configuration.NewUsers.RegistrationFormEnabledFields), ValueType: "list"},
 		database.ConfigValue{Section: "Configuration.New_Users", Key: "SysopQuestionEnabled", Value: formatBoolValue(cfg.Configuration.NewUsers.SysopQuestionEnabled), ValueType: "bool"},
 	)

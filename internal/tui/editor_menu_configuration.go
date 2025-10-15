@@ -292,21 +292,56 @@ func configurationMenu(cfg *config.Config) MenuCategory {
 						},
 					},
 					{
-						ID:       "ask-real-name",
-						Label:    "Ask Real Name",
+						ID:       "ask-first-name",
+						Label:    "Ask First Name",
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
-							ID:        "config.new_users.ask_real_name",
-							Label:     "Ask Real Name",
+							ID:        "config.new_users.ask_first_name",
+							Label:     "Ask First Name",
 							ValueType: BoolValue,
 							Field: ConfigField{
-								GetValue: func() interface{} { return cfg.Configuration.NewUsers.AskRealName },
+								GetValue: func() interface{} { return cfg.Configuration.NewUsers.AskFirstName },
 								SetValue: func(v interface{}) error {
-									cfg.Configuration.NewUsers.AskRealName = v.(bool)
+									cfg.Configuration.NewUsers.AskFirstName = v.(bool)
 									return nil
 								},
 							},
-							HelpText: "Ask for real name during registration",
+							HelpText: "Ask for first name during registration",
+						},
+					},
+					{
+						ID:       "ask-last-name",
+						Label:    "Ask Last Name",
+						ItemType: EditableField,
+						EditableItem: &MenuItem{
+							ID:        "config.new_users.ask_last_name",
+							Label:     "Ask Last Name",
+							ValueType: BoolValue,
+							Field: ConfigField{
+								GetValue: func() interface{} { return cfg.Configuration.NewUsers.AskLastName },
+								SetValue: func(v interface{}) error {
+									cfg.Configuration.NewUsers.AskLastName = v.(bool)
+									return nil
+								},
+							},
+							HelpText: "Ask for last name during registration",
+						},
+					},
+					{
+						ID:       "ask-email",
+						Label:    "Ask Email",
+						ItemType: EditableField,
+						EditableItem: &MenuItem{
+							ID:        "config.new_users.ask_email",
+							Label:     "Ask Email",
+							ValueType: BoolValue,
+							Field: ConfigField{GetValue: func() interface{} { return cfg.Configuration.NewUsers.AskEmail },
+								SetValue: func(v interface{}) error {
+									cfg.Configuration.NewUsers.AskEmail = v.(bool)
+									return nil
+								},
+							},
+							HelpText: "Ask for email during registration",
 						},
 					},
 					{

@@ -64,18 +64,29 @@ func CreateUser(username, password, email string, securityLevel int, userDetails
 		UpdatedAt: time.Now().UTC(),
 	}
 
+	// Extract user details for direct storage in users table
+	firstName := userDetails["first_name"]
+	lastName := userDetails["last_name"]
+	location := userDetails["locations"]
+
 	params := CreateUserParams{
 		Username:      username,
 		Password:      digest,
 		SecurityLevel: securityLevel,
 		Email:         email,
 		CreatedAt:     time.Now().UTC(),
+		FirstName:     firstName,
+		LastName:      lastName,
+		Location:      location,
 	}
 
 	userRecord, err := getStorage().CreateUser(params)
 	if err != nil {
 		if errors.Is(err, ErrUserExists) {
 			return fmt.Errorf("user %s already exists", username)
+		}
+		if errors.Is(err, ErrEmailExists) {
+			return fmt.Errorf("email %s already exists", email)
 		}
 		return fmt.Errorf("could not create user: %w", err)
 	}
@@ -150,6 +161,12 @@ func UserExists(username string) bool {
 	return err == nil
 }
 
+// EmailExists checks if an email address is already registered
+func EmailExists(email string) bool {
+	_, err := getStorage().GetUserByEmail(email)
+	return err == nil
+}
+
 // LoginPrompt handles the login process for telnet clients
 func LoginPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *config.Config) (*UserRecord, error) {
 	io.ClearScreen()
@@ -193,7 +210,7 @@ func LoginPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *config
 				continue
 			} else if strings.EqualFold(username, "NEW") {
 				// Handle new user registration
-				userRecord, err := RegisterPrompt(io, session, cfg)
+				userRecord, err := RegisterPrompt(io, session, cfg, "")
 				if err != nil {
 					// Registration failed or cancelled, restart login prompt
 					io.ClearScreen()
@@ -230,7 +247,7 @@ func LoginPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *config
 
 				if createAccount {
 					// Start registration process
-					userRecord, err := RegisterPrompt(io, session, cfg)
+					userRecord, err := RegisterPrompt(io, session, cfg, username)
 					if err != nil {
 						// Registration failed or cancelled, restart login prompt
 						io.ClearScreen()
@@ -319,7 +336,7 @@ func LoginPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *config
 }
 
 // RegisterPrompt handles new user registration
-func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *config.Config) (*UserRecord, error) {
+func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *config.Config, initialUsername string) (*UserRecord, error) {
 	io.ClearScreen()
 
 	// Display new user art
@@ -337,7 +354,7 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 	var username string
 	for {
 		var err error
-		username, err = ui.PromptSimple(io, " Desired Username: ", 20, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan, "")
+		username, err = ui.PromptSimple(io, " Desired Username: ", 20, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan, initialUsername)
 		if err != nil {
 			if err.Error() == "ESC_PRESSED" {
 				if ui.HandleEscQuit(io) {
@@ -461,6 +478,10 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 		if email == "" {
 			ui.ShowErrorAndClearMultiplePrompts(io, " Email is required.", 2)
 			continue
+		} else if EmailExists(email) {
+			logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "email already exists")
+			ui.ShowErrorAndClearMultiplePrompts(io, " Email address already exists.", 2)
+			continue
 		} else {
 			break
 		}
@@ -570,15 +591,16 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 
 				// Customize prompt based on field name
 				switch strings.ToLower(fieldName) {
-				case "firstname":
-					promptText = " First Name: "
+				case "first name":
+					io.Print(ui.Ansi.BlackHi + "\r\n Real Names are required for some message networks.\r\n" + ui.Ansi.Reset)
+					promptText = "       First Name: "
 					maxLength = 30
-				case "lastname":
-					promptText = "  Last Name: "
+				case "last name":
+					promptText = "        Last Name: "
 					maxLength = 30
 				case "location":
 					io.Print(ui.Ansi.BlackHi + "\r\n Location can be used to show your city/state or other info.\r\n" + ui.Ansi.Reset)
-					promptText = "          Location: "
+					promptText = "         Location: "
 					maxLength = 30
 				default:
 					promptText = fieldName + ": "
@@ -603,7 +625,7 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 							return nil, err
 						}
 
-						if value == "" {
+						if strings.TrimSpace(value) == "" {
 							ui.ShowErrorAndClearPrompt(io, fieldName+" is required.")
 							continue
 						} else {
@@ -628,22 +650,57 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 				}
 
 				if value != "" {
-					userDetails[fieldName] = value
+					// Map field names to match database column names for consistency
+					var key string
+					switch strings.ToLower(fieldName) {
+					case "firstname", "first name":
+						key = "first_name"
+					case "lastname", "last name":
+						key = "last_name"
+					case "location":
+						key = "locations"
+					default:
+						key = fieldName
+					}
+					userDetails[key] = value
 				}
 			}
 		}
 	}
 
+	// Debug logging: show userDetails map contents
+	fmt.Printf("DEBUG: userDetails map contents:\n")
+	for key, value := range userDetails {
+		fmt.Printf("  %s = '%s'\n", key, value)
+	}
+
 	// Display summary and confirm
 	io.Print("\r\n\r\n" + ui.Ansi.Cyan + " Account Summary:" + ui.Ansi.Reset + "\r\n")
-	io.Printf(ui.Ansi.WhiteHi+" Username: "+ui.Ansi.Reset+"%s\r\n", username)
-	io.Printf(ui.Ansi.WhiteHi+" Password: "+ui.Ansi.Reset+"%s\r\n", strings.Repeat("*", len(password)))
-	io.Printf(ui.Ansi.WhiteHi+" Email: "+ui.Ansi.Reset+"%s\r\n", email)
-	io.Printf(ui.Ansi.WhiteHi+" Terminal Width: "+ui.Ansi.Reset+"%s\r\n", userDetails["terminal_width"])
-	io.Printf(ui.Ansi.WhiteHi+" Terminal Height: "+ui.Ansi.Reset+"%s\r\n", userDetails["terminal_height"])
+
+	// Use consistent right-aligned labels (12 characters wide before colon)
+	io.Printf(ui.Ansi.WhiteHi+"%12s: "+ui.Ansi.Reset+"%s\r\n", "Username", username)
+	io.Printf(ui.Ansi.WhiteHi+"%12s: "+ui.Ansi.Reset+"%s\r\n", "Email", email)
+
+	// Only show fields that exist
+	if firstName, ok := userDetails["first_name"]; ok && firstName != "" {
+		io.Printf(ui.Ansi.WhiteHi+"%12s: "+ui.Ansi.Reset+"%s\r\n", "First Name", firstName)
+	}
+	if lastName, ok := userDetails["last_name"]; ok && lastName != "" {
+		io.Printf(ui.Ansi.WhiteHi+"%12s: "+ui.Ansi.Reset+"%s\r\n", "Last Name", lastName)
+	}
+	if location, ok := userDetails["locations"]; ok && location != "" {
+		io.Printf(ui.Ansi.WhiteHi+"%12s: "+ui.Ansi.Reset+"%s\r\n", "Location", location)
+	}
+
+	io.Printf(ui.Ansi.WhiteHi+"%12s: "+ui.Ansi.Reset+"%s\r\n", "Term Width", userDetails["terminal_width"])
+	io.Printf(ui.Ansi.WhiteHi+"%12s: "+ui.Ansi.Reset+"%s\r\n", "Term Height", userDetails["terminal_height"])
+
+	// Show any other custom fields (excluding the ones we already displayed)
 	for fieldName, value := range userDetails {
-		if fieldName != "terminal_width" && fieldName != "terminal_height" {
-			io.Printf(ui.Ansi.WhiteHi+"%s: "+ui.Ansi.Reset+"%s\r\n", fieldName, value)
+		if fieldName != "terminal_width" && fieldName != "terminal_height" &&
+			fieldName != "first_name" && fieldName != "last_name" && fieldName != "locations" &&
+			value != "" {
+			io.Printf(ui.Ansi.WhiteHi+"%12s: "+ui.Ansi.Reset+"%s\r\n", fieldName, value)
 		}
 	}
 	io.Print("\r\n")

@@ -1029,7 +1029,7 @@ func (m Model) handleUserManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 								return nil
 							},
 						},
-						HelpText: "User's first name (optional)",
+						HelpText: "User's first name",
 					},
 				},
 				{
@@ -1057,7 +1057,7 @@ func (m Model) handleUserManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 								return nil
 							},
 						},
-						HelpText: "User's last name (optional)",
+						HelpText: "User's last name",
 					},
 				},
 				{
@@ -1111,34 +1111,6 @@ func (m Model) handleUserManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 							},
 						},
 						HelpText: "User's email address (optional)",
-					},
-				},
-				{
-					ID:       "user-country",
-					Label:    "Country",
-					ItemType: EditableField,
-					EditableItem: &MenuItem{
-						ID:        "user-country",
-						Label:     "Country",
-						ValueType: StringValue,
-						Field: ConfigField{
-							GetValue: func() interface{} {
-								if user.user.Country.Valid {
-									return user.user.Country.String
-								}
-								return ""
-							},
-							SetValue: func(v interface{}) error {
-								s := v.(string)
-								if s == "" {
-									user.user.Country = sql.NullString{Valid: false}
-								} else {
-									user.user.Country = sql.NullString{String: s, Valid: true}
-								}
-								return nil
-							},
-						},
-						HelpText: "User's country (optional)",
 					},
 				},
 				{

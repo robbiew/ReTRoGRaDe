@@ -66,7 +66,9 @@ type FormLayoutConfig struct {
 type NewUsersConfig struct {
 	AllowNew                      bool
 	AskLocation                   bool
-	AskRealName                   bool
+	AskFirstName                  bool
+	AskLastName                   bool
+	AskEmail                      bool
 	RegistrationFormEnabledFields []string
 	RegistrationFields            map[string]RegistrationFieldConfig
 	SysopQuestionEnabled          bool

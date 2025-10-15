@@ -67,7 +67,6 @@ Primary user account table with authentication and profile data.
 - `created_date` (TEXT NOT NULL)
 - `last_login` (TEXT)
 - `email` (TEXT UNIQUE)
-- `country` (TEXT)
 - `locations` (TEXT)
 
 **Indexes:**

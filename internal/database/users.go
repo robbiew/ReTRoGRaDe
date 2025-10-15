@@ -59,7 +59,6 @@ type UserRecord struct {
 	CreatedDate       string
 	LastLogin         sql.NullString
 	Email             sql.NullString
-	Country           sql.NullString
 	Locations         sql.NullString
 }
 
@@ -140,7 +139,6 @@ func (s *SQLiteDB) InitializeUserSchema() error {
 			created_date TEXT NOT NULL,
 			last_login TEXT,
 			email TEXT UNIQUE,
-			country TEXT,
 			locations TEXT
 		)`,
 		`CREATE TABLE IF NOT EXISTS bbs_sessions (
@@ -234,7 +232,6 @@ func (s *SQLiteDB) InitializeUserSchema() error {
 		{"users", "password_updated_at", "TEXT"},
 		{"users", "failed_attempts", "INTEGER NOT NULL DEFAULT 0"},
 		{"users", "locked_until", "TEXT"},
-		{"users", "country", "TEXT"},
 		{"users", "locations", "TEXT"},
 	}
 
@@ -353,9 +350,9 @@ func createUserExec(ex execer, user *UserRecord) (int64, error) {
 	result, err := ex.Exec(`
 		INSERT INTO users (
 			username, first_name, last_name, password_hash, password_salt, password_algo, password_updated_at,
-			failed_attempts, locked_until, security_level, created_date, last_login, email, country, locations
+			failed_attempts, locked_until, security_level, created_date, last_login, email, locations
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		user.Username,
 		user.FirstName,
 		user.LastName,
@@ -369,7 +366,6 @@ func createUserExec(ex execer, user *UserRecord) (int64, error) {
 		user.CreatedDate,
 		user.LastLogin,
 		user.Email,
-		user.Country,
 		user.Locations,
 	)
 	if err != nil {
@@ -387,7 +383,7 @@ func createUserExec(ex execer, user *UserRecord) (int64, error) {
 func updateUserExec(ex execer, user *UserRecord) error {
 	_, err := ex.Exec(`
 		UPDATE users
-		SET password_hash = ?, password_salt = ?, password_algo = ?, password_updated_at = ?, failed_attempts = ?, locked_until = ?, security_level = ?, created_date = ?, last_login = ?, email = ?, country = ?, locations = ?
+		SET password_hash = ?, password_salt = ?, password_algo = ?, password_updated_at = ?, failed_attempts = ?, locked_until = ?, security_level = ?, created_date = ?, last_login = ?, email = ?, first_name = ?, last_name = ?, locations = ?
 		WHERE id = ?`,
 		user.PasswordHash,
 		user.PasswordSalt,
@@ -399,9 +395,10 @@ func updateUserExec(ex execer, user *UserRecord) error {
 		user.CreatedDate,
 		user.LastLogin,
 		user.Email,
-		user.Country,
 		user.Locations,
 		user.ID,
+		user.FirstName,
+		user.LastName,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
@@ -437,7 +434,7 @@ func deleteUserExec(ex execer, userID int64) error {
 func (s *SQLiteDB) GetUserByUsername(username string) (*UserRecord, error) {
 	fmt.Printf("DEBUG: GetUserByUsername called with username: %s\n", username)
 	row := s.db.QueryRow(`
-		SELECT id, username, first_name, last_name, password_hash, password_salt, password_algo, password_updated_at, failed_attempts, locked_until, security_level, created_date, last_login, email, country, locations
+		SELECT id, username, first_name, last_name, password_hash, password_salt, password_algo, password_updated_at, failed_attempts, locked_until, security_level, created_date, last_login, email, locations
 		FROM users
 		WHERE LOWER(username) = LOWER(?)`,
 		username,
@@ -459,7 +456,6 @@ func (s *SQLiteDB) GetUserByUsername(username string) (*UserRecord, error) {
 		&user.CreatedDate,
 		&user.LastLogin,
 		&user.Email,
-		&user.Country,
 		&user.Locations,
 	); err != nil {
 		fmt.Printf("DEBUG: GetUserByUsername scan error: %v\n", err)
@@ -474,10 +470,50 @@ func (s *SQLiteDB) GetUserByUsername(username string) (*UserRecord, error) {
 	return &user, nil
 }
 
+// GetUserByEmail retrieves a user row by email address (case-insensitive).
+func (s *SQLiteDB) GetUserByEmail(email string) (*UserRecord, error) {
+	email = strings.TrimSpace(email)
+	if email == "" {
+		return nil, fmt.Errorf("email is required")
+	}
+	row := s.db.QueryRow(`
+		SELECT id, username, first_name, last_name, password_hash, password_salt, password_algo, password_updated_at, failed_attempts, locked_until, security_level, created_date, last_login, email, locations
+		FROM users
+		WHERE LOWER(email) = LOWER(?)`,
+		email,
+	)
+
+	var user UserRecord
+	if err := row.Scan(
+		&user.ID,
+		&user.Username,
+		&user.FirstName,
+		&user.LastName,
+		&user.PasswordHash,
+		&user.PasswordSalt,
+		&user.PasswordAlgo,
+		&user.PasswordUpdatedAt,
+		&user.FailedAttempts,
+		&user.LockedUntil,
+		&user.SecurityLevel,
+		&user.CreatedDate,
+		&user.LastLogin,
+		&user.Email,
+		&user.Locations,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	return &user, nil
+}
+
 // GetUserByID retrieves a user row by ID.
 func (s *SQLiteDB) GetUserByID(userID int64) (*UserRecord, error) {
 	row := s.db.QueryRow(`
-		SELECT id, username, first_name, last_name, password_hash, password_salt, password_algo, password_updated_at, failed_attempts, locked_until, security_level, created_date, last_login, email, country, locations
+		SELECT id, username, first_name, last_name, password_hash, password_salt, password_algo, password_updated_at, failed_attempts, locked_until, security_level, created_date, last_login, email, locations
 		FROM users
 		WHERE id = ?`,
 		userID,
@@ -499,7 +535,6 @@ func (s *SQLiteDB) GetUserByID(userID int64) (*UserRecord, error) {
 		&user.CreatedDate,
 		&user.LastLogin,
 		&user.Email,
-		&user.Country,
 		&user.Locations,
 	); err != nil {
 		if err == sql.ErrNoRows {
@@ -515,7 +550,7 @@ func (s *SQLiteDB) GetUserByID(userID int64) (*UserRecord, error) {
 func (s *SQLiteDB) UpdateUser(user *UserRecord) error {
 	_, err := s.db.Exec(`
 		UPDATE users
-		SET first_name = ?, last_name = ?, password_hash = ?, password_salt = ?, password_algo = ?, password_updated_at = ?, failed_attempts = ?, locked_until = ?, security_level = ?, created_date = ?, last_login = ?, email = ?, country = ?, locations = ?
+		SET first_name = ?, last_name = ?, password_hash = ?, password_salt = ?, password_algo = ?, password_updated_at = ?, failed_attempts = ?, locked_until = ?, security_level = ?, created_date = ?, last_login = ?, email = ?, locations = ?
 		WHERE id = ?`,
 		user.FirstName,
 		user.LastName,
@@ -529,7 +564,6 @@ func (s *SQLiteDB) UpdateUser(user *UserRecord) error {
 		user.CreatedDate,
 		user.LastLogin,
 		user.Email,
-		user.Country,
 		user.Locations,
 		user.ID,
 	)
@@ -723,13 +757,6 @@ func nullOrString(value sql.NullString) interface{} {
 func nullOrInt64(value sql.NullInt64) interface{} {
 	if value.Valid {
 		return value.Int64
-	}
-	return nil
-}
-
-func nullOrStringFromNullTime(value sql.NullTime) interface{} {
-	if value.Valid {
-		return value.Time.Format(sqliteTimeFormat)
 	}
 	return nil
 }

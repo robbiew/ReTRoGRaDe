@@ -70,11 +70,22 @@ func (s *sqliteStorage) CreateUser(params CreateUserParams) (*UserRecord, error)
 		Email:             database.NullString(strings.TrimSpace(params.Email)),
 		FailedAttempts:    0,
 		LockedUntil:       sql.NullString{},
+		FirstName:         database.NullString(strings.TrimSpace(params.FirstName)),
+		LastName:          database.NullString(strings.TrimSpace(params.LastName)),
+		Locations:         database.NullString(strings.TrimSpace(params.Location)),
 	}
 
 	id, err := s.db.CreateUser(&dbUser)
 	if err != nil {
-		if isUniqueConstraintError(err) {
+		// Check for unique constraint violations
+		errMsg := strings.ToLower(err.Error())
+		if strings.Contains(errMsg, "unique") {
+			if strings.Contains(errMsg, "username") {
+				return nil, ErrUserExists
+			} else if strings.Contains(errMsg, "email") {
+				return nil, ErrEmailExists
+			}
+			// Fallback to generic user exists error
 			return nil, ErrUserExists
 		}
 		return nil, fmt.Errorf("auth: create user failed: %w", err)
@@ -96,6 +107,28 @@ func (s *sqliteStorage) GetUserByUsername(username string) (*UserRecord, error) 
 	}
 
 	dbUser, err := s.db.GetUserByUsername(username)
+	if err != nil {
+		return nil, fmt.Errorf("auth: lookup user failed: %w", err)
+	}
+	if dbUser == nil {
+		return nil, ErrUserNotFound
+	}
+
+	user, err := toDomainUserRecord(dbUser)
+	if err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
+func (s *sqliteStorage) GetUserByEmail(email string) (*UserRecord, error) {
+	email = strings.TrimSpace(email)
+	if email == "" {
+		return nil, fmt.Errorf("auth: email is required")
+	}
+
+	dbUser, err := s.db.GetUserByEmail(email)
 	if err != nil {
 		return nil, fmt.Errorf("auth: lookup user failed: %w", err)
 	}
@@ -349,13 +382,6 @@ func parseTimestampString(value string) (time.Time, bool) {
 		}
 	}
 	return time.Time{}, false
-}
-
-func isUniqueConstraintError(err error) bool {
-	if err == nil {
-		return false
-	}
-	return strings.Contains(strings.ToLower(err.Error()), "unique")
 }
 
 // ErrNotFound returns a typed error for missing entities.

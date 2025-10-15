@@ -38,12 +38,15 @@ func GetDefaultConfig() *Config {
 	// Configuration.NewUsers
 	cfg.Configuration.NewUsers.AllowNew = true
 	cfg.Configuration.NewUsers.AskLocation = true
-	cfg.Configuration.NewUsers.AskRealName = true
+	cfg.Configuration.NewUsers.AskFirstName = true
+	cfg.Configuration.NewUsers.AskLastName = true
+	cfg.Configuration.NewUsers.AskEmail = true
 	cfg.Configuration.NewUsers.RegistrationFormEnabledFields = []string{
 		"Username",
 		"Password",
 		"Email",
-		"RealName",
+		"First Name",
+		"Last Name",
 		"Location",
 	}
 	cfg.Configuration.NewUsers.RegistrationFields = map[string]RegistrationFieldConfig{
@@ -51,7 +54,11 @@ func GetDefaultConfig() *Config {
 			Enabled:  true,
 			Required: true,
 		},
-		"RealName": {
+		"First Name": {
+			Enabled:  true,
+			Required: true,
+		},
+		"Last Name": {
 			Enabled:  true,
 			Required: true,
 		},

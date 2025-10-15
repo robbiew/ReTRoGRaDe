@@ -72,6 +72,7 @@ type Database interface {
 	// User operations
 	CreateUser(user *UserRecord) (int64, error)
 	GetUserByUsername(username string) (*UserRecord, error)
+	GetUserByEmail(email string) (*UserRecord, error)
 	GetUserByID(userID int64) (*UserRecord, error)
 	GetAllUsers() ([]UserRecord, error)
 	UpdateUser(user *UserRecord) error
