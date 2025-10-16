@@ -43,4 +43,6 @@ temp/
 
 .roo/
 
+# binaires for testing
 server
+retrograde-test
