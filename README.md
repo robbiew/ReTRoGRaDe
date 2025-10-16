@@ -18,25 +18,26 @@ As a hobbyist Go developer, I'm leveraging AI tools like Roo Code, Codex and Cla
 
 ## Feature Status
 
-| Feature | Progress | Notes |
-|---------|----------|-------|
-| Telnet Server | 100% | Completed |
-| Security System | 100% | Completed |
-| User Authentication | 100% | Completed |
-| SQLite Database | 100% | Completed |
-| TUI Configuration Editor | 100% | Completed |
-| Guided First-Time Setup | 100% | Completed |
-| ANSI Art Support | 100% | Completed |
-| Session Management | 100% | Completed |
-| Node Management | 100% | Completed |
-| Login UI | 50% | Needs layout work |
-| Event System | 0% | e.g. Logon Event List -> main menu |
-| Menu Construction System | 25% | Renegade-style system (TUI) for constructing menus and prompts |
-| Message Base Configuration & UI | 0% | JAM format: local, echomail (FTN), netmail, User-to-User |
-| Message Editor (basic) | 0% | Simple FSE |
-| Message Reader (basic) | 0% | Simple FSR |
-| Native Door Support | 0% | Linux native door launcher (menu action) |
-| DOS Door Support | 0% | Dosemu2 launch door (menu action) |
+| Feature                         | Progress | Notes                                                                              |
+| ------------------------------- | -------- | ---------------------------------------------------------------------------------- |
+| Telnet Server                   | 100%     | Completed                                                                          |
+| Security System                 | 100%     | Completed                                                                          |
+| User Authentication             | 100%     | Completed                                                                          |
+| SQLite Database                 | 100%     | Completed                                                                          |
+| TUI Configuration Editor        | 100%     | Completed                                                                          |
+| Guided First-Time Setup         | 100%     | Completed                                                                          |
+| ANSI Art Support                | 100%     | Completed                                                                          |
+| Session Management              | 100%     | Completed                                                                          |
+| Node Management                 | 100%     | Completed                                                                          |
+| Login UI                        | 100%     | Needs small tweaks                                                                 |
+| Event System                    | 0%       | e.g. Logon Event List -> main menu                                                 |
+| Menu Construction System        | 25%      | Renegade-style system (TUI) for constructing menus and prompts. Needs command work |
+| Message Base Configuration & UI | 0%       | JAM format: local, echomail (FTN), netmail, User-to-User                           |
+| Message Editor (basic)          | 0%       | Simple FSE                                                                         |
+| Message Reader (basic)          | 0%       | Simple FSR                                                                         |
+| Native Door Support             | 0%       | Linux native door launcher (menu action)                                           |
+| DOS Door Support                | 0%       | Dosemu2 launch door (menu action)                                                  |
+| MCI Codes                       | 0%       |                                                                                    |
 
 ## Quick Start
 
