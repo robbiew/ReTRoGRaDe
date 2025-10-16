@@ -315,10 +315,6 @@ func runServer() {
 			os.Exit(1)
 		}
 
-		// Exit after setup with instructions
-		fmt.Println("\nRetrograde BBS successfully installed... Next steps:")
-		fmt.Println("- \"retrograde config\" to customize, or")
-		fmt.Printf("- \"retrograde\" to start server on port %d\n", 2323) // default port
 		os.Exit(0)
 	}
 
@@ -545,7 +541,7 @@ func negotiateTelnetOptions(writer *bufio.Writer) {
 	writer.Flush()
 
 	// Give client time to process negotiations
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(300 * time.Millisecond)
 
 	fmt.Println("Sent telnet option negotiations")
 }
