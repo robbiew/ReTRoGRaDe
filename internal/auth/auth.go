@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,18 @@ import (
 	"github.com/robbiew/retrograde/internal/telnet"
 	"github.com/robbiew/retrograde/internal/ui"
 )
+
+// FieldEdit represents an editable field in the confirmation screen
+type FieldEdit struct {
+	Key        string
+	Label      string
+	Value      string
+	DataType   string // "username", "email", "password", "text", "number"
+	MapKey     string // Key in userDetails map (empty for username/email/password)
+	Required   bool
+	MaxLength  int
+	Validation func(string) error
+}
 
 const userTimestampLayout = "2006-01-02 15:04:05"
 
@@ -580,7 +593,17 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 
 	// Check for additional fields from RegistrationFields config
 	if cfg.Configuration.NewUsers.RegistrationFields != nil {
-		for fieldName, fieldConfig := range cfg.Configuration.NewUsers.RegistrationFields {
+		// Get field names and sort them for consistent ordering
+		fieldNames := make([]string, 0, len(cfg.Configuration.NewUsers.RegistrationFields))
+		for fieldName := range cfg.Configuration.NewUsers.RegistrationFields {
+			fieldNames = append(fieldNames, fieldName)
+		}
+
+		// Sort alphabetically to ensure consistent order (First Name before Last Name)
+		sort.Strings(fieldNames)
+
+		for _, fieldName := range fieldNames {
+			fieldConfig := cfg.Configuration.NewUsers.RegistrationFields[fieldName]
 			if fieldConfig.Enabled {
 				// Skip email since it's already prompted separately
 				if strings.ToLower(fieldName) == "email" {
@@ -675,69 +698,23 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 	}
 
 	// Display summary and confirm
-	io.Print("\r\n\r\n" + ui.Ansi.Cyan + " Account Summary:" + ui.Ansi.Reset + "\r\n")
-
-	// Use consistent right-aligned labels (12 characters wide before colon)
-	io.Printf(ui.Ansi.WhiteHi+"%12s: "+ui.Ansi.Reset+"%s\r\n", "Username", username)
-	io.Printf(ui.Ansi.WhiteHi+"%12s: "+ui.Ansi.Reset+"%s\r\n", "Email", email)
-
-	// Only show fields that exist
-	if firstName, ok := userDetails["first_name"]; ok && firstName != "" {
-		io.Printf(ui.Ansi.WhiteHi+"%12s: "+ui.Ansi.Reset+"%s\r\n", "First Name", firstName)
+	// Show interactive confirmation screen
+	confirmed, err := ShowAccountConfirmation(io, &username, &email, &password, userDetails, session, cfg, initialUsername)
+	if err != nil {
+		logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", err.Error())
+		return nil, err
 	}
-	if lastName, ok := userDetails["last_name"]; ok && lastName != "" {
-		io.Printf(ui.Ansi.WhiteHi+"%12s: "+ui.Ansi.Reset+"%s\r\n", "Last Name", lastName)
-	}
-	if location, ok := userDetails["locations"]; ok && location != "" {
-		io.Printf(ui.Ansi.WhiteHi+"%12s: "+ui.Ansi.Reset+"%s\r\n", "Location", location)
-	}
-
-	io.Printf(ui.Ansi.WhiteHi+"%12s: "+ui.Ansi.Reset+"%s\r\n", "Term Width", userDetails["terminal_width"])
-	io.Printf(ui.Ansi.WhiteHi+"%12s: "+ui.Ansi.Reset+"%s\r\n", "Term Height", userDetails["terminal_height"])
-
-	// Show any other custom fields (excluding the ones we already displayed)
-	for fieldName, value := range userDetails {
-		if fieldName != "terminal_width" && fieldName != "terminal_height" &&
-			fieldName != "first_name" && fieldName != "last_name" && fieldName != "locations" &&
-			value != "" {
-			io.Printf(ui.Ansi.WhiteHi+"%12s: "+ui.Ansi.Reset+"%s\r\n", fieldName, value)
-		}
-	}
-	io.Print("\r\n")
-
-	// Confirm creation
-	var confirm string
-	for {
-		var err error
-		confirm, err = ui.PromptSimple(io, "Create account with this info? (Y/N): ", 1, ui.Ansi.Yellow, ui.Ansi.WhiteHi, ui.Ansi.BgCyan, "")
-		if err != nil {
-			if err.Error() == "ESC_PRESSED" {
-				if ui.HandleEscQuit(io) {
-					logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "registration cancelled by user")
-					return nil, fmt.Errorf("registration cancelled")
-				}
-				ui.ShowErrorAndClearPrompt(io, "Registration cancelled.")
-				continue
-			}
-			return nil, err
-		}
-
-		// Case-insensitive comparison
-		if strings.EqualFold(confirm, "Y") {
-			break
-		} else if strings.EqualFold(confirm, "N") {
-			logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "registration cancelled by user")
-			return nil, fmt.Errorf("registration cancelled")
-		} else {
-			ui.ShowErrorAndClearPrompt(io, "Please enter Y or N.")
-			continue
-		}
+	if !confirmed {
+		logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "user cancelled at confirmation")
+		return nil, fmt.Errorf("registration cancelled")
 	}
 
 	// Create user account
-	err := CreateUser(username, password, email, config.SecurityLevelRegular, userDetails) // Default security level for regular users
+	err = CreateUser(username, password, email, config.SecurityLevelRegular, userDetails)
 	if err != nil {
-		logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", err.Error())
+		logging.LogEvent(session.NodeNumber, username, session.IPAddress, "REGISTER_FAILED", "could not create user")
+		io.Print(ui.Ansi.Red + "Something went wrong creating your account. Please contact the sysop." + ui.Ansi.Reset + "\r\n")
+		ui.Pause(io)
 		return nil, err
 	}
 
@@ -755,5 +732,274 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 	io.Printf(ui.Ansi.GreenHi+"\r\n\r\n Account created successfully. Welcome, %s!\r\n"+ui.Ansi.Reset, username)
 	ui.Pause(io)
 
+	// Show new user welcome screen
+	io.ClearScreen()
+	if err := ui.PrintAnsiArt(io, "welcome"); err != nil {
+		io.Print("\r\n Welcome to the BBS!\r\n\r\n")
+	}
+	ui.Pause(io)
+
 	return user, nil
+}
+
+// ShowAccountConfirmation displays an interactive account summary where users can edit fields
+func ShowAccountConfirmation(io *telnet.TelnetIO, username *string, email *string, password *string,
+	userDetails map[string]string, session *config.TelnetSession, cfg *config.Config,
+	initialUsername string) (bool, error) {
+
+	for {
+		io.ClearScreen()
+
+		// Display confirmation art
+		if err := ui.PrintAnsiArt(io, "confirm"); err != nil {
+			io.Print("\r\n Account Confirmation\r\n")
+		}
+
+		io.Print("\r\n")
+		io.Print(ui.Ansi.Cyan + " Review and edit your account information:\r\n\r\n" + ui.Ansi.Reset)
+
+		// Dynamically build field list based on what was collected
+		fields := []FieldEdit{}
+		keyLetters := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P"}
+		keyIndex := 0
+
+		// Always have username and email
+		fields = append(fields, FieldEdit{
+			Key:       keyLetters[keyIndex],
+			Label:     "Username",
+			Value:     *username,
+			DataType:  "username",
+			Required:  true,
+			MaxLength: 20,
+		})
+		keyIndex++
+
+		fields = append(fields, FieldEdit{
+			Key:       keyLetters[keyIndex],
+			Label:     "Email",
+			Value:     *email,
+			DataType:  "email",
+			Required:  true,
+			MaxLength: 30,
+		})
+		keyIndex++
+
+		// Dynamically add fields from userDetails (in a consistent order)
+		// First, add the standard fields in preferred order
+		standardFields := []struct {
+			mapKey string
+			label  string
+			maxLen int
+		}{
+			{"first_name", "First Name", 30},
+			{"last_name", "Last Name", 30},
+			{"locations", "Location", 30},
+			{"terminal_width", "Term Width", 3},
+			{"terminal_height", "Term Height", 3},
+		}
+
+		for _, sf := range standardFields {
+			if val, exists := userDetails[sf.mapKey]; exists {
+				dataType := "text"
+				if sf.mapKey == "terminal_width" || sf.mapKey == "terminal_height" {
+					dataType = "number"
+				}
+
+				fields = append(fields, FieldEdit{
+					Key:       keyLetters[keyIndex],
+					Label:     sf.label,
+					Value:     val,
+					DataType:  dataType,
+					MapKey:    sf.mapKey,
+					MaxLength: sf.maxLen,
+				})
+				keyIndex++
+			}
+		}
+
+		// Add any other custom fields that aren't in the standard list
+		for key, value := range userDetails {
+			// Skip if already added
+			isStandard := false
+			for _, sf := range standardFields {
+				if sf.mapKey == key {
+					isStandard = true
+					break
+				}
+			}
+			if !isStandard && value != "" {
+				fields = append(fields, FieldEdit{
+					Key:       keyLetters[keyIndex],
+					Label:     key,
+					Value:     value,
+					DataType:  "text",
+					MapKey:    key,
+					MaxLength: 50,
+				})
+				keyIndex++
+			}
+		}
+
+		// Display all fields
+		for _, field := range fields {
+			io.Printf(" "+ui.Ansi.YellowHi+"%s"+ui.Ansi.Reset+") "+ui.Ansi.WhiteHi+"%-13s: "+ui.Ansi.Reset+"%s\r\n",
+				field.Key, field.Label, field.Value)
+		}
+
+		io.Print("\r\n")
+		io.Print(" " + ui.Ansi.GreenHi + "S" + ui.Ansi.Reset + ") Save and Create Account\r\n")
+		io.Print(" " + ui.Ansi.RedHi + "Q" + ui.Ansi.Reset + ") Cancel Registration\r\n")
+		io.Print("\r\n")
+		io.Print(ui.Ansi.Cyan + " Select an option to edit, or S to save: " + ui.Ansi.Reset)
+
+		// Get user choice
+		key, err := io.GetKeyPressUpper()
+		if err != nil {
+			return false, err
+		}
+
+		io.Printf("%c\r\n\r\n", key)
+
+		switch key {
+		case 'S':
+			// Confirm save
+			return true, nil
+
+		case 'Q':
+			// Cancel
+			io.Print(ui.Ansi.YellowHi + " Are you sure you want to cancel? (Y/N): " + ui.Ansi.Reset)
+			confirmKey, err := io.GetKeyPressUpper()
+			if err != nil {
+				return false, err
+			}
+			if confirmKey == 'Y' {
+				return false, fmt.Errorf("registration cancelled")
+			}
+			continue
+
+		default:
+			// Find the selected field
+			var selectedField *FieldEdit
+			for i := range fields {
+				if fields[i].Key == string(key) {
+					selectedField = &fields[i]
+					break
+				}
+			}
+
+			if selectedField == nil {
+				// Invalid key, just redisplay
+				continue
+			}
+
+			// Edit the selected field
+			io.Printf(ui.Ansi.Cyan+" Edit %s:\r\n\r\n"+ui.Ansi.Reset, selectedField.Label)
+
+			var newValue string
+			var promptErr error
+
+			// Use appropriate prompt based on field type
+			if selectedField.DataType == "password" {
+				newValue, promptErr = ui.PromptPasswordSimple(io, " "+selectedField.Label+": ",
+					selectedField.MaxLength, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan)
+			} else {
+				newValue, promptErr = ui.PromptSimple(io, " "+selectedField.Label+": ",
+					selectedField.MaxLength, ui.Ansi.Cyan, ui.Ansi.WhiteHi, ui.Ansi.BgCyan, selectedField.Value)
+			}
+
+			if promptErr != nil {
+				if promptErr.Error() == "ESC_PRESSED" {
+					continue
+				}
+				return false, promptErr
+			}
+
+			// Validate the new value based on field type
+			valid := true
+			errorMsg := ""
+
+			switch selectedField.DataType {
+			case "username":
+				usernameRegex := regexp.MustCompile(`^[a-zA-Z0-9 ]+$`)
+				if newValue == "" {
+					valid = false
+					errorMsg = "Username cannot be empty."
+				} else if len(newValue) < 3 {
+					valid = false
+					errorMsg = "Username must be at least 3 characters."
+				} else if IsReservedUsername(newValue) {
+					valid = false
+					errorMsg = "Username is reserved."
+				} else if UserExists(newValue) && newValue != *username {
+					valid = false
+					errorMsg = "Username already exists."
+				} else if !usernameRegex.MatchString(newValue) {
+					valid = false
+					errorMsg = "Username can only contain letters, numbers, and spaces."
+				}
+				if valid {
+					*username = newValue
+				}
+
+			case "email":
+				if newValue == "" {
+					valid = false
+					errorMsg = "Email cannot be empty."
+				} else if EmailExists(newValue) && newValue != *email {
+					valid = false
+					errorMsg = "Email already exists."
+				}
+				if valid {
+					*email = newValue
+				}
+
+			case "password":
+				if newValue == "" {
+					valid = false
+					errorMsg = "Password cannot be empty."
+				} else if len(newValue) < 4 {
+					valid = false
+					errorMsg = "Password must be at least 4 characters."
+				}
+				if valid {
+					*password = newValue
+				}
+
+			case "number":
+				num, err := strconv.Atoi(newValue)
+				if err != nil {
+					valid = false
+					errorMsg = "Must be a valid number."
+				} else {
+					// Check specific number ranges
+					if selectedField.MapKey == "terminal_width" && (num < 1 || num > 80) {
+						valid = false
+						errorMsg = "Width must be between 1 and 80."
+					} else if selectedField.MapKey == "terminal_height" && (num < 1 || num > 25) {
+						valid = false
+						errorMsg = "Height must be between 1 and 25."
+					}
+				}
+				if valid {
+					userDetails[selectedField.MapKey] = newValue
+				}
+
+			case "text":
+				// Basic text validation
+				if selectedField.Required && strings.TrimSpace(newValue) == "" {
+					valid = false
+					errorMsg = selectedField.Label + " is required."
+				}
+				if valid {
+					userDetails[selectedField.MapKey] = newValue
+				}
+			}
+
+			// Show error if validation failed
+			if !valid {
+				io.Print(ui.Ansi.RedHi + " " + errorMsg + "\r\n" + ui.Ansi.Reset)
+				time.Sleep(2 * time.Second)
+			}
+		}
+	}
 }
