@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/robbiew/retrograde/internal/ui"
 )
 
 // ============================================================================
@@ -444,7 +445,7 @@ func (m Model) renderModalForm() string {
 			// Truncate long values to prevent wrapping
 			maxValueLen := 50
 			if len(currentValueStr) > maxValueLen {
-				currentValueStr = currentValueStr[:maxValueLen-3] + "..."
+				currentValueStr = ui.TruncateWithPipeCodes(currentValueStr, maxValueLen-3)
 			}
 
 			// Check if this is the selected field
@@ -492,7 +493,7 @@ func (m Model) renderModalForm() string {
 
 				availableValueSpace := modalWidth - 16
 				if len(valueText) > availableValueSpace {
-					valueText = valueText[:availableValueSpace-3] + "..."
+					valueText = ui.TruncateWithPipeCodes(valueText, availableValueSpace-3)
 				}
 
 				labelStyle := lipgloss.NewStyle().
@@ -716,7 +717,7 @@ func (m Model) renderLevel3Menu(dimmed bool) string {
 
 			// Truncate if too long
 			if len(line) > maxFieldWidth {
-				line = line[:maxFieldWidth-3] + "..."
+				line = ui.TruncateWithPipeCodes(line, maxFieldWidth-3)
 			}
 
 			// Pad to max width for consistent lightbar
@@ -1144,6 +1145,11 @@ func (m Model) renderMenuDataListWithEditing(width int) []string {
 			currentValue := field.EditableItem.Field.GetValue()
 			valueStr := formatValue(currentValue, field.EditableItem.ValueType)
 
+			// Apply pipe code parsing for Name, Title, and Prompt fields
+			if field.EditableItem.ID == "menu-name" || field.EditableItem.ID == "menu-title-1" || field.EditableItem.ID == "menu-title-2" || field.EditableItem.ID == "menu-prompt" {
+				valueStr = ui.ParsePipeColorCodes(valueStr)
+			}
+
 			isSelected := i == m.selectedCommandIndex
 
 			if isSelected && isEditing {
@@ -1166,6 +1172,10 @@ func (m Model) renderMenuDataListWithEditing(width int) []string {
 				} else {
 					// Set dynamic width for text input in menu data editing
 					availableInputWidth := width - 4 - 16 // width - padding - label width
+					// Allow wider input for Prompt field to enable horizontal scrolling
+					if field.EditableItem.ID == "menu-prompt" {
+						availableInputWidth = width - 4 - 10 // More space for prompt
+					}
 					m.textInput.Width = availableInputWidth
 
 					label := fmt.Sprintf(" %-14s:", field.EditableItem.Label)
@@ -1186,8 +1196,8 @@ func (m Model) renderMenuDataListWithEditing(width int) []string {
 
 				labelWidth := 16
 				availableValueSpace := width - 4 - labelWidth
-				if len(valueText) > availableValueSpace {
-					valueText = valueText[:availableValueSpace-3] + "..."
+				if len(ui.StripPipeCodes(valueText)) > availableValueSpace {
+					valueText = ui.TruncateWithPipeCodes(valueText, availableValueSpace-3)
 				}
 
 				labelStyle := lipgloss.NewStyle().
@@ -1207,14 +1217,18 @@ func (m Model) renderMenuDataListWithEditing(width int) []string {
 				dataLines = append(dataLines, label+value)
 			} else {
 				// UNSELECTED: Normal display
+				// Allow longer display for Prompt field to prevent early truncation
 				maxValueLen := 49
-				if len(valueStr) > maxValueLen {
-					valueStr = valueStr[:maxValueLen-3] + "..."
+				if field.EditableItem.ID == "menu-prompt" {
+					maxValueLen = width - 20 // Allow more space for prompt field
+				}
+				if len(ui.StripPipeCodes(valueStr)) > maxValueLen {
+					valueStr = ui.TruncateWithPipeCodes(valueStr, maxValueLen-3)
 				}
 
 				line := fmt.Sprintf(" %-14s: %s", field.EditableItem.Label, valueStr)
-				if len(line) > width-4 {
-					line = line[:width-7] + "..."
+				if len(ui.StripPipeCodes(line)) > width-4 {
+					line = ui.TruncateWithPipeCodes(line, width-7)
 				}
 
 				style := lipgloss.NewStyle().
@@ -1245,7 +1259,7 @@ func (m Model) renderCommandList(width int) []string {
 		// Format: [CommandNumber] [Keys] [ShortDescription]
 		line := fmt.Sprintf(" %d. %-3s %s", cmd.CommandNumber, cmd.Keys, cmd.ShortDescription)
 		if len(line) > width-4 {
-			line = line[:width-7] + "..."
+			line = ui.TruncateWithPipeCodes(line, width-7)
 		}
 		if len(line) < width-4 {
 			line += strings.Repeat(" ", width-4-len(line))
@@ -1413,6 +1427,15 @@ func (m *Model) setupMenuEditCommandModal() {
 
 // setupMenuEditDataModal sets up modal fields for menu data editing
 func (m *Model) setupMenuEditDataModal() {
+	// Ensure Titles slice has at least 2 elements
+	for len(m.editingMenu.Titles) < 2 {
+		m.editingMenu.Titles = append(m.editingMenu.Titles, "")
+	}
+	// Limit to maximum of 2 items
+	if len(m.editingMenu.Titles) > 2 {
+		m.editingMenu.Titles = m.editingMenu.Titles[:2]
+	}
+
 	// Create modal fields for menu data editing
 	m.modalFields = []SubmenuItem{
 		{
@@ -1434,28 +1457,67 @@ func (m *Model) setupMenuEditDataModal() {
 			},
 		},
 		{
-			ID:       "menu-titles",
-			Label:    "Titles",
+			ID:       "menu-title-1",
+			Label:    "Title 1",
 			ItemType: EditableField,
 			EditableItem: &MenuItem{
-				ID:        "menu-titles",
-				Label:     "Titles",
-				ValueType: ListValue,
+				ID:        "menu-title-1",
+				Label:     "Title 1",
+				ValueType: StringValue,
 				Field: ConfigField{
-					GetValue: func() interface{} { return strings.Join(m.editingMenu.Titles, ", ") },
+					GetValue: func() interface{} {
+						if len(m.editingMenu.Titles) > 0 {
+							return m.editingMenu.Titles[0]
+						}
+						return ""
+					},
 					SetValue: func(v interface{}) error {
 						s := v.(string)
-						m.editingMenu.Titles = nil
-						for _, title := range strings.Split(s, ",") {
-							title = strings.TrimSpace(title)
-							if title != "" {
-								m.editingMenu.Titles = append(m.editingMenu.Titles, title)
-							}
+						if len(m.editingMenu.Titles) == 0 {
+							m.editingMenu.Titles = append(m.editingMenu.Titles, s)
+						} else {
+							m.editingMenu.Titles[0] = s
+						}
+						// Ensure at most 2 items
+						if len(m.editingMenu.Titles) > 2 {
+							m.editingMenu.Titles = m.editingMenu.Titles[:2]
 						}
 						return nil
 					},
 				},
-				HelpText: "Menu titles (comma-separated)",
+				HelpText: "First menu title",
+			},
+		},
+		{
+			ID:       "menu-title-2",
+			Label:    "Title 2",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "menu-title-2",
+				Label:     "Title 2",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} {
+						if len(m.editingMenu.Titles) > 1 {
+							return m.editingMenu.Titles[1]
+						}
+						return ""
+					},
+					SetValue: func(v interface{}) error {
+						s := v.(string)
+						if len(m.editingMenu.Titles) < 2 {
+							m.editingMenu.Titles = append(m.editingMenu.Titles, s)
+						} else {
+							m.editingMenu.Titles[1] = s
+						}
+						// Ensure at most 2 items
+						if len(m.editingMenu.Titles) > 2 {
+							m.editingMenu.Titles = m.editingMenu.Titles[:2]
+						}
+						return nil
+					},
+				},
+				HelpText: "Second menu title",
 			},
 		},
 		{

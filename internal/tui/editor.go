@@ -16,6 +16,7 @@ import (
 	"github.com/mattn/go-isatty"
 	"github.com/robbiew/retrograde/internal/config"
 	"github.com/robbiew/retrograde/internal/database"
+	"github.com/robbiew/retrograde/internal/ui"
 )
 
 //go:embed config.ans
@@ -409,9 +410,9 @@ func (d menuDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 	// Format: [MenuName] [CommandCount]
 	itemText := fmt.Sprintf(" %s (%d commands)", item.menu.Name, item.commandCount)
 
-	// Truncate if text is too long
-	if len(itemText) > d.maxWidth {
-		itemText = itemText[:d.maxWidth-3] + "..."
+	// Truncate if text is too long, using visible length after stripping pipe codes
+	if len(ui.StripPipeCodes(itemText)) > d.maxWidth {
+		itemText = ui.TruncateWithPipeCodes(itemText, d.maxWidth-3)
 	}
 
 	// Calculate padding to fill to maxWidth

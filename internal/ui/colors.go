@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"fmt"
 	"regexp"
+	"strings"
 )
 
 // Struct for organizing all ANSI escape sequences
@@ -161,4 +163,97 @@ func ColorFromNumber(code int) string {
 		return ansiColorTable[code]
 	}
 	return Ansi.White
+}
+
+// ParsePipeColorCodes converts Renegade-style pipe color codes (like |01, |02) to ANSI escape sequences.
+// Pipe codes are in the format |XX where XX is a two-digit number from 00-15.
+// Returns the string with pipe codes replaced by ANSI color sequences.
+func ParsePipeColorCodes(input string) string {
+	// Use regex to find pipe codes like |01, |02, etc.
+	re := regexp.MustCompile(`\|(\d{2})`)
+	isFirst := true
+	return re.ReplaceAllStringFunc(input, func(match string) string {
+		// Extract the two-digit number
+		codeStr := match[1:] // Remove the |
+		if len(codeStr) != 2 {
+			return match // Invalid format, return as-is
+		}
+
+		// Parse the number
+		var code int
+		if _, err := fmt.Sscanf(codeStr, "%d", &code); err != nil {
+			return match // Invalid number, return as-is
+		}
+
+		// Convert to ANSI color, adding reset before each color code except the first
+		color := ColorFromNumber(code)
+		if !isFirst {
+			color = Ansi.Reset + color
+		}
+		isFirst = false
+		return color
+	})
+}
+
+// StripPipeCodes removes pipe color codes from a string to get the visible text.
+func StripPipeCodes(s string) string {
+	re := regexp.MustCompile(`\|(\d{2})`)
+	return re.ReplaceAllString(s, "")
+}
+
+// TruncateWithPipeCodes truncates a string containing pipe codes to a maximum visible length.
+func TruncateWithPipeCodes(s string, maxVisibleLen int) string {
+	visibleLen := len(StripPipeCodes(s))
+	if visibleLen <= maxVisibleLen {
+		return s
+	}
+	var result strings.Builder
+	visibleCount := 0
+	i := 0
+	for i < len(s) && visibleCount < maxVisibleLen {
+		if i+2 < len(s) && s[i] == '|' && s[i+1] >= '0' && s[i+1] <= '9' && s[i+2] >= '0' && s[i+2] <= '9' {
+			result.WriteString(s[i : i+3])
+			i += 3
+		} else {
+			result.WriteByte(s[i])
+			visibleCount++
+			i++
+		}
+	}
+	result.WriteString("...")
+	return result.String()
+}
+
+// TruncateWithANSICodes truncates a string containing ANSI codes to a maximum visible length.
+func TruncateWithANSICodes(s string, maxVisibleLen int) string {
+	visibleLen := len(StripANSI(s))
+	if visibleLen <= maxVisibleLen {
+		return s
+	}
+	var result strings.Builder
+	visibleCount := 0
+	i := 0
+	for i < len(s) && visibleCount < maxVisibleLen {
+		if s[i] == '\x1b' {
+			// ANSI escape sequence
+			j := i
+			for j < len(s) && s[j] != 'm' {
+				j++
+			}
+			if j < len(s) {
+				result.WriteString(s[i : j+1])
+				i = j + 1
+			} else {
+				// Invalid ANSI, copy as is
+				result.WriteByte(s[i])
+				i++
+			}
+		} else {
+			result.WriteByte(s[i])
+			visibleCount++
+			i++
+		}
+	}
+	result.WriteString("...")
+	return result.String()
 }
