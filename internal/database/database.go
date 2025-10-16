@@ -39,7 +39,6 @@ type Menu struct {
 	Titles              []string // JSON
 	Prompt              string
 	ACSRequired         string
-	Password            string
 	GenericColumns      int
 	GenericBracketColor int
 	GenericCommandColor int

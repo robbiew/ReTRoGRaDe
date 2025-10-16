@@ -99,7 +99,7 @@ func (m *Model) loadMenus() error {
 
 	// If no menus exist, seed a default menu
 	if len(menus) == 0 {
-		if err := m.seedDefaultMenu(); err != nil {
+		if err := database.SeedDefaultMainMenu(m.db); err != nil {
 			return fmt.Errorf("failed to seed default menu: %w", err)
 		}
 		// Reload menus after seeding
@@ -139,67 +139,6 @@ func (m *Model) loadMenus() error {
 	menuList.Styles.HelpStyle = lipgloss.NewStyle()
 
 	m.menuListUI = menuList
-
-	return nil
-}
-
-// seedDefaultMenu creates a basic MAIN menu for development
-func (m *Model) seedDefaultMenu() error {
-	// Create MAIN menu
-	menu := &database.Menu{
-		Name:                "MAIN",
-		Titles:              []string{"|05-= |13Retrograde BBS |05=-,|07-|06- |14Main Menu |06-|07-"},
-		Prompt:              "|08[ |14M|06ain |14M|06enu |08] |05CMD|13? :",
-		ACSRequired:         "",
-		GenericColumns:      3,
-		GenericBracketColor: 3,
-		GenericCommandColor: 11,
-		GenericDescColor:    15,
-		ClearScreen:         true,
-	}
-
-	menuID, err := m.db.CreateMenu(menu)
-	if err != nil {
-		return fmt.Errorf("failed to create MAIN menu: %w", err)
-	}
-
-	// Create menu commands
-	commands := []database.MenuCommand{
-		{
-			MenuID:           int(menuID),
-			CommandNumber:    1,
-			Keys:             "R",
-			ShortDescription: "Read Mail",
-			ACSRequired:      "",
-			CmdKeys:          "MM",
-			Options:          "",
-		},
-		{
-			MenuID:           int(menuID),
-			CommandNumber:    2,
-			Keys:             "P",
-			ShortDescription: "Post Message",
-			ACSRequired:      "",
-			CmdKeys:          "MP",
-			Options:          "",
-		},
-		{
-			MenuID:           int(menuID),
-			CommandNumber:    3,
-			Keys:             "G",
-			ShortDescription: "Goodbye",
-			ACSRequired:      "",
-			CmdKeys:          "G",
-			Options:          "",
-		},
-	}
-
-	for _, cmd := range commands {
-		_, err := m.db.CreateMenuCommand(&cmd)
-		if err != nil {
-			return fmt.Errorf("failed to create menu command %s: %w", cmd.Keys, err)
-		}
-	}
 
 	return nil
 }
