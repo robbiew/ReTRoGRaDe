@@ -122,22 +122,22 @@ var Ansi = AnsiEscapes{
 }
 
 var ansiColorTable = []string{
-	Ansi.Black,
-	Ansi.Red,
-	Ansi.Green,
-	Ansi.Yellow,
-	Ansi.Blue,
-	Ansi.Magenta,
-	Ansi.Cyan,
-	Ansi.White,
-	Ansi.BlackHi,
-	Ansi.RedHi,
-	Ansi.GreenHi,
-	Ansi.YellowHi,
-	Ansi.BlueHi,
-	Ansi.MagentaHi,
-	Ansi.CyanHi,
-	Ansi.WhiteHi,
+	Ansi.Black,     // 0
+	Ansi.Red,       // 1
+	Ansi.Green,     // 2
+	Ansi.Yellow,    // 3
+	Ansi.Blue,      // 4
+	Ansi.Magenta,   // 5
+	Ansi.Cyan,      // 6
+	Ansi.White,     // 7
+	Ansi.BlackHi,   // 8
+	Ansi.RedHi,     // 9
+	Ansi.GreenHi,   // 10
+	Ansi.YellowHi,  // 11
+	Ansi.BlueHi,    // 12
+	Ansi.MagentaHi, // 13
+	Ansi.CyanHi,    // 14
+	Ansi.WhiteHi,   // 15
 }
 
 const (

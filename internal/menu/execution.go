@@ -14,17 +14,19 @@ import (
 
 // MenuExecutor handles the execution of menus
 type MenuExecutor struct {
-	db       database.Database
-	registry *CmdKeyRegistry
-	io       *telnet.TelnetIO
+	db         database.Database
+	registry   *CmdKeyRegistry
+	io         *telnet.TelnetIO
+	currentRow int
 }
 
 // NewMenuExecutor creates a new menu executor
 func NewMenuExecutor(db database.Database, io *telnet.TelnetIO) *MenuExecutor {
 	return &MenuExecutor{
-		db:       db,
-		registry: NewCmdKeyRegistry(),
-		io:       io,
+		db:         db,
+		registry:   NewCmdKeyRegistry(),
+		io:         io,
+		currentRow: 1,
 	}
 }
 
@@ -54,12 +56,13 @@ func (e *MenuExecutor) ExecuteMenu(menuName string, ctx *ExecutionContext) error
 
 	// Main menu loop
 	for {
-		// Position prompt at bottom of terminal
+		// Position prompt at next available row after menu display
 		height := 24
 		if ctx != nil && ctx.Session != nil && ctx.Session.Height > 0 {
 			height = ctx.Session.Height
 		}
-		e.io.Print(ui.MoveCursorSequence(1, height))
+		promptRow := min(height, e.currentRow+1)
+		e.io.Print(ui.MoveCursorSequence(1, promptRow))
 		e.io.Print(menu.Prompt)
 
 		// Read input (single key for now, can be expanded)
@@ -109,7 +112,8 @@ func (e *MenuExecutor) ExecuteMenu(menuName string, ctx *ExecutionContext) error
 // displayTitles displays the menu titles
 func (e *MenuExecutor) displayTitles(menu *database.Menu) {
 	for _, title := range menu.Titles {
-		e.io.Printf("%s\r\n", title)
+		e.io.Printf("\r\n%s\r\n", title)
+		e.currentRow += 2 // Each title adds 2 rows (\r\n + title + \r\n)
 	}
 }
 
@@ -118,20 +122,26 @@ func (e *MenuExecutor) displayGenericMenu(menu *database.Menu, commands []databa
 	// Check ACS for menu access
 	if !e.checkACS(menu.ACSRequired, ctx) {
 		e.io.Print("Access denied.\r\n")
+		e.currentRow += 1
 		return
 	}
 
 	// Clear screen if required
 	e.clearScreen(menu.ClearScreen)
+	if menu.ClearScreen {
+		e.currentRow = 1 // Reset to top after clear screen
+	}
 
 	// Display titles (centered)
 	for _, title := range menu.Titles {
 		centeredTitle := e.centerTitle(title, ctx)
-		e.io.Printf("%s\r\n", centeredTitle)
+		e.io.Printf("\r\n%s\r\n", centeredTitle)
+		e.currentRow += 2 // Each title adds 2 rows
 	}
 
 	// Add row spacing after titles
 	e.io.Printf("\r\n")
+	e.currentRow += 1
 
 	// Display commands in columns with colors
 	e.displayCommandsInColumns(commands, menu, ctx)
@@ -233,6 +243,7 @@ func (e *MenuExecutor) serveThemeFile(themePath string) error {
 func (e *MenuExecutor) clearScreen(clear bool) {
 	if clear {
 		e.io.Print(ui.ClearScreenSequence()) // ANSI clear screen and move cursor to top-left
+		e.currentRow = 1                     // Reset cursor row after clear screen
 	}
 }
 
@@ -283,8 +294,35 @@ func (e *MenuExecutor) displayCommandsInColumns(commands []database.MenuCommand,
 	if ctx != nil && ctx.Session != nil && ctx.Session.Width > 0 {
 		screenWidth = ctx.Session.Width
 	}
-	colWidth := (screenWidth - 4) / columns
 	const margin = 2
+	const interColumnPadding = 2
+
+	// Calculate the maximum column width across all columns
+	maxWidth := 0
+	for _, cmd := range displayCommands {
+		formatted := fmt.Sprintf("%s[%s%s%s%s%s]%s %s%s%s",
+			bracketColor, resetColor, commandColor, cmd.Keys, resetColor, bracketColor, resetColor,
+			descColor, cmd.ShortDescription, resetColor)
+		visibleLen := len(ui.StripANSI(formatted))
+		if visibleLen > maxWidth {
+			maxWidth = visibleLen
+		}
+	}
+	colWidths := make([]int, columns)
+	for i := range colWidths {
+		colWidths[i] = maxWidth
+	}
+
+	// Calculate total menu width and centering padding
+	totalMenuWidth := 0
+	for _, w := range colWidths {
+		totalMenuWidth += w
+	}
+	totalMenuWidth += margin + margin + (columns-1)*interColumnPadding
+	padding := (screenWidth - totalMenuWidth) / 2
+	if padding < 0 {
+		padding = 0
+	}
 
 	for row := 0; row < itemsPerColumn; row++ {
 		line := ""
@@ -293,23 +331,25 @@ func (e *MenuExecutor) displayCommandsInColumns(commands []database.MenuCommand,
 			if idx < len(displayCommands) {
 				cmd := displayCommands[idx]
 				// Format: [keys] Short Description
-				formatted := fmt.Sprintf("%s[%s%s%s]%s %s%s%s",
-					bracketColor, resetColor,
-					commandColor, cmd.Keys, resetColor,
+				formatted := fmt.Sprintf("%s[%s%s%s%s%s]%s %s%s%s",
+					bracketColor, resetColor, commandColor, cmd.Keys, resetColor, bracketColor, resetColor,
 					descColor, cmd.ShortDescription, resetColor)
 
 				visibleLen := len(ui.StripANSI(formatted))
-				if visibleLen < colWidth {
-					formatted += strings.Repeat(" ", colWidth-visibleLen)
+				if visibleLen < colWidths[col] {
+					formatted += strings.Repeat(" ", colWidths[col]-visibleLen)
 				}
-				// Add left margin for first column, right margin for others
+				// Add left margin for first column, inter-column padding and right margin for others
 				if col == 0 {
 					line += strings.Repeat(" ", margin) + formatted
 				} else {
-					line += formatted + strings.Repeat(" ", margin)
+					line += strings.Repeat(" ", interColumnPadding) + formatted + strings.Repeat(" ", margin)
 				}
 			}
 		}
+		// Apply centering padding to the beginning of each row
+		line = strings.Repeat(" ", padding) + line
 		e.io.Printf("%s\r\n", strings.TrimRight(line, " "))
+		e.currentRow += 1 // Each command row adds 1 row
 	}
 }
