@@ -1,4 +1,4 @@
-# Retrograde BBS
+# ReTRoGRaDe BBS
 
 Retrograde is a retro-style Bulletin Board System (BBS) implemented in Go. This project is experimental and actively under development. It is not recommended for production use unless you are contributing to its development. Please note that this is not a complete BBS implementation -- not even close! -- but rather the initial foundation for one.
 
