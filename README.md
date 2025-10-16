@@ -21,23 +21,26 @@ As a hobbyist Go developer, I'm leveraging AI tools like Roo Code, Codex and Cla
 | Feature                         | Progress | Notes                                                                              |
 | ------------------------------- | -------- | ---------------------------------------------------------------------------------- |
 | Telnet Server                   | 100%     | Completed                                                                          |
-| Security System                 | 100%     | Completed                                                                          |
-| User Authentication             | 100%     | Completed                                                                          |
-| SQLite Database                 | 100%     | Completed                                                                          |
-| TUI Configuration Editor        | 100%     | Completed                                                                          |
-| Guided First-Time Setup         | 100%     | Completed                                                                          |
-| ANSI Art Support                | 100%     | Completed                                                                          |
-| Session Management              | 100%     | Completed                                                                          |
-| Node Management                 | 100%     | Completed                                                                          |
-| Login UI                        | 100%     | Needs small tweaks                                                                 |
+| Security System                 | 100%     | White/Blacklist support, GeoIP filtering, Rate Limiting                            |
+| SQLite Database                 | 100%     | Scaffolds sensible defaults on initialization                                      |
+| TUI Configuration Editor        | 100%     | View and edit configuration files                                                  |
+| Guided First-Time Setup         | 100%     | Ensures paths are set correctly                                                    |
+| ANSI Art Support                | 100%     | SAUCE strip                                                                        |
+| Session Management              | 100%     | Idle timeout, disconnection                                                        |
+| Node Management                 | 100%     | Max nodes, per-user limits, logging                                                |
+| Auth /Login UI                  | 100%     | Create New User, Login                                                             |
 | Event System                    | 0%       | e.g. Logon Event List -> main menu                                                 |
 | Menu Construction System        | 25%      | Renegade-style system (TUI) for constructing menus and prompts. Needs command work |
-| Message Base Configuration & UI | 0%       | JAM format: local, echomail (FTN), netmail, User-to-User                           |
-| Message Editor (basic)          | 0%       | Simple FSE                                                                         |
-| Message Reader (basic)          | 0%       | Simple FSR                                                                         |
+| Message Base Configuration & UI | 0%       | Local message base configuration                                                   |
+| Message Base (FTN) Support      | 0%       | Read/write support for FTN message bases for echomail                              |
+| Netmail Support                 | 0%       | Read/write support for private Netmail                                             |
+| Private Email Support           | 0%       | Read/write support for private Email                                               |
+| Message Editor (basic)          | 0%       | Simple Full Screen Editor                                                          |
+| Message Reader (basic)          | 0%       | Simple Full Screen Reader                                                          |
 | Native Door Support             | 0%       | Linux native door launcher (menu action)                                           |
 | DOS Door Support                | 0%       | Dosemu2 launch door (menu action)                                                  |
-| MCI Codes                       | 0%       |                                                                                    |
+| MCI Codes                       | 0%       | Support for MCI codes                                                              |
+| Pipe Colors                     | 0%       | Support for Renegade-style pipe colors                                             |
 
 ## Quick Start
 
@@ -62,17 +65,17 @@ On Windows, use the batch script:
 build.bat
 ```
 
-The script creates `release/retrograde-darwin-arm64`, `release/retrograde-linux-amd64`, etc. for Linux/macOS/Windows.
+The script creates `release/retrograde-darwin-arm64`, `release/retrograde-linux-amd64`, etc. for Linux/macOS/Windows in the `release/` directory.
 
 ### First-Time Setup
 
-1. Run the binary: `./retrograde`
+1. Run the binary: `./retrograde` (first run triggers setup)
 2. Follow the guided setup wizard to configure paths and initialize the database.
 3. Copy ANSI art files from the repo's `theme/` directory to your configured theme directory.
 
 ### Configure
 
-Launch the configuration editor:
+Launch the configuration editor for more settings:
 
 ```bash
 ./retrograde config
@@ -164,23 +167,22 @@ This project follows the [Standard Go Project Layout](https://github.com/golang-
 retrograde/
 ├── cmd/
 │   └── server/         # Main BBS server binary
+├── content/            # Content assets for the BBS (e.g. ANSI art)
+├── docs/               # Documentation, design notes, and research
 ├── internal/           # Private application packages
-│   ├── auth/           # User authentication
+│   ├── auth/           # User authentication, registration, and session management
 │   ├── config/         # Configuration management
 │   ├── database/       # SQLite database layer
-│   ├── jam/            # JAM message base implementation
+│   ├── filesystem/     # Filesystem operations
 │   ├── logging/        # Logging utilities
+│   ├── menu/           # Menu construction system, rendering, and navigation
 │   ├── security/       # Security features
 │   ├── telnet/         # Telnet I/O
 │   ├── tui/            # Configuration TUI
-│   ├── ui/             # UI utilities
-│   ├── menu/           # Menu construction system
-│   └── util/           # Utility functions
-├── memory-bank/        # Development documentation
-├── content/            # Content assets for the BBS
-├── security/           # Security configuration files
-├── release/            # Build artifacts
-└── docs/               # Documentation
+│   └── ui/             # UI utilities (e.g. ANSI art, terminal handling)
+├── memory-bank/        # Development documentation (AI notes, design docs, etc.)
+└── release/            # Build artifacts and release binaries
+
 ```
 
 ## Requirements
