@@ -335,8 +335,8 @@ func (d userDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 	var str string
 	isSelected := index == m.Index()
 
-	// Format: [UserName] [SecLevel] [UserID] - tab separated for alignment
-	itemText := fmt.Sprintf(" %s\t%d\t%d", item.user.Username, item.user.SecurityLevel, item.user.ID)
+	// Format with fixed-width columns: Username (15 chars), Level (5 chars), UID (5 chars)
+	itemText := fmt.Sprintf(" %-15s %-5d %-5d", item.user.Username, item.user.SecurityLevel, item.user.ID)
 
 	// Truncate if text is too long
 	if len(itemText) > d.maxWidth {

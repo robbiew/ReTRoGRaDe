@@ -916,9 +916,17 @@ func (m Model) renderUserManagement() string {
 		Width(42)
 	separator := separatorStyle.Render(strings.Repeat("-", 42))
 
+	// Add column headers
+	columnHeaders := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorBgMedium)).
+		Foreground(lipgloss.Color(ColorTextBright)).
+		Bold(true).
+		Width(42).
+		Render(fmt.Sprintf(" %-15s %-5s %-5s", "Username", "Level", "UID"))
+
 	listView := strings.TrimSpace(m.userListUI.View())
 
-	allLines := []string{header, separator, listView, separator}
+	allLines := []string{header, separator, columnHeaders, separator, listView, separator}
 
 	combined := strings.Join(allLines, "\n")
 

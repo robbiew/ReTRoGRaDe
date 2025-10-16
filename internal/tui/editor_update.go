@@ -212,32 +212,44 @@ func (m Model) handleLevel4ModalNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 			m.navMode = SaveChangesPrompt
 
 			// Remember where to go after save/cancel
-			hasSubSections := false
-			for _, field := range m.modalFields {
-				if field.ItemType == SectionHeader {
-					hasSubSections = true
-					break
-				}
-			}
-
-			if hasSubSections {
-				m.returnToMode = Level3MenuNavigation
+			if m.editingUser != nil {
+				m.returnToMode = UserManagementMode
+			} else if m.editingSecurityLevel != nil {
+				m.returnToMode = SecurityLevelsMode
 			} else {
-				m.returnToMode = Level2MenuNavigation
+				hasSubSections := false
+				for _, field := range m.modalFields {
+					if field.ItemType == SectionHeader {
+						hasSubSections = true
+						break
+					}
+				}
+
+				if hasSubSections {
+					m.returnToMode = Level3MenuNavigation
+				} else {
+					m.returnToMode = Level2MenuNavigation
+				}
 			}
 
 			return m, nil
 		}
 
 		// No unsaved changes, exit normally
-		if m.editingSecurityLevel != nil {
+		if m.editingUser != nil {
+			// Return to user management list
+			m.navMode = UserManagementMode
+			m.modalFields = nil
+			m.modalFieldIndex = 0
+			m.modalSectionName = ""
+			m.editingUser = nil
+		} else if m.editingSecurityLevel != nil {
 			// Return to security levels list
 			m.navMode = SecurityLevelsMode
 			m.modalFields = nil
 			m.modalFieldIndex = 0
 			m.modalSectionName = ""
 			m.editingSecurityLevel = nil
-			m.editingUser = nil
 		} else {
 			hasSubSections := false
 			for _, field := range m.modalFields {
