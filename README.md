@@ -188,7 +188,7 @@ retrograde/
 ## Requirements
 
 - Go 1.24+
-- Terminal/telnet client with ANSI support (like Syncterm, Netrunner or Icy_Term)
+- Modern terminal/telnet client with ANSI support (like Syncterm, Netrunner, Icy_Term or MagiTerm)
 
 ## Dependencies
 
