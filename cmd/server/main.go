@@ -216,7 +216,7 @@ func runGuidedSetup() error {
 	// Show success message only on successful completion
 	fmt.Println("\nRetrograde BBS successfully installed... Next steps:")
 	fmt.Printf("- \"retrograde\" to start server on port %d\n", 2323) // default port
-	fmt.Println("- \"retrograde config\" to customize\n")
+	fmt.Println("- \"retrograde config\" to customize")
 	fmt.Println("- Copy files from git themes directory to your themes folder")
 
 	// Open db - ensure data directory exists
