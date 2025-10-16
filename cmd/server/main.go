@@ -320,7 +320,7 @@ func handleConnection(conn net.Conn, cfg *config.Config, nodeID int) {
 	session := &config.TelnetSession{
 		Alias:         "Guest",                   // Default for unauthenticated users
 		SecurityLevel: config.SecurityLevelGuest, // Guest security level
-		TimeLeft:      10,                        // 60 minutes
+		TimeLeft:      10,
 		StartTime:     time.Now(),
 		LastActivity:  time.Now(),
 		NodeNumber:    nodeID,
@@ -328,7 +328,7 @@ func handleConnection(conn net.Conn, cfg *config.Config, nodeID int) {
 		Connected:     true,
 		Conn:          conn, // Store connection reference for timeout handling
 		Width:         80,   // Default width
-		Height:        25,   // Default height
+		Height:        24,   // Default height
 	}
 
 	// Create TelnetIO wrapper with session reference

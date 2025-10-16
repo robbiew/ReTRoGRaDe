@@ -7,9 +7,9 @@ import (
 
 // Security Level Constants
 const (
-	SecurityLevelGuest   = 0   // Unauthenticated users
-	SecurityLevelRegular = 10  // Standard registered users
-	SecurityLevelSysOp   = 100 // System operators with full access
+	SecurityLevelGuest   = 0   // Unauthenticated users (no access other than login or registration)
+	SecurityLevelRegular = 10  // Standard registered users (code-level defaults only, actually defined in editor)
+	SecurityLevelSysOp   = 100 // System operators with full access (code-level defaults only, actually defined in editor)
 )
 
 // Config struct to hold settings from the ini file with hierarchical structure
@@ -158,9 +158,9 @@ type EditorsSection struct {
 	MessageBase EditorConfig
 	FileBase    EditorConfig
 	Menus       EditorConfig
-	Logon       EditorConfig
-	Logoff      EditorConfig
-	Timed       EditorConfig
+	Logon       EditorConfig // future: Login Events
+	Logoff      EditorConfig // future: Logout Events
+	Timed       EditorConfig // future: Timed Events
 }
 
 // EditorConfig holds configuration for a specific editor
