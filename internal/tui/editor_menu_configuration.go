@@ -188,24 +188,6 @@ func configurationMenu(cfg *config.Config) MenuCategory {
 						},
 					},
 					{
-						ID:       "system-password",
-						Label:    "System Pass",
-						ItemType: EditableField,
-						EditableItem: &MenuItem{
-							ID:        "config.general.system_password",
-							Label:     "System Pass",
-							ValueType: StringValue,
-							Field: ConfigField{
-								GetValue: func() interface{} { return cfg.Configuration.General.SystemPassword },
-								SetValue: func(v interface{}) error {
-									cfg.Configuration.General.SystemPassword = v.(string)
-									return nil
-								},
-							},
-							HelpText: "System password for protected areas",
-						},
-					},
-					{
 						ID:       "timeout-minutes",
 						Label:    "Timeout Mins",
 						ItemType: EditableField,
@@ -228,24 +210,6 @@ func configurationMenu(cfg *config.Config) MenuCategory {
 								}
 								return nil
 							},
-						},
-					},
-					{
-						ID:       "default-theme",
-						Label:    "Default Theme",
-						ItemType: EditableField,
-						EditableItem: &MenuItem{
-							ID:        "config.general.default_theme",
-							Label:     "Default Theme",
-							ValueType: StringValue,
-							Field: ConfigField{
-								GetValue: func() interface{} { return cfg.Configuration.General.DefaultTheme },
-								SetValue: func(v interface{}) error {
-									cfg.Configuration.General.DefaultTheme = v.(string)
-									return nil
-								},
-							},
-							HelpText: "Default theme name",
 						},
 					},
 					{

@@ -29,10 +29,8 @@ func GetDefaultConfig() *Config {
 	// Configuration.General
 	cfg.Configuration.General.BBSLocation = "Your City, State"
 	cfg.Configuration.General.BBSName = "Another Retrograde BBS"
-	cfg.Configuration.General.DefaultTheme = "default"
 	cfg.Configuration.General.StartMenu = "MAIN"
 	cfg.Configuration.General.SysOpName = "SysOp"
-	cfg.Configuration.General.SystemPassword = "CHANGEME"
 	cfg.Configuration.General.TimeoutMinutes = 3
 
 	// Configuration.NewUsers
@@ -65,29 +63,6 @@ func GetDefaultConfig() *Config {
 		"Location": {
 			Enabled:  true,
 			Required: true,
-		},
-	}
-	cfg.Configuration.NewUsers.SysopQuestionEnabled = true
-	cfg.Configuration.NewUsers.SysopFields = map[string]RegistrationFieldConfig{
-		"BBSName": {
-			Enabled:  true,
-			Required: true,
-		},
-		"BBSURL": {
-			Enabled:  true,
-			Required: false,
-		},
-		"BBSPort": {
-			Enabled:  true,
-			Required: false,
-		},
-		"BBSSoftware": {
-			Enabled:  true,
-			Required: false,
-		},
-		"BBSLocation": {
-			Enabled:  true,
-			Required: false,
 		},
 	}
 	cfg.Configuration.NewUsers.FormLayout = map[string]FormLayoutConfig{}

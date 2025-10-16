@@ -42,3 +42,5 @@ temp/
 # release directory (built binaries)
 
 .roo/
+
+server

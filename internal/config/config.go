@@ -190,14 +190,10 @@ func mapValueToConfig(cfg *Config, v database.ConfigValue) {
 			cfg.Configuration.General.BBSLocation = value
 		case "BBS_Name":
 			cfg.Configuration.General.BBSName = value
-		case "Default_Theme":
-			cfg.Configuration.General.DefaultTheme = value
 		case "Start_Menu":
 			cfg.Configuration.General.StartMenu = value
 		case "SysOp_Name":
 			cfg.Configuration.General.SysOpName = value
-		case "System_Password":
-			cfg.Configuration.General.SystemPassword = value
 		case "Timeout_Minutes":
 			cfg.Configuration.General.TimeoutMinutes = parseIntValue(value)
 		}
@@ -208,9 +204,6 @@ func mapValueToConfig(cfg *Config, v database.ConfigValue) {
 	if section == "Configuration.New_Users" {
 		if cfg.Configuration.NewUsers.RegistrationFields == nil {
 			cfg.Configuration.NewUsers.RegistrationFields = make(map[string]RegistrationFieldConfig)
-		}
-		if cfg.Configuration.NewUsers.SysopFields == nil {
-			cfg.Configuration.NewUsers.SysopFields = make(map[string]RegistrationFieldConfig)
 		}
 		if cfg.Configuration.NewUsers.FormLayout == nil {
 			cfg.Configuration.NewUsers.FormLayout = make(map[string]FormLayoutConfig)
@@ -227,8 +220,6 @@ func mapValueToConfig(cfg *Config, v database.ConfigValue) {
 			cfg.Configuration.NewUsers.AskLastName = parseBoolValue(value)
 		case key == "RegistrationFormEnabledFields":
 			cfg.Configuration.NewUsers.RegistrationFormEnabledFields = parseListValue(value)
-		case key == "SysopQuestionEnabled":
-			cfg.Configuration.NewUsers.SysopQuestionEnabled = parseBoolValue(value)
 		case strings.HasPrefix(key, "RegistrationField."):
 			parts := strings.Split(key, ".")
 			if len(parts) == 3 {
@@ -242,20 +233,6 @@ func mapValueToConfig(cfg *Config, v database.ConfigValue) {
 					field.Required = parseBoolValue(value)
 				}
 				cfg.Configuration.NewUsers.RegistrationFields[fieldID] = field
-			}
-		case strings.HasPrefix(key, "SysopField."):
-			parts := strings.Split(key, ".")
-			if len(parts) == 3 {
-				fieldID := parts[1]
-				attr := parts[2]
-				field := cfg.Configuration.NewUsers.SysopFields[fieldID]
-				switch attr {
-				case "Enabled":
-					field.Enabled = parseBoolValue(value)
-				case "Required":
-					field.Required = parseBoolValue(value)
-				}
-				cfg.Configuration.NewUsers.SysopFields[fieldID] = field
 			}
 		case strings.HasPrefix(key, "FormLayout."):
 			parts := strings.Split(key, ".")
@@ -404,10 +381,8 @@ func configToValues(cfg *Config) []database.ConfigValue {
 	values = append(values,
 		database.ConfigValue{Section: "Configuration.General", Key: "BBS_Location", Value: cfg.Configuration.General.BBSLocation, ValueType: "string"},
 		database.ConfigValue{Section: "Configuration.General", Key: "BBS_Name", Value: cfg.Configuration.General.BBSName, ValueType: "string"},
-		database.ConfigValue{Section: "Configuration.General", Key: "Default_Theme", Value: cfg.Configuration.General.DefaultTheme, ValueType: "string"},
 		database.ConfigValue{Section: "Configuration.General", Key: "Start_Menu", Value: cfg.Configuration.General.StartMenu, ValueType: "string"},
 		database.ConfigValue{Section: "Configuration.General", Key: "SysOp_Name", Value: cfg.Configuration.General.SysOpName, ValueType: "string"},
-		database.ConfigValue{Section: "Configuration.General", Key: "System_Password", Value: cfg.Configuration.General.SystemPassword, ValueType: "string"},
 		database.ConfigValue{Section: "Configuration.General", Key: "Timeout_Minutes", Value: strconv.Itoa(cfg.Configuration.General.TimeoutMinutes), ValueType: "int"},
 	)
 
@@ -418,7 +393,6 @@ func configToValues(cfg *Config) []database.ConfigValue {
 		database.ConfigValue{Section: "Configuration.New_Users", Key: "Ask_First_Name", Value: formatBoolValue(cfg.Configuration.NewUsers.AskFirstName), ValueType: "bool"},
 		database.ConfigValue{Section: "Configuration.New_Users", Key: "Ask_Last_Name", Value: formatBoolValue(cfg.Configuration.NewUsers.AskLastName), ValueType: "bool"},
 		database.ConfigValue{Section: "Configuration.New_Users", Key: "RegistrationFormEnabledFields", Value: formatListValue(cfg.Configuration.NewUsers.RegistrationFormEnabledFields), ValueType: "list"},
-		database.ConfigValue{Section: "Configuration.New_Users", Key: "SysopQuestionEnabled", Value: formatBoolValue(cfg.Configuration.NewUsers.SysopQuestionEnabled), ValueType: "bool"},
 	)
 
 	// Configuration.Auth
@@ -446,31 +420,6 @@ func configToValues(cfg *Config) []database.ConfigValue {
 				database.ConfigValue{
 					Section:   "Configuration.New_Users",
 					Key:       fmt.Sprintf("RegistrationField.%s.Required", fieldID),
-					Value:     formatBoolValue(field.Required),
-					ValueType: "bool",
-				},
-			)
-		}
-	}
-
-	if cfg.Configuration.NewUsers.SysopFields != nil {
-		fieldIDs := make([]string, 0, len(cfg.Configuration.NewUsers.SysopFields))
-		for fieldID := range cfg.Configuration.NewUsers.SysopFields {
-			fieldIDs = append(fieldIDs, fieldID)
-		}
-		sort.Strings(fieldIDs)
-		for _, fieldID := range fieldIDs {
-			field := cfg.Configuration.NewUsers.SysopFields[fieldID]
-			values = append(values,
-				database.ConfigValue{
-					Section:   "Configuration.New_Users",
-					Key:       fmt.Sprintf("SysopField.%s.Enabled", fieldID),
-					Value:     formatBoolValue(field.Enabled),
-					ValueType: "bool",
-				},
-				database.ConfigValue{
-					Section:   "Configuration.New_Users",
-					Key:       fmt.Sprintf("SysopField.%s.Required", fieldID),
 					Value:     formatBoolValue(field.Required),
 					ValueType: "bool",
 				},

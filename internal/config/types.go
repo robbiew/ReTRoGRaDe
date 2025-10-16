@@ -45,10 +45,8 @@ type PathsConfig struct {
 type GeneralConfig struct {
 	BBSLocation    string
 	BBSName        string
-	DefaultTheme   string
 	StartMenu      string
 	SysOpName      string
-	SystemPassword string
 	TimeoutMinutes int
 }
 
@@ -71,8 +69,6 @@ type NewUsersConfig struct {
 	AskEmail                      bool
 	RegistrationFormEnabledFields []string
 	RegistrationFields            map[string]RegistrationFieldConfig
-	SysopQuestionEnabled          bool
-	SysopFields                   map[string]RegistrationFieldConfig
 	FormLayout                    map[string]FormLayoutConfig
 }
 
