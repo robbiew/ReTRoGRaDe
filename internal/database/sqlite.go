@@ -98,7 +98,6 @@ func (s *SQLiteDB) InitializeSchema() error {
 					titles TEXT, -- JSON array
 					prompt TEXT,
 					acs_required TEXT,
-					password TEXT,
 					generic_columns INTEGER DEFAULT 4,
 					generic_bracket_color INTEGER DEFAULT 1,
 					generic_command_color INTEGER DEFAULT 9,
@@ -112,8 +111,8 @@ func (s *SQLiteDB) InitializeSchema() error {
 
 			// Copy data from old table to new table, excluding obsolete columns and converting flags
 			_, err = tx.Exec(`
-				INSERT INTO menus (id, name, titles, prompt, acs_required, password, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, clear_screen)
-				SELECT id, name, titles, prompt, acs_required, password, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color,
+				INSERT INTO menus (id, name, titles, prompt, acs_required, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, clear_screen)
+				SELECT id, name, titles, prompt, acs_required, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color,
 					   CASE WHEN substr(flags, 1, 1) = 'C' THEN 1 ELSE 0 END
 				FROM menus_old
 			`)
@@ -259,7 +258,6 @@ func (s *SQLiteDB) InitializeSchema() error {
 			titles TEXT, -- JSON array
 			prompt TEXT,
 			acs_required TEXT,
-			password TEXT,
 			generic_columns INTEGER DEFAULT 4,
 			generic_bracket_color INTEGER DEFAULT 1,
 			generic_command_color INTEGER DEFAULT 9,
@@ -494,9 +492,9 @@ func (s *SQLiteDB) CreateMenu(menu *Menu) (int64, error) {
 	}
 
 	result, err := s.db.Exec(`
-		INSERT INTO menus (name, titles, prompt, acs_required, password, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, clear_screen)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		menu.Name, string(titlesJSON), menu.Prompt, menu.ACSRequired, menu.Password, menu.GenericColumns, menu.GenericBracketColor, menu.GenericCommandColor, menu.GenericDescColor, menu.ClearScreen)
+		INSERT INTO menus (name, titles, prompt, acs_required, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, clear_screen)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		menu.Name, string(titlesJSON), menu.Prompt, menu.ACSRequired, menu.GenericColumns, menu.GenericBracketColor, menu.GenericCommandColor, menu.GenericDescColor, menu.ClearScreen)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create menu: %w", err)
 	}
@@ -515,9 +513,9 @@ func (s *SQLiteDB) GetMenuByName(name string) (*Menu, error) {
 	var titlesJSON string
 
 	err := s.db.QueryRow(`
-		SELECT id, name, titles, prompt, acs_required, password, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, clear_screen
+		SELECT id, name, titles, prompt, acs_required, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, clear_screen
 		FROM menus WHERE name = ?`, name).Scan(
-		&menu.ID, &menu.Name, &titlesJSON, &menu.Prompt, &menu.ACSRequired, &menu.Password, &menu.GenericColumns, &menu.GenericBracketColor, &menu.GenericCommandColor, &menu.GenericDescColor, &menu.ClearScreen)
+		&menu.ID, &menu.Name, &titlesJSON, &menu.Prompt, &menu.ACSRequired, &menu.GenericColumns, &menu.GenericBracketColor, &menu.GenericCommandColor, &menu.GenericDescColor, &menu.ClearScreen)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("menu not found: %s", name)
 	}
@@ -539,9 +537,9 @@ func (s *SQLiteDB) GetMenuByID(id int64) (*Menu, error) {
 	var titlesJSON string
 
 	err := s.db.QueryRow(`
-		SELECT id, name, titles, prompt, acs_required, password, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, clear_screen
+		SELECT id, name, titles, prompt, acs_required, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, clear_screen
 		FROM menus WHERE id = ?`, id).Scan(
-		&menu.ID, &menu.Name, &titlesJSON, &menu.Prompt, &menu.ACSRequired, &menu.Password, &menu.GenericColumns, &menu.GenericBracketColor, &menu.GenericCommandColor, &menu.GenericDescColor, &menu.ClearScreen)
+		&menu.ID, &menu.Name, &titlesJSON, &menu.Prompt, &menu.ACSRequired, &menu.GenericColumns, &menu.GenericBracketColor, &menu.GenericCommandColor, &menu.GenericDescColor, &menu.ClearScreen)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("menu not found: %d", id)
 	}
@@ -560,7 +558,7 @@ func (s *SQLiteDB) GetMenuByID(id int64) (*Menu, error) {
 // GetAllMenus retrieves all menus
 func (s *SQLiteDB) GetAllMenus() ([]Menu, error) {
 	rows, err := s.db.Query(`
-		SELECT id, name, titles, prompt, acs_required, password, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, clear_screen
+		SELECT id, name, titles, prompt, acs_required, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, clear_screen
 		FROM menus ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query menus: %w", err)
@@ -571,7 +569,7 @@ func (s *SQLiteDB) GetAllMenus() ([]Menu, error) {
 	for rows.Next() {
 		var menu Menu
 		var titlesJSON string
-		err := rows.Scan(&menu.ID, &menu.Name, &titlesJSON, &menu.Prompt, &menu.ACSRequired, &menu.Password, &menu.GenericColumns, &menu.GenericBracketColor, &menu.GenericCommandColor, &menu.GenericDescColor, &menu.ClearScreen)
+		err := rows.Scan(&menu.ID, &menu.Name, &titlesJSON, &menu.Prompt, &menu.ACSRequired, &menu.GenericColumns, &menu.GenericBracketColor, &menu.GenericCommandColor, &menu.GenericDescColor, &menu.ClearScreen)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan menu: %w", err)
 		}
@@ -595,9 +593,9 @@ func (s *SQLiteDB) UpdateMenu(menu *Menu) error {
 	}
 
 	_, err = s.db.Exec(`
-		UPDATE menus SET name = ?, titles = ?, prompt = ?, acs_required = ?, password = ?, generic_columns = ?, generic_bracket_color = ?, generic_command_color = ?, generic_desc_color = ?, clear_screen = ?
+		UPDATE menus SET name = ?, titles = ?, prompt = ?, acs_required = ?, generic_columns = ?, generic_bracket_color = ?, generic_command_color = ?, generic_desc_color = ?, clear_screen = ?
 		WHERE id = ?`,
-		menu.Name, string(titlesJSON), menu.Prompt, menu.ACSRequired, menu.Password, menu.GenericColumns, menu.GenericBracketColor, menu.GenericCommandColor, menu.GenericDescColor, menu.ClearScreen, menu.ID)
+		menu.Name, string(titlesJSON), menu.Prompt, menu.ACSRequired, menu.GenericColumns, menu.GenericBracketColor, menu.GenericCommandColor, menu.GenericDescColor, menu.ClearScreen, menu.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update menu: %w", err)
 	}

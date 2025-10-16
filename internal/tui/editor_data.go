@@ -148,14 +148,13 @@ func (m *Model) seedDefaultMenu() error {
 	// Create MAIN menu
 	menu := &database.Menu{
 		Name:                "MAIN",
-		Titles:              []string{"-= Retrograde BBS =-", "-- Main Menu --"},
-		Prompt:              "[@1 - @2]@MTime Left: [@V] (?=Help)@MMain Menu :",
+		Titles:              []string{"|05-= |13Retrograde BBS |05=-,|07-|06- |14Main Menu |06-|07-"},
+		Prompt:              "|08[ |14M|06ain |14M|06enu |08] |05CMD|13? :",
 		ACSRequired:         "",
-		Password:            "",
-		GenericColumns:      4,
-		GenericBracketColor: 1,
-		GenericCommandColor: 9,
-		GenericDescColor:    1,
+		GenericColumns:      3,
+		GenericBracketColor: 3,
+		GenericCommandColor: 11,
+		GenericDescColor:    15,
 		ClearScreen:         true,
 	}
 

@@ -131,6 +131,12 @@ func (m Model) View() string {
 			m.overlayString(canvas, breadcrumb, m.screenHeight-3, 0)
 		}
 
+		// Add color key reference when on Menu Data tab
+		if m.currentMenuTab == 0 {
+			colorKey := m.renderColorKeyReference()
+			m.overlayString(canvas, colorKey, m.screenHeight-2, 0)
+		}
+
 		// Add footer BEFORE returning
 		footer := m.renderFooter()
 		m.overlayString(canvas, footer, m.screenHeight-1, 0)
@@ -1739,4 +1745,34 @@ func (m Model) renderFooter() string {
 		Render(footerText)
 
 	return footer
+}
+
+// Add this function to internal/tui/editor_view.go
+
+// renderColorKeyReference renders a horizontal color code reference
+func (m Model) renderColorKeyReference() string {
+	var parts []string
+
+	// Add label
+	parts = append(parts, "Color Codes: ")
+
+	// Add each color code (00-15) with the actual color
+	for i := 0; i <= 15; i++ {
+		code := fmt.Sprintf("%02d", i)
+		// Use ui.ColorFromNumber to get the ANSI color
+		coloredCode := ui.ColorFromNumber(i) + code + ui.Ansi.Reset
+		parts = append(parts, "|")
+		parts = append(parts, coloredCode)
+		parts = append(parts, " ")
+	}
+
+	line := strings.Join(parts, "")
+
+	// Center the line
+	centered := lipgloss.NewStyle().
+		Width(m.screenWidth).
+		Align(lipgloss.Center).
+		Render(line)
+
+	return centered
 }
