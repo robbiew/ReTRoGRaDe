@@ -202,58 +202,87 @@ func StripPipeCodes(s string) string {
 }
 
 // TruncateWithPipeCodes truncates a string containing pipe codes to a maximum visible length.
+// The maxVisibleLen parameter is the TOTAL visible length INCLUDING the "..." ellipsis.
 func TruncateWithPipeCodes(s string, maxVisibleLen int) string {
 	visibleLen := len(StripPipeCodes(s))
 	if visibleLen <= maxVisibleLen {
 		return s
 	}
+
+	// Reserve 3 characters for the ellipsis
+	ellipsisLen := 3
+	targetVisibleLen := maxVisibleLen - ellipsisLen
+	if targetVisibleLen < 0 {
+		targetVisibleLen = 0
+	}
+
 	var result strings.Builder
 	visibleCount := 0
 	i := 0
-	for i < len(s) && visibleCount < maxVisibleLen {
+
+	// Copy characters until we reach the target visible length
+	for i < len(s) && visibleCount < targetVisibleLen {
 		if i+2 < len(s) && s[i] == '|' && s[i+1] >= '0' && s[i+1] <= '9' && s[i+2] >= '0' && s[i+2] <= '9' {
+			// Copy pipe code without incrementing visible count
 			result.WriteString(s[i : i+3])
 			i += 3
 		} else {
+			// Copy visible character and increment count
 			result.WriteByte(s[i])
 			visibleCount++
 			i++
 		}
 	}
+
 	result.WriteString("...")
 	return result.String()
 }
 
 // TruncateWithANSICodes truncates a string containing ANSI codes to a maximum visible length.
+// The maxVisibleLen parameter is the TOTAL visible length INCLUDING the "..." ellipsis.
 func TruncateWithANSICodes(s string, maxVisibleLen int) string {
 	visibleLen := len(StripANSI(s))
 	if visibleLen <= maxVisibleLen {
 		return s
 	}
+
+	// Reserve 3 characters for the ellipsis
+	ellipsisLen := 3
+	targetVisibleLen := maxVisibleLen - ellipsisLen
+	if targetVisibleLen < 0 {
+		targetVisibleLen = 0
+	}
+
 	var result strings.Builder
 	visibleCount := 0
 	i := 0
-	for i < len(s) && visibleCount < maxVisibleLen {
+
+	// Copy characters until we reach the target visible length
+	for i < len(s) && visibleCount < targetVisibleLen {
 		if s[i] == '\x1b' {
-			// ANSI escape sequence
+			// ANSI escape sequence - copy until 'm'
 			j := i
 			for j < len(s) && s[j] != 'm' {
 				j++
 			}
 			if j < len(s) {
+				// Include the 'm' and copy entire sequence
 				result.WriteString(s[i : j+1])
 				i = j + 1
 			} else {
 				// Invalid ANSI, copy as is
 				result.WriteByte(s[i])
+				visibleCount++
 				i++
 			}
 		} else {
+			// Regular visible character
 			result.WriteByte(s[i])
 			visibleCount++
 			i++
 		}
 	}
+
 	result.WriteString("...")
 	return result.String()
 }

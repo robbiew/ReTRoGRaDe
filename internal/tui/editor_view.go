@@ -493,7 +493,7 @@ func (m Model) renderModalForm() string {
 
 				availableValueSpace := modalWidth - 16
 				if len(valueText) > availableValueSpace {
-					valueText = ui.TruncateWithPipeCodes(valueText, availableValueSpace-3)
+					valueText = ui.TruncateWithPipeCodes(valueText, availableValueSpace)
 				}
 
 				labelStyle := lipgloss.NewStyle().
@@ -1124,7 +1124,9 @@ func (m Model) renderMenuModify() string {
 	return menuBox
 }
 
-// Add new function to handle editing in the menu data list
+// Complete fix for renderMenuDataListWithEditing in internal/tui/editor_view.go
+// Replace the entire function with this corrected version
+
 func (m Model) renderMenuDataListWithEditing(width int) []string {
 	if len(m.modalFields) == 0 {
 		return []string{
@@ -1145,9 +1147,13 @@ func (m Model) renderMenuDataListWithEditing(width int) []string {
 			currentValue := field.EditableItem.Field.GetValue()
 			valueStr := formatValue(currentValue, field.EditableItem.ValueType)
 
+			// Track whether we've parsed pipe codes (which converts to ANSI)
+			isParsed := false
+
 			// Apply pipe code parsing for Name, Title, and Prompt fields
 			if field.EditableItem.ID == "menu-name" || field.EditableItem.ID == "menu-title-1" || field.EditableItem.ID == "menu-title-2" || field.EditableItem.ID == "menu-prompt" {
 				valueStr = ui.ParsePipeColorCodes(valueStr)
+				isParsed = true
 			}
 
 			isSelected := i == m.selectedCommandIndex
@@ -1191,13 +1197,21 @@ func (m Model) renderMenuDataListWithEditing(width int) []string {
 				}
 			} else if isSelected && !isEditing {
 				// SELECTION MODE: Split highlighting - only highlight the label
-				labelText := fmt.Sprintf(" %-14s:", field.EditableItem.Label) // Changed from %-20s
+				labelText := fmt.Sprintf(" %-14s:", field.EditableItem.Label)
 				valueText := " " + valueStr
 
 				labelWidth := 16
 				availableValueSpace := width - 4 - labelWidth
-				if len(ui.StripPipeCodes(valueText)) > availableValueSpace {
-					valueText = ui.TruncateWithPipeCodes(valueText, availableValueSpace-3)
+
+				// Use ANSI functions if we parsed pipe codes, otherwise use pipe code functions
+				if isParsed {
+					if len(ui.StripANSI(valueText)) > availableValueSpace {
+						valueText = ui.TruncateWithANSICodes(valueText, availableValueSpace)
+					}
+				} else {
+					if len(ui.StripPipeCodes(valueText)) > availableValueSpace {
+						valueText = ui.TruncateWithPipeCodes(valueText, availableValueSpace)
+					}
 				}
 
 				labelStyle := lipgloss.NewStyle().
@@ -1222,13 +1236,29 @@ func (m Model) renderMenuDataListWithEditing(width int) []string {
 				if field.EditableItem.ID == "menu-prompt" {
 					maxValueLen = width - 20 // Allow more space for prompt field
 				}
-				if len(ui.StripPipeCodes(valueStr)) > maxValueLen {
-					valueStr = ui.TruncateWithPipeCodes(valueStr, maxValueLen-3)
+
+				// Use ANSI functions if we parsed pipe codes, otherwise use pipe code functions
+				if isParsed {
+					if len(ui.StripANSI(valueStr)) > maxValueLen {
+						valueStr = ui.TruncateWithANSICodes(valueStr, maxValueLen)
+					}
+				} else {
+					if len(ui.StripPipeCodes(valueStr)) > maxValueLen {
+						valueStr = ui.TruncateWithPipeCodes(valueStr, maxValueLen)
+					}
 				}
 
 				line := fmt.Sprintf(" %-14s: %s", field.EditableItem.Label, valueStr)
-				if len(ui.StripPipeCodes(line)) > width-4 {
-					line = ui.TruncateWithPipeCodes(line, width-7)
+
+				// Check full line and truncate if needed
+				if isParsed {
+					if len(ui.StripANSI(line)) > width-4 {
+						line = ui.TruncateWithANSICodes(line, width-4)
+					}
+				} else {
+					if len(ui.StripPipeCodes(line)) > width-4 {
+						line = ui.TruncateWithPipeCodes(line, width-4)
+					}
 				}
 
 				style := lipgloss.NewStyle().
@@ -1259,7 +1289,7 @@ func (m Model) renderCommandList(width int) []string {
 		// Format: [CommandNumber] [Keys] [ShortDescription]
 		line := fmt.Sprintf(" %d. %-3s %s", cmd.CommandNumber, cmd.Keys, cmd.ShortDescription)
 		if len(line) > width-4 {
-			line = ui.TruncateWithPipeCodes(line, width-7)
+			line = ui.TruncateWithPipeCodes(line, width-4)
 		}
 		if len(line) < width-4 {
 			line += strings.Repeat(" ", width-4-len(line))
