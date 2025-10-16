@@ -63,7 +63,8 @@ func (e *MenuExecutor) ExecuteMenu(menuName string, ctx *ExecutionContext) error
 		}
 		promptRow := min(height, e.currentRow+1)
 		e.io.Print(ui.MoveCursorSequence(1, promptRow))
-		e.io.Print(menu.Prompt)
+		parsedPrompt := ui.ParsePipeColorCodes(menu.Prompt)
+		e.io.Print(parsedPrompt)
 
 		// Read input (single key for now, can be expanded)
 		key, err := e.io.GetKeyPressUpper()
@@ -112,8 +113,9 @@ func (e *MenuExecutor) ExecuteMenu(menuName string, ctx *ExecutionContext) error
 // displayTitles displays the menu titles
 func (e *MenuExecutor) displayTitles(menu *database.Menu) {
 	for _, title := range menu.Titles {
-		e.io.Printf("\r\n%s\r\n", title)
-		e.currentRow += 2 // Each title adds 2 rows (\r\n + title + \r\n)
+		parsedTitle := ui.ParsePipeColorCodes(title)
+		e.io.Printf("\r\n%s\r\n", parsedTitle)
+		e.currentRow += 2
 	}
 }
 
@@ -134,11 +136,11 @@ func (e *MenuExecutor) displayGenericMenu(menu *database.Menu, commands []databa
 
 	// Display titles (centered)
 	for _, title := range menu.Titles {
-		centeredTitle := e.centerTitle(title, ctx)
+		parsedTitle := ui.ParsePipeColorCodes(title)     // Parse pipe codes first
+		centeredTitle := e.centerTitle(parsedTitle, ctx) // Then center
 		e.io.Printf("\r\n%s\r\n", centeredTitle)
-		e.currentRow += 2 // Each title adds 2 rows
+		e.currentRow += 2
 	}
-
 	// Add row spacing after titles
 	e.io.Printf("\r\n")
 	e.currentRow += 1
@@ -249,11 +251,12 @@ func (e *MenuExecutor) clearScreen(clear bool) {
 
 // centerTitle centers the title text on screen
 func (e *MenuExecutor) centerTitle(title string, ctx *ExecutionContext) string {
-	width := 80 // default width
+	width := 80
 	if ctx != nil && ctx.Session != nil && ctx.Session.Width > 0 {
 		width = ctx.Session.Width
 	}
-	visible := ui.StripANSI(title)
+	// Strip both pipe codes and ANSI to get visible length
+	visible := ui.StripANSI(ui.StripPipeCodes(title))
 	if len(visible) >= width {
 		return title
 	}
