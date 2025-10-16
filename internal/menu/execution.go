@@ -12,27 +12,6 @@ import (
 	"github.com/robbiew/retrograde/internal/ui"
 )
 
-// getTerminalDimensions returns the terminal width and height from the session,
-// with fallback to 80x24 if dimensions aren't available
-func getTerminalDimensions(ctx *ExecutionContext) (width, height int) {
-	if ctx != nil && ctx.Session != nil {
-		if ctx.Session.Width > 0 {
-			width = ctx.Session.Width
-		} else {
-			width = 80
-		}
-		if ctx.Session.Height > 0 {
-			height = ctx.Session.Height
-		} else {
-			height = 24
-		}
-	} else {
-		width = 80
-		height = 24
-	}
-	return
-}
-
 // MenuExecutor handles the execution of menus
 type MenuExecutor struct {
 	db       database.Database
@@ -70,16 +49,16 @@ func (e *MenuExecutor) ExecuteMenu(menuName string, ctx *ExecutionContext) error
 	// Display menu titles
 	e.displayTitles(menu)
 
-	// Execute EVERYTIME commands
-	// Note: EVERYTIME functionality removed as Flags field was removed
-
 	// Display generic menu if applicable
 	e.displayGenericMenu(menu, commands, ctx)
 
 	// Main menu loop
 	for {
 		// Position prompt at bottom of terminal
-		_, height := getTerminalDimensions(ctx)
+		height := 24
+		if ctx != nil && ctx.Session != nil && ctx.Session.Height > 0 {
+			height = ctx.Session.Height
+		}
 		e.io.Print(ui.MoveCursorSequence(1, height))
 		e.io.Print(menu.Prompt)
 
@@ -174,6 +153,10 @@ func (e *MenuExecutor) checkACS(acs string, ctx *ExecutionContext) bool {
 		return true // No ACS requirement means allow access
 	}
 
+	if ctx == nil || ctx.Session == nil {
+		return false // Deny access if context or session is nil
+	}
+
 	// Get user's security level
 	userSecLevel := ctx.Session.SecurityLevel
 
@@ -255,7 +238,10 @@ func (e *MenuExecutor) clearScreen(clear bool) {
 
 // centerTitle centers the title text on screen
 func (e *MenuExecutor) centerTitle(title string, ctx *ExecutionContext) string {
-	width, _ := getTerminalDimensions(ctx)
+	width := 80 // default width
+	if ctx != nil && ctx.Session != nil && ctx.Session.Width > 0 {
+		width = ctx.Session.Width
+	}
 	visible := ui.StripANSI(title)
 	if len(visible) >= width {
 		return title
@@ -282,8 +268,8 @@ func (e *MenuExecutor) displayCommandsInColumns(commands []database.MenuCommand,
 		return
 	}
 
-	// Use 4 columns for the new layout
-	columns := 4
+	// Use configured columns for the layout
+	columns := menu.GenericColumns
 
 	// ANSI color codes
 	bracketColor := ui.ColorFromNumber(menu.GenericBracketColor)
@@ -293,7 +279,10 @@ func (e *MenuExecutor) displayCommandsInColumns(commands []database.MenuCommand,
 
 	// Calculate items per column
 	itemsPerColumn := (len(displayCommands) + columns - 1) / columns
-	screenWidth, _ := getTerminalDimensions(ctx)
+	screenWidth := 80
+	if ctx != nil && ctx.Session != nil && ctx.Session.Width > 0 {
+		screenWidth = ctx.Session.Width
+	}
 	colWidth := (screenWidth - 4) / columns
 	const margin = 2
 
