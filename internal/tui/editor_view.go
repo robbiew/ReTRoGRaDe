@@ -533,16 +533,18 @@ func (m Model) renderModalForm() string {
 
 					// Don't use Width() as it causes wrapping - manually pad instead
 					inlineDisplay := label + inputView
-					// Calculate visual width (strips ANSI codes)
-					visualLen := len(label) + availableInputWidth + 1 // label + space + input width
-					if visualLen < modalWidth {
-						inlineDisplay += strings.Repeat(" ", modalWidth-visualLen)
+					lineWidth := lipgloss.Width(inlineDisplay)
+					if lineWidth < modalWidth {
+						inlineDisplay += strings.Repeat(" ", modalWidth-lineWidth)
+					} else if lineWidth > modalWidth {
+						inlineDisplay = ui.TruncateWithANSICodes(inlineDisplay, modalWidth)
 					}
 
 					fullRowStyle := lipgloss.NewStyle().
 						Background(lipgloss.Color(ColorPrimary)).
 						Foreground(lipgloss.Color(ColorTextBright)).
-						Bold(true)
+						Bold(true).
+						Width(modalWidth)
 
 					fieldLines = append(fieldLines, fullRowStyle.Render(inlineDisplay))
 				}
