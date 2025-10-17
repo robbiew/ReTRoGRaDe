@@ -1417,7 +1417,15 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleMenuEditData processes input in menu edit data mode
 func (m Model) handleMenuEditData(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Use the same logic as Level4ModalNavigation for field editing
+	// Safety check at the top - if modalFields is empty, return to menu management
+	if len(m.modalFields) == 0 {
+		m.message = "Error: No fields to edit. Returning to menu list."
+		m.messageTime = time.Now()
+		m.messageType = ErrorMessage
+		m.navMode = MenuManagementMode
+		return m, nil
+	}
+
 	switch msg.String() {
 	case "up", "k":
 		// Navigate up in field list
@@ -1434,6 +1442,12 @@ func (m Model) handleMenuEditData(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.message = ""
 		return m, nil
 	case "enter":
+		// Bounds check for modalFieldIndex
+		if m.modalFieldIndex >= len(m.modalFields) {
+			m.modalFieldIndex = len(m.modalFields) - 1
+			return m, nil
+		}
+
 		// Edit selected field
 		selectedField := m.modalFields[m.modalFieldIndex]
 		if selectedField.ItemType == EditableField && selectedField.EditableItem != nil {
@@ -1879,7 +1893,7 @@ func (m Model) handleMenuManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Insert new menu
 		m.editingMenu = &database.Menu{
 			Name:                "",
-			Titles:              []string{""},
+			Titles:              []string{"", ""},
 			Prompt:              "",
 			ACSRequired:         "",
 			GenericColumns:      4,
@@ -1888,6 +1902,11 @@ func (m Model) handleMenuManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			GenericDescColor:    1,
 			ClearScreen:         false,
 		}
+		// CRITICAL: Set up modal fields for new menu editing
+		// ADD THIS: Initialize modal fields for the new menu
+		m.setupMenuEditDataModal()
+		m.modalFieldIndex = 0
+
 		m.navMode = MenuEditDataMode
 		m.message = "Creating new menu"
 		m.messageTime = time.Now()
