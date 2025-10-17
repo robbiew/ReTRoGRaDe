@@ -56,6 +56,7 @@ type MenuCommand struct {
 	ACSRequired      string
 	CmdKeys          string
 	Options          string
+	Active           bool
 }
 
 // Database interface defines all database operations

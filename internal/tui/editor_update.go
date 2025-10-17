@@ -1473,6 +1473,7 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					ACSRequired:      selectedCmd.ACSRequired,
 					CmdKeys:          selectedCmd.CmdKeys,
 					Options:          selectedCmd.Options,
+					Active:           selectedCmd.Active,
 				}
 				// Set up modal fields for command editing
 				m.setupMenuEditCommandModal()
@@ -1491,6 +1492,7 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				ACSRequired:      "",
 				CmdKeys:          "",
 				Options:          "",
+				Active:           true,
 			}
 			m.editingMenuCommand = newCommand
 			// Set up modal fields for command editing
@@ -1687,9 +1689,12 @@ func (m Model) handleMenuEditCommand(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 			// Initialize text input based on value type
 			if m.editingItem.ValueType == BoolValue {
+				// For bool, we don't use text input, just enter editing mode
 				m.textInput.SetValue("")
+				m.navMode = EditingValue
+				m.message = ""
 			} else if m.editingItem.ValueType == SelectValue {
-				// NEW: Handle SelectValue - create a selection list
+				// Handle SelectValue - create a selection list
 				m.navMode = SelectingValue
 				m.selectListIndex = 0
 				// Find current value in options
@@ -1724,7 +1729,6 @@ func (m Model) handleMenuEditCommand(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.textInput.Focus()
 				m.textInput.CursorEnd() // Move cursor to end
 				m.textInput.Focus()     // Ensure it's focused
-				// Add this in each place where you enter EditingValue mode:
 				m.textInput.TextStyle = lipgloss.NewStyle().
 					Foreground(lipgloss.Color(ColorTextBright)).
 					Background(lipgloss.Color(ColorPrimary))

@@ -280,6 +280,7 @@ func (s *SQLiteDB) InitializeSchema() error {
 			acs_required TEXT,
 			cmdkeys TEXT,
 			options TEXT,
+			active BOOLEAN DEFAULT 1,
 			FOREIGN KEY (menu_id) REFERENCES menus(id) ON DELETE CASCADE
 		)
 	`)
@@ -615,9 +616,9 @@ func (s *SQLiteDB) DeleteMenu(id int64) error {
 // CreateMenuCommand creates a new menu command
 func (s *SQLiteDB) CreateMenuCommand(cmd *MenuCommand) (int64, error) {
 	result, err := s.db.Exec(`
-		INSERT INTO menu_commands (menu_id, command_number, keys, short_description, acs_required, cmdkeys, options)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		cmd.MenuID, cmd.CommandNumber, cmd.Keys, cmd.ShortDescription, cmd.ACSRequired, cmd.CmdKeys, cmd.Options)
+		INSERT INTO menu_commands (menu_id, command_number, keys, short_description, acs_required, cmdkeys, options, active)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		cmd.MenuID, cmd.CommandNumber, cmd.Keys, cmd.ShortDescription, cmd.ACSRequired, cmd.CmdKeys, cmd.Options, cmd.Active)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create menu command: %w", err)
 	}
@@ -633,7 +634,7 @@ func (s *SQLiteDB) CreateMenuCommand(cmd *MenuCommand) (int64, error) {
 // GetMenuCommands retrieves all commands for a menu
 func (s *SQLiteDB) GetMenuCommands(menuID int) ([]MenuCommand, error) {
 	rows, err := s.db.Query(`
-		SELECT id, menu_id, command_number, keys, short_description, acs_required, cmdkeys, options
+		SELECT id, menu_id, command_number, keys, short_description, acs_required, cmdkeys, options, active
 		FROM menu_commands WHERE menu_id = ? ORDER BY command_number`, menuID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query menu commands: %w", err)
@@ -643,7 +644,7 @@ func (s *SQLiteDB) GetMenuCommands(menuID int) ([]MenuCommand, error) {
 	var commands []MenuCommand
 	for rows.Next() {
 		var cmd MenuCommand
-		err := rows.Scan(&cmd.ID, &cmd.MenuID, &cmd.CommandNumber, &cmd.Keys, &cmd.ShortDescription, &cmd.ACSRequired, &cmd.CmdKeys, &cmd.Options)
+		err := rows.Scan(&cmd.ID, &cmd.MenuID, &cmd.CommandNumber, &cmd.Keys, &cmd.ShortDescription, &cmd.ACSRequired, &cmd.CmdKeys, &cmd.Options, &cmd.Active)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan menu command: %w", err)
 		}
@@ -656,9 +657,9 @@ func (s *SQLiteDB) GetMenuCommands(menuID int) ([]MenuCommand, error) {
 // UpdateMenuCommand updates a menu command
 func (s *SQLiteDB) UpdateMenuCommand(cmd *MenuCommand) error {
 	_, err := s.db.Exec(`
-		UPDATE menu_commands SET menu_id = ?, command_number = ?, keys = ?, short_description = ?, acs_required = ?, cmdkeys = ?, options = ?
+		UPDATE menu_commands SET menu_id = ?, command_number = ?, keys = ?, short_description = ?, acs_required = ?, cmdkeys = ?, options = ?, active = ?
 		WHERE id = ?`,
-		cmd.MenuID, cmd.CommandNumber, cmd.Keys, cmd.ShortDescription, cmd.ACSRequired, cmd.CmdKeys, cmd.Options, cmd.ID)
+		cmd.MenuID, cmd.CommandNumber, cmd.Keys, cmd.ShortDescription, cmd.ACSRequired, cmd.CmdKeys, cmd.Options, cmd.Active, cmd.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update menu command: %w", err)
 	}

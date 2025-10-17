@@ -20,30 +20,13 @@ func SeedDefaultMainMenu(db Database) error {
 		defaultCommands := []MenuCommand{
 			{
 				MenuID:           menu.ID,
-				CommandNumber:    1,
-				Keys:             "R",
-				ShortDescription: "Read Mail",
-				ACSRequired:      "",
-				CmdKeys:          "MM",
-				Options:          "",
-			},
-			{
-				MenuID:           menu.ID,
-				CommandNumber:    2,
-				Keys:             "P",
-				ShortDescription: "Post Message",
-				ACSRequired:      "",
-				CmdKeys:          "MP",
-				Options:          "",
-			},
-			{
-				MenuID:           menu.ID,
 				CommandNumber:    3,
 				Keys:             "G",
 				ShortDescription: "Goodbye",
 				ACSRequired:      "",
 				CmdKeys:          "G",
 				Options:          "",
+				Active:           true,
 			},
 		}
 		for _, cmd := range defaultCommands {
@@ -77,30 +60,13 @@ func SeedDefaultMainMenu(db Database) error {
 	commands := []MenuCommand{
 		{
 			MenuID:           int(menuID),
-			CommandNumber:    1,
-			Keys:             "R",
-			ShortDescription: "Read Mail",
-			ACSRequired:      "",
-			CmdKeys:          "MM",
-			Options:          "",
-		},
-		{
-			MenuID:           int(menuID),
-			CommandNumber:    2,
-			Keys:             "P",
-			ShortDescription: "Post Message",
-			ACSRequired:      "",
-			CmdKeys:          "MP",
-			Options:          "",
-		},
-		{
-			MenuID:           int(menuID),
 			CommandNumber:    3,
 			Keys:             "G",
 			ShortDescription: "Goodbye",
 			ACSRequired:      "",
 			CmdKeys:          "G",
 			Options:          "",
+			Active:           true,
 		},
 	}
 

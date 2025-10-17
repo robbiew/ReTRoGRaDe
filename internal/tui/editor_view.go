@@ -1323,9 +1323,23 @@ func (m Model) renderMenuDataListWithEditing(width int) []string {
 // renderCommandList renders the command list for the commands tab
 func (m Model) renderCommandList(width int) []string {
 	var commandLines []string
+
+	// Add column header with dark grey background
+	columnHeader := lipgloss.NewStyle().
+		Background(lipgloss.Color("8")).
+		Foreground(lipgloss.Color(ColorTextBright)).
+		Bold(true).
+		Width(width - 4).
+		Render(fmt.Sprintf(" %-4s %-4s %-30s %-6s", "#", "Key", "Description", "Active"))
+	commandLines = append(commandLines, columnHeader)
+
 	for i, cmd := range m.menuCommandsList {
-		// Format: [CommandNumber] [Keys] [ShortDescription]
-		line := fmt.Sprintf(" %d. %-3s %s", cmd.CommandNumber, cmd.Keys, cmd.ShortDescription)
+		// Format: [CommandNumber] [Keys] [ShortDescription] [Active Status]
+		activeIndicator := "[✓]"
+		if !cmd.Active {
+			activeIndicator = "[X]"
+		}
+		line := fmt.Sprintf(" %-4s %-4s %-30s %-6s", fmt.Sprintf("%d.", cmd.CommandNumber), cmd.Keys, cmd.ShortDescription, activeIndicator)
 		if len(line) > width-4 {
 			line = ui.TruncateWithPipeCodes(line, width-4)
 		}
@@ -1349,15 +1363,13 @@ func (m Model) renderCommandList(width int) []string {
 		commandLines = append(commandLines, style.Render(line))
 	}
 
-	// If no commands, show message
-	if len(commandLines) == 0 {
-		commandLines = []string{
-			lipgloss.NewStyle().
-				Foreground(lipgloss.Color(ColorTextDim)).
-				Background(lipgloss.Color(ColorBgMedium)).
-				Width(width - 4).
-				Render(" No commands defined - press 'I' to add"),
-		}
+	// If no commands, show message after header
+	if len(m.menuCommandsList) == 0 {
+		commandLines = append(commandLines, lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorTextDim)).
+			Background(lipgloss.Color(ColorBgMedium)).
+			Width(width-4).
+			Render(" No commands defined - press 'I' to add"))
 	}
 
 	// Pad to 14 lines to match menu data list height
@@ -1489,6 +1501,24 @@ func (m *Model) setupMenuEditCommandModal() {
 				HelpText: "Command options/parameters",
 			},
 		},
+		{
+			ID:       "command-active",
+			Label:    "Active",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "command-active",
+				Label:     "Active",
+				ValueType: BoolValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenuCommand.Active },
+					SetValue: func(v interface{}) error {
+						m.editingMenuCommand.Active = v.(bool)
+						return nil
+					},
+				},
+				HelpText: "Whether this command is active/available",
+			},
+		},
 	}
 
 	m.modalFieldIndex = 0
@@ -1549,7 +1579,7 @@ func (m Model) renderSelectingValueView() string {
 			lastCategory = opt.Category
 		}
 
-		// Add the option line
+		// Add the option line (only implemented commands shown)
 		line := fmt.Sprintf(" [%s] %-25s %s", opt.Value, opt.Label, opt.Description)
 		if len(line) > modalWidth-4 {
 			line = line[:modalWidth-7] + "..."

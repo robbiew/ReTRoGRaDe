@@ -238,6 +238,7 @@ type SelectOption struct {
 	Label       string // Display name (e.g., "Read Mail", "Post Message")
 	Description string // Additional info shown in selection list
 	Category    string // Optional category for grouping
+	Implemented bool   // Whether this command is fully implemented
 }
 
 // ConfigField provides access to configuration values

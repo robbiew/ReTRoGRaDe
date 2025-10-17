@@ -28,6 +28,7 @@ type CmdKeyDefinition struct {
 	Name        string // Human-readable name (e.g., "Read Mail", "Post Message")
 	Description string // Detailed description of what the command does
 	Category    string // Category for grouping (e.g., "Message", "File", "System")
+	Implemented bool   // Whether this command is fully implemented
 	Handler     CmdKeyHandler
 }
 
@@ -94,22 +95,25 @@ func (r *CmdKeyRegistry) registerDefaults() {
 	r.Register(&CmdKeyDefinition{
 		CmdKey:      "!D",
 		Name:        "Download QWK Packet",
-		Description: "Download offline mail in .QWK format",
+		Description: "Download offline mail in .QWK",
 		Category:    "Offline Mail",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
 		CmdKey:      "!P",
 		Name:        "Set Message Pointers",
-		Description: "Set message read pointers for offline mail",
+		Description: "Set pointers for offline mail",
 		Category:    "Offline Mail",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
 		CmdKey:      "!U",
 		Name:        "Upload REP Packet",
-		Description: "Upload offline mail replies in .REP format",
+		Description: "Upload offline mail in .REP",
 		Category:    "Offline Mail",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 
@@ -119,6 +123,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Change Message Base",
 		Description: "Change to a different message base",
 		Category:    "Message",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -126,6 +131,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Enter Message",
 		Description: "Enter a new message to current base",
 		Category:    "Message",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -133,6 +139,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Kill Message Scan",
 		Description: "Stop scanning messages",
 		Category:    "Message",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -140,6 +147,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "List Messages",
 		Description: "List message titles in current base",
 		Category:    "Message",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -147,6 +155,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Read Mail",
 		Description: "Read messages addressed to you",
 		Category:    "Message",
+		Implemented: false,
 		Handler:     handleReadMail,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -154,6 +163,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "New Message Scan",
 		Description: "Scan all new messages",
 		Category:    "Message",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -161,6 +171,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Post Message",
 		Description: "Post a new message to current base",
 		Category:    "Message",
+		Implemented: false,
 		Handler:     handlePostMessage,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -168,6 +179,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Read Messages",
 		Description: "Read messages in current base",
 		Category:    "Message",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -175,6 +187,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Scan Messages",
 		Description: "Quick scan of message subjects",
 		Category:    "Message",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -182,6 +195,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Your Messages",
 		Description: "Read messages you've posted",
 		Category:    "Message",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -189,6 +203,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Your Mail Scan",
 		Description: "Scan your personal mail",
 		Category:    "Message",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -196,6 +211,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Global New Scan",
 		Description: "Scan new messages across all bases",
 		Category:    "Message",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -203,6 +219,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Read Message Number",
 		Description: "Read a specific message by number",
 		Category:    "Message",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 
@@ -212,6 +229,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Change File Base",
 		Description: "Change to a different file area",
 		Category:    "File",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -219,6 +237,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Batch Download",
 		Description: "Add files to batch download queue",
 		Category:    "File",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -226,6 +245,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Download File",
 		Description: "Download a file from current area",
 		Category:    "File",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -233,6 +253,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Find File",
 		Description: "Search for files across all areas",
 		Category:    "File",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -240,6 +261,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "List Files",
 		Description: "List files in current area",
 		Category:    "File",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -247,6 +269,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "New Files Scan",
 		Description: "Scan for new files",
 		Category:    "File",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -254,6 +277,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "File Points",
 		Description: "Display your file points/ratio",
 		Category:    "File",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -261,6 +285,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Search Files",
 		Description: "Search for files by keyword",
 		Category:    "File",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -268,6 +293,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Upload File",
 		Description: "Upload a file to current area",
 		Category:    "File",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -275,6 +301,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "View File",
 		Description: "View a file's description or contents",
 		Category:    "File",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -282,6 +309,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Global File Search",
 		Description: "Search all file areas",
 		Category:    "File",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -289,6 +317,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Your Uploads",
 		Description: "List files you've uploaded",
 		Category:    "File",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -296,6 +325,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Contents",
 		Description: "View archive contents",
 		Category:    "File",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 
@@ -305,6 +335,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Clear Batch Queue",
 		Description: "Clear your batch transfer queue",
 		Category:    "Batch",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -312,6 +343,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Batch Download",
 		Description: "Download all files in batch queue",
 		Category:    "Batch",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -319,6 +351,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "List Batch Queue",
 		Description: "List files in your batch queue",
 		Category:    "Batch",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -326,6 +359,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Remove from Batch",
 		Description: "Remove a file from batch queue",
 		Category:    "Batch",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -333,6 +367,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Batch Upload",
 		Description: "Upload multiple files at once",
 		Category:    "Batch",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -340,6 +375,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Batch Queue Status",
 		Description: "Display number of files in batch queue",
 		Category:    "Batch",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 
@@ -349,6 +385,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Goodbye / Logoff",
 		Description: "Log off the BBS",
 		Category:    "System",
+		Implemented: true,
 		Handler:     handleGoodbye,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -356,6 +393,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Careful Logoff",
 		Description: "Prompt before logging off",
 		Category:    "System",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -363,6 +401,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Instant Logoff",
 		Description: "Immediate logoff without prompt",
 		Category:    "System",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -370,6 +409,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Main Menu",
 		Description: "Return to main menu",
 		Category:    "System",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 
@@ -379,6 +419,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Logon to BBS",
 		Description: "Login (shuttle mode)",
 		Category:    "User",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -386,6 +427,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Apply for Access",
 		Description: "New user application",
 		Category:    "User",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -393,6 +435,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Bulletins",
 		Description: "Read system bulletins",
 		Category:    "User",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -400,6 +443,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Page Sysop",
 		Description: "Page the system operator",
 		Category:    "User",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -407,6 +451,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "User Editor",
 		Description: "Edit your user settings",
 		Category:    "User",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -414,6 +459,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Feedback",
 		Description: "Send feedback to sysop",
 		Category:    "User",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -421,6 +467,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Goodbye Script",
 		Description: "Display goodbye and logoff",
 		Category:    "User",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -428,6 +475,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Last Callers",
 		Description: "View list of recent callers",
 		Category:    "User",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -435,6 +483,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Node List",
 		Description: "View active nodes/users",
 		Category:    "User",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -442,6 +491,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Page User",
 		Description: "Page another user",
 		Category:    "User",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -449,6 +499,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Your Stats",
 		Description: "View your usage statistics",
 		Category:    "User",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -456,6 +507,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "System Information",
 		Description: "View BBS system information",
 		Category:    "User",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -463,6 +515,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "User List",
 		Description: "View list of users",
 		Category:    "User",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -470,6 +523,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Version Info",
 		Description: "View BBS software version",
 		Category:    "User",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 
@@ -479,6 +533,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Add Voting Question",
 		Description: "Add a new voting question",
 		Category:    "Voting",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -486,6 +541,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "List Voting Questions",
 		Description: "List all voting questions",
 		Category:    "Voting",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -493,6 +549,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "View Voting Results",
 		Description: "View results of voting questions",
 		Category:    "Voting",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -500,6 +557,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Vote on All",
 		Description: "Vote on all unvoted questions",
 		Category:    "Voting",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -507,6 +565,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Vote on Question",
 		Description: "Vote on a specific question",
 		Category:    "Voting",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 
@@ -516,6 +575,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Go to Menu",
 		Description: "Navigate to a different menu",
 		Category:    "Navigation",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -523,6 +583,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Gosub Menu",
 		Description: "Go to menu and return",
 		Category:    "Navigation",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -530,6 +591,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Return from Menu",
 		Description: "Return to previous menu",
 		Category:    "Navigation",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 
@@ -539,6 +601,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Execute Program",
 		Description: "Execute an external program",
 		Category:    "Misc",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -546,6 +609,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Display File",
 		Description: "Display a text file",
 		Category:    "Misc",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -553,6 +617,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Display String",
 		Description: "Display a text string",
 		Category:    "Misc",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 	r.Register(&CmdKeyDefinition{
@@ -560,6 +625,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		Name:        "Prompt for Password",
 		Description: "Prompt user for password",
 		Category:    "Misc",
+		Implemented: false,
 		Handler:     handleNotImplemented,
 	})
 }

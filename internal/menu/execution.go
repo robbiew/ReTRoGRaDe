@@ -149,10 +149,10 @@ func (e *MenuExecutor) displayGenericMenu(menu *database.Menu, commands []databa
 	e.displayCommandsInColumns(commands, menu, ctx)
 }
 
-// findCommand finds a command matching the input
+// findCommand finds a command matching the input (only active commands)
 func (e *MenuExecutor) findCommand(commands []database.MenuCommand, input string) *database.MenuCommand {
 	for _, cmd := range commands {
-		if strings.EqualFold(cmd.Keys, input) {
+		if strings.EqualFold(cmd.Keys, input) && cmd.Active {
 			return &cmd
 		}
 	}
@@ -270,10 +270,10 @@ func (e *MenuExecutor) displayCommandsInColumns(commands []database.MenuCommand,
 		return
 	}
 
-	// Filter commands that have short descriptions
+	// Filter commands that have short descriptions and are active
 	var displayCommands []database.MenuCommand
 	for _, cmd := range commands {
-		if cmd.ShortDescription != "" {
+		if cmd.ShortDescription != "" && cmd.Active {
 			displayCommands = append(displayCommands, cmd)
 		}
 	}
