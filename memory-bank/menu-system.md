@@ -8,7 +8,7 @@ Implement a menu system inspired by Renegade BBS, retaining its configuration ap
 
 - **menus table**:
   - id (INTEGER PRIMARY KEY)
-  - name (TEXT UNIQUE, e.g., 'MAIN')
+  - name (TEXT UNIQUE, e.g., 'MainMenu')
   - titles (TEXT, JSON array of strings)
   - help_file (TEXT)
   - long_help_file (TEXT)
@@ -65,7 +65,7 @@ Cmdkeys registry: Map strings to functions taking user context and options. Impl
 
 ## Integration with BBS Flow
 
-- Add "Start Menu" to configuration (default 'MAIN').
+- Add "Start Menu" to configuration (default 'MainMenu').
 - Post-login, load start menu and enter execution loop.
 - Add "Menu Editor" to TUI config under Editors.
 - For pre-login, consider a separate menu or integrate with login UI.
@@ -75,8 +75,8 @@ Cmdkeys registry: Map strings to functions taking user context and options. Impl
 1. Create DB migration for schema.
 2. Implement Menu/MenuCommand models and basic DB functions.
 3. Implement cmdkey registry with handlers for MM (read mail), MP (post), G (goodbye).
-4. Seed a basic MAIN menu via DB or TUI editor: commands for mail, post, logout.
-5. Integrate: After login, load MAIN menu.
+4. Seed a basic MainMenu via DB or TUI editor: commands for mail, post, logout.
+5. Integrate: After login, load MainMenu.
 6. Test via telnet: Login, view menu, execute commands, verify execution and navigation.
 
 ## Modern Improvements over Renegade
@@ -101,4 +101,4 @@ Cmdkeys registry: Map strings to functions taking user context and options. Impl
 - Implement menu execution engine with prompt/input handling
 - Add start menu config option
 - Integrate menu loading post-login
-- Test basic MAIN menu creation and execution
+- Test basic MainMenu creation and execution

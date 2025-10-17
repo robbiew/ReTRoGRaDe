@@ -31,25 +31,17 @@ func NewMenuExecutor(db database.Database, io *telnet.TelnetIO) *MenuExecutor {
 }
 
 // ExecuteMenu executes a menu by name
-func (e *MenuExecutor) ExecuteMenu(menuName string, ctx *ExecutionContext) error {
-	// Check for theme file first
-	themeFile := e.checkThemeFile(menuName)
-	if themeFile != "" {
-		return e.serveThemeFile(themeFile)
-	}
 
-	menu, err := e.db.GetMenuByName(menuName)
+func (e *MenuExecutor) ExecuteMenu(menuName string, ctx *ExecutionContext) error {
+	menu, err := e.lookupMenuByName(menuName)
 	if err != nil {
-		return fmt.Errorf("failed to load menu %s: %w", menuName, err)
+		return err
 	}
 
 	commands, err := e.db.GetMenuCommands(menu.ID)
 	if err != nil {
 		return fmt.Errorf("failed to load menu commands for %s: %w", menuName, err)
 	}
-
-	// Display menu titles
-	e.displayTitles(menu)
 
 	// Display generic menu if applicable
 	e.displayGenericMenu(menu, commands, ctx)
@@ -110,15 +102,6 @@ func (e *MenuExecutor) ExecuteMenu(menuName string, ctx *ExecutionContext) error
 	return nil
 }
 
-// displayTitles displays the menu titles
-func (e *MenuExecutor) displayTitles(menu *database.Menu) {
-	for _, title := range menu.Titles {
-		parsedTitle := ui.ParsePipeColorCodes(title)
-		e.io.Printf("\r\n%s\r\n", parsedTitle)
-		e.currentRow += 2
-	}
-}
-
 // displayGenericMenu displays the generic menu if applicable
 func (e *MenuExecutor) displayGenericMenu(menu *database.Menu, commands []database.MenuCommand, ctx *ExecutionContext) {
 	// Check ACS for menu access
@@ -134,19 +117,107 @@ func (e *MenuExecutor) displayGenericMenu(menu *database.Menu, commands []databa
 		e.currentRow = 1 // Reset to top after clear screen
 	}
 
-	// Display titles (centered)
-	for _, title := range menu.Titles {
-		parsedTitle := ui.ParsePipeColorCodes(title)     // Parse pipe codes first
-		centeredTitle := e.centerTitle(parsedTitle, ctx) // Then center
-		e.io.Printf("\r\n%s\r\n", centeredTitle)
-		e.currentRow += 2
+	displayMode := sanitizeDisplayMode(menu.DisplayMode)
+	headerDisplayed := false
+
+	switch displayMode {
+	case database.DisplayModeThemeOnly:
+		if art := e.findThemeFile(menu.Name); art != "" {
+			if lines, err := e.serveThemeFile(art); err == nil && lines > 0 {
+				headerDisplayed = true
+			}
+		}
+		if !headerDisplayed {
+			displayMode = database.DisplayModeTitlesGenerated
+		}
+	case database.DisplayModeHeaderGenerated:
+		if art := e.findThemeFile(menu.Name + ".hdr"); art != "" {
+			if lines, err := e.serveThemeFile(art); err == nil && lines > 0 {
+				headerDisplayed = true
+			}
+		}
+		if !headerDisplayed {
+			displayMode = database.DisplayModeTitlesGenerated
+		}
 	}
-	// Add row spacing after titles
-	e.io.Printf("\r\n")
-	e.currentRow += 1
+
+	if displayMode == database.DisplayModeTitlesGenerated {
+		headerDisplayed = e.displayCenteredTitles(menu, ctx) || headerDisplayed
+	}
+
+	if headerDisplayed && displayMode != database.DisplayModeThemeOnly {
+		e.io.Printf("\r\n")
+		e.currentRow += 1
+	}
+
+	menu.DisplayMode = displayMode
+
+	if displayMode == database.DisplayModeThemeOnly {
+		return
+	}
 
 	// Display commands in columns with colors
 	e.displayCommandsInColumns(commands, menu, ctx)
+}
+
+func sanitizeDisplayMode(value string) string {
+	switch value {
+	case database.DisplayModeHeaderGenerated, database.DisplayModeThemeOnly:
+		return value
+	case database.DisplayModeTitlesGenerated:
+		return value
+	default:
+		return database.DisplayModeTitlesGenerated
+	}
+}
+
+func (e *MenuExecutor) displayCenteredTitles(menu *database.Menu, ctx *ExecutionContext) bool {
+	if len(menu.Titles) == 0 {
+		return false
+	}
+	for _, title := range menu.Titles {
+		parsedTitle := ui.ParsePipeColorCodes(title)
+		centeredTitle := e.centerTitle(parsedTitle, ctx)
+		e.io.Printf("\r\n%s\r\n", centeredTitle)
+		e.currentRow += 2
+	}
+	return true
+}
+
+func (e *MenuExecutor) findThemeFile(base string) string {
+	themeDir := e.getThemeBaseDir()
+
+	candidates := []string{}
+	for _, ext := range []string{".ans", ".asc"} {
+		name := base + ext
+		candidates = append(candidates,
+			filepath.Join(themeDir, name),
+			filepath.Join(themeDir, strings.ToLower(name)),
+			filepath.Join(themeDir, strings.ToUpper(name)))
+	}
+
+	for _, path := range candidates {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+
+	entries, err := os.ReadDir(themeDir)
+	if err != nil {
+		return ""
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		for _, ext := range []string{".ans", ".asc"} {
+			if strings.EqualFold(name, base+ext) {
+				return filepath.Join(themeDir, name)
+			}
+		}
+	}
+	return ""
 }
 
 // findCommand finds a command matching the input (only active commands)
@@ -219,26 +290,21 @@ func (e *MenuExecutor) executeCommand(cmd database.MenuCommand, ctx *ExecutionCo
 	return e.registry.Execute(cmd.CmdKeys, ctx, cmd.Options)
 }
 
-// checkThemeFile checks if a theme file exists for the given menu name
-func (e *MenuExecutor) checkThemeFile(menuName string) string {
-	extensions := []string{".ans", ".asc"}
-	for _, ext := range extensions {
-		themePath := filepath.Join("theme", menuName+ext)
-		if _, err := os.Stat(themePath); err == nil {
-			return themePath
-		}
-	}
-	return ""
-}
-
 // serveThemeFile serves the content of a theme file
-func (e *MenuExecutor) serveThemeFile(themePath string) error {
+func (e *MenuExecutor) serveThemeFile(themePath string) (int, error) {
 	content, err := os.ReadFile(themePath)
 	if err != nil {
-		return fmt.Errorf("failed to read theme file %s: %w", themePath, err)
+		return 0, fmt.Errorf("failed to read theme file %s: %w", themePath, err)
 	}
-	e.io.Print(string(content))
-	return nil
+	data := ui.StripSauce(string(content))
+	e.io.Print(data)
+
+	lineCount := strings.Count(data, "\n")
+	if len(data) > 0 && !strings.HasSuffix(data, "\n") {
+		lineCount++
+	}
+	e.currentRow += lineCount
+	return lineCount, nil
 }
 
 // clearScreen clears the screen if ClearScreen is true
@@ -285,6 +351,19 @@ func (e *MenuExecutor) displayCommandsInColumns(commands []database.MenuCommand,
 	// Use configured columns for the layout
 	columns := menu.GenericColumns
 
+	leftBracket := menu.LeftBracket
+	if len([]rune(leftBracket)) == 0 {
+		leftBracket = "["
+	} else if runes := []rune(leftBracket); len(runes) > 2 {
+		leftBracket = string(runes[:2])
+	}
+	rightBracket := menu.RightBracket
+	if len([]rune(rightBracket)) == 0 {
+		rightBracket = "]"
+	} else if runes := []rune(rightBracket); len(runes) > 2 {
+		rightBracket = string(runes[:2])
+	}
+
 	// ANSI color codes
 	bracketColor := ui.ColorFromNumber(menu.GenericBracketColor)
 	commandColor := ui.ColorFromNumber(menu.GenericCommandColor)
@@ -303,8 +382,10 @@ func (e *MenuExecutor) displayCommandsInColumns(commands []database.MenuCommand,
 	// Calculate the maximum column width across all columns
 	maxWidth := 0
 	for _, cmd := range displayCommands {
-		formatted := fmt.Sprintf("%s[%s%s%s%s%s]%s %s%s%s",
-			bracketColor, resetColor, commandColor, cmd.Keys, resetColor, bracketColor, resetColor,
+		formatted := fmt.Sprintf("%s%s%s%s%s%s%s%s%s %s%s%s",
+			bracketColor, leftBracket, resetColor,
+			commandColor, cmd.Keys, resetColor,
+			bracketColor, rightBracket, resetColor,
 			descColor, cmd.ShortDescription, resetColor)
 		visibleLen := len(ui.StripANSI(formatted))
 		if visibleLen > maxWidth {
@@ -334,8 +415,10 @@ func (e *MenuExecutor) displayCommandsInColumns(commands []database.MenuCommand,
 			if idx < len(displayCommands) {
 				cmd := displayCommands[idx]
 				// Format: [keys] Short Description
-				formatted := fmt.Sprintf("%s[%s%s%s%s%s]%s %s%s%s",
-					bracketColor, resetColor, commandColor, cmd.Keys, resetColor, bracketColor, resetColor,
+				formatted := fmt.Sprintf("%s%s%s%s%s%s%s%s%s %s%s%s",
+					bracketColor, leftBracket, resetColor,
+					commandColor, cmd.Keys, resetColor,
+					bracketColor, rightBracket, resetColor,
 					descColor, cmd.ShortDescription, resetColor)
 
 				visibleLen := len(ui.StripANSI(formatted))
@@ -355,4 +438,38 @@ func (e *MenuExecutor) displayCommandsInColumns(commands []database.MenuCommand,
 		e.io.Printf("%s\r\n", strings.TrimRight(line, " "))
 		e.currentRow += 1 // Each command row adds 1 row
 	}
+}
+
+func (e *MenuExecutor) getThemeBaseDir() string {
+	if dir := ui.GetThemeDirectory(); strings.TrimSpace(dir) != "" {
+		return strings.TrimSpace(dir)
+	}
+	if dir, err := e.db.GetConfig("Configuration.Paths", "", "Themes"); err == nil {
+		dir = strings.TrimSpace(dir)
+		if dir != "" {
+			return dir
+		}
+	}
+	return "theme"
+}
+
+func (e *MenuExecutor) lookupMenuByName(name string) (*database.Menu, error) {
+	menu, err := e.db.GetMenuByName(name)
+	if err == nil {
+		return menu, nil
+	}
+
+	menus, listErr := e.db.GetAllMenus()
+	if listErr != nil {
+		return nil, fmt.Errorf("failed to load menu %s: %w", name, err)
+	}
+
+	for _, m := range menus {
+		if strings.EqualFold(m.Name, name) {
+			copy := m
+			return &copy, nil
+		}
+	}
+
+	return nil, fmt.Errorf("failed to load menu %s: %w", name, err)
 }

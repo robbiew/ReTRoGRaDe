@@ -16,6 +16,37 @@ type SQLiteDB struct {
 	path string
 }
 
+func clampBracket(value, fallback string) string {
+	runes := []rune(value)
+	if len(runes) == 0 {
+		return fallback
+	}
+	if len(runes) > 2 {
+		runes = runes[:2]
+	}
+	return string(runes)
+}
+
+func sanitizeDisplayMode(value string) string {
+	switch value {
+	case DisplayModeHeaderGenerated, DisplayModeThemeOnly:
+		return value
+	case DisplayModeTitlesGenerated:
+		return value
+	default:
+		return DisplayModeTitlesGenerated
+	}
+}
+
+func normalizeMenuDefaults(menu *Menu) {
+	if menu == nil {
+		return
+	}
+	menu.LeftBracket = clampBracket(menu.LeftBracket, "[")
+	menu.RightBracket = clampBracket(menu.RightBracket, "]")
+	menu.DisplayMode = sanitizeDisplayMode(menu.DisplayMode)
+}
+
 // OpenSQLite opens or creates a SQLite database
 func OpenSQLite(config ConnectionConfig) (*SQLiteDB, error) {
 	db, err := sql.Open("sqlite", config.Path+"?_pragma=journal_mode(WAL)")
@@ -110,7 +141,10 @@ func (s *SQLiteDB) InitializeSchema() error {
 			generic_bracket_color INTEGER DEFAULT 1,
 			generic_command_color INTEGER DEFAULT 9,
 			generic_desc_color INTEGER DEFAULT 1,
-			clear_screen BOOLEAN DEFAULT 0
+			clear_screen BOOLEAN DEFAULT 0,
+			left_bracket TEXT DEFAULT '[',
+			right_bracket TEXT DEFAULT ']',
+			display_mode TEXT DEFAULT 'titles_generated'
 		)
 	`)
 	if err != nil {
@@ -146,6 +180,21 @@ func (s *SQLiteDB) InitializeSchema() error {
 	}
 
 	// Ensure new columns exist for legacy databases
+	if _, err := tx.Exec(`ALTER TABLE menus ADD COLUMN left_bracket TEXT DEFAULT '['`); err != nil {
+		if !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+			return fmt.Errorf("failed to add left_bracket column: %w", err)
+		}
+	}
+	if _, err := tx.Exec(`ALTER TABLE menus ADD COLUMN right_bracket TEXT DEFAULT ']'`); err != nil {
+		if !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+			return fmt.Errorf("failed to add right_bracket column: %w", err)
+		}
+	}
+	if _, err := tx.Exec(`ALTER TABLE menus ADD COLUMN display_mode TEXT DEFAULT 'titles_generated'`); err != nil {
+		if !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+			return fmt.Errorf("failed to add display_mode column: %w", err)
+		}
+	}
 	if _, err := tx.Exec(`ALTER TABLE menu_commands ADD COLUMN long_description TEXT`); err != nil {
 		if !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
 			return fmt.Errorf("failed to add long_description column: %w", err)
@@ -353,11 +402,12 @@ func (s *SQLiteDB) CreateMenu(menu *Menu) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed to marshal titles: %w", err)
 	}
+	normalizeMenuDefaults(menu)
 
 	result, err := s.db.Exec(`
-		INSERT INTO menus (name, titles, prompt, acs_required, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, clear_screen)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		menu.Name, string(titlesJSON), menu.Prompt, menu.ACSRequired, menu.GenericColumns, menu.GenericBracketColor, menu.GenericCommandColor, menu.GenericDescColor, menu.ClearScreen)
+		INSERT INTO menus (name, titles, prompt, acs_required, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, clear_screen, left_bracket, right_bracket, display_mode)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		menu.Name, string(titlesJSON), menu.Prompt, menu.ACSRequired, menu.GenericColumns, menu.GenericBracketColor, menu.GenericCommandColor, menu.GenericDescColor, menu.ClearScreen, menu.LeftBracket, menu.RightBracket, menu.DisplayMode)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create menu: %w", err)
 	}
@@ -376,9 +426,9 @@ func (s *SQLiteDB) GetMenuByName(name string) (*Menu, error) {
 	var titlesJSON string
 
 	err := s.db.QueryRow(`
-		SELECT id, name, titles, prompt, acs_required, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, clear_screen
+		SELECT id, name, titles, prompt, acs_required, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, clear_screen, left_bracket, right_bracket, display_mode
 		FROM menus WHERE name = ?`, name).Scan(
-		&menu.ID, &menu.Name, &titlesJSON, &menu.Prompt, &menu.ACSRequired, &menu.GenericColumns, &menu.GenericBracketColor, &menu.GenericCommandColor, &menu.GenericDescColor, &menu.ClearScreen)
+		&menu.ID, &menu.Name, &titlesJSON, &menu.Prompt, &menu.ACSRequired, &menu.GenericColumns, &menu.GenericBracketColor, &menu.GenericCommandColor, &menu.GenericDescColor, &menu.ClearScreen, &menu.LeftBracket, &menu.RightBracket, &menu.DisplayMode)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("menu not found: %s", name)
 	}
@@ -390,6 +440,7 @@ func (s *SQLiteDB) GetMenuByName(name string) (*Menu, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal titles: %w", err)
 	}
+	normalizeMenuDefaults(&menu)
 
 	return &menu, nil
 }
@@ -400,9 +451,9 @@ func (s *SQLiteDB) GetMenuByID(id int64) (*Menu, error) {
 	var titlesJSON string
 
 	err := s.db.QueryRow(`
-		SELECT id, name, titles, prompt, acs_required, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, clear_screen
+		SELECT id, name, titles, prompt, acs_required, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, clear_screen, left_bracket, right_bracket, display_mode
 		FROM menus WHERE id = ?`, id).Scan(
-		&menu.ID, &menu.Name, &titlesJSON, &menu.Prompt, &menu.ACSRequired, &menu.GenericColumns, &menu.GenericBracketColor, &menu.GenericCommandColor, &menu.GenericDescColor, &menu.ClearScreen)
+		&menu.ID, &menu.Name, &titlesJSON, &menu.Prompt, &menu.ACSRequired, &menu.GenericColumns, &menu.GenericBracketColor, &menu.GenericCommandColor, &menu.GenericDescColor, &menu.ClearScreen, &menu.LeftBracket, &menu.RightBracket, &menu.DisplayMode)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("menu not found: %d", id)
 	}
@@ -414,6 +465,7 @@ func (s *SQLiteDB) GetMenuByID(id int64) (*Menu, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal titles: %w", err)
 	}
+	normalizeMenuDefaults(&menu)
 
 	return &menu, nil
 }
@@ -421,7 +473,7 @@ func (s *SQLiteDB) GetMenuByID(id int64) (*Menu, error) {
 // GetAllMenus retrieves all menus
 func (s *SQLiteDB) GetAllMenus() ([]Menu, error) {
 	rows, err := s.db.Query(`
-		SELECT id, name, titles, prompt, acs_required, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, clear_screen
+		SELECT id, name, titles, prompt, acs_required, generic_columns, generic_bracket_color, generic_command_color, generic_desc_color, clear_screen, left_bracket, right_bracket, display_mode
 		FROM menus ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query menus: %w", err)
@@ -432,7 +484,7 @@ func (s *SQLiteDB) GetAllMenus() ([]Menu, error) {
 	for rows.Next() {
 		var menu Menu
 		var titlesJSON string
-		err := rows.Scan(&menu.ID, &menu.Name, &titlesJSON, &menu.Prompt, &menu.ACSRequired, &menu.GenericColumns, &menu.GenericBracketColor, &menu.GenericCommandColor, &menu.GenericDescColor, &menu.ClearScreen)
+		err := rows.Scan(&menu.ID, &menu.Name, &titlesJSON, &menu.Prompt, &menu.ACSRequired, &menu.GenericColumns, &menu.GenericBracketColor, &menu.GenericCommandColor, &menu.GenericDescColor, &menu.ClearScreen, &menu.LeftBracket, &menu.RightBracket, &menu.DisplayMode)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan menu: %w", err)
 		}
@@ -441,6 +493,7 @@ func (s *SQLiteDB) GetAllMenus() ([]Menu, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal titles: %w", err)
 		}
+		normalizeMenuDefaults(&menu)
 
 		menus = append(menus, menu)
 	}
@@ -454,11 +507,12 @@ func (s *SQLiteDB) UpdateMenu(menu *Menu) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal titles: %w", err)
 	}
+	normalizeMenuDefaults(menu)
 
 	_, err = s.db.Exec(`
-		UPDATE menus SET name = ?, titles = ?, prompt = ?, acs_required = ?, generic_columns = ?, generic_bracket_color = ?, generic_command_color = ?, generic_desc_color = ?, clear_screen = ?
+		UPDATE menus SET name = ?, titles = ?, prompt = ?, acs_required = ?, generic_columns = ?, generic_bracket_color = ?, generic_command_color = ?, generic_desc_color = ?, clear_screen = ?, left_bracket = ?, right_bracket = ?, display_mode = ?
 		WHERE id = ?`,
-		menu.Name, string(titlesJSON), menu.Prompt, menu.ACSRequired, menu.GenericColumns, menu.GenericBracketColor, menu.GenericCommandColor, menu.GenericDescColor, menu.ClearScreen, menu.ID)
+		menu.Name, string(titlesJSON), menu.Prompt, menu.ACSRequired, menu.GenericColumns, menu.GenericBracketColor, menu.GenericCommandColor, menu.GenericDescColor, menu.ClearScreen, menu.LeftBracket, menu.RightBracket, menu.DisplayMode, menu.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update menu: %w", err)
 	}

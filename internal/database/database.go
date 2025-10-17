@@ -32,6 +32,12 @@ type AuthAuditEntry struct {
 	Context   sql.NullString
 }
 
+const (
+	DisplayModeTitlesGenerated = "titles_generated"
+	DisplayModeHeaderGenerated = "header_generated"
+	DisplayModeThemeOnly       = "theme_only"
+)
+
 // Menu represents a menu in the BBS system
 type Menu struct {
 	ID                  int
@@ -44,6 +50,9 @@ type Menu struct {
 	GenericCommandColor int
 	GenericDescColor    int
 	ClearScreen         bool
+	LeftBracket         string
+	RightBracket        string
+	DisplayMode         string
 }
 
 // MenuCommand represents a command in a menu

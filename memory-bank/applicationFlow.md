@@ -324,7 +324,7 @@ Background goroutine monitors session activity:
    ```
 
 4. **Update Node Manager:** Change node display from "Guest" to username
-5. **Load Start Menu:** Execute configured start menu (default: "MAIN")
+5. **Load Start Menu:** Execute configured start menu (default: "MainMenu")
 6. **Menu System:** User enters full menu-driven interface
 
 **State Transition:** Guest → Authenticated User
@@ -446,7 +446,7 @@ User{
    - Update session with user data
 3. **Welcome Message:** "Account created successfully. Welcome, {username}!"
 4. **Update Node Manager:** Change node from "Guest" to username
-5. **Load Start Menu:** Execute configured start menu (default: "MAIN")
+5. **Load Start Menu:** Execute configured start menu (default: "MainMenu")
 6. **Menu System:** User enters full menu-driven interface
 
 **State Transition:** Guest → Authenticated New User
@@ -463,7 +463,7 @@ After successful login/registration, user enters the menu system with authentica
 
 **Menu System Entry:**
 
-- **Start Menu:** Configured via `Configuration.General.StartMenu` (default: "MAIN")
+- **Start Menu:** Configured via `Configuration.General.StartMenu` (default: "MainMenu")
 - **Menu Execution:** [`menu.NewMenuExecutor()`](menu/execution.go) loads and executes menu
 - **Context:** User context includes ID, username, IO handler, and session data
 

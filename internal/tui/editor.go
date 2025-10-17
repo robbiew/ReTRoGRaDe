@@ -167,6 +167,7 @@ type Model struct {
 	// Menu editing state
 	editingMenu          *database.Menu        // Currently editing menu
 	editingMenuCommand   *database.MenuCommand // Currently editing menu command
+	originalMenuCommand  *database.MenuCommand // Original values before editing
 	selectedCommandIndex int                   // Selected command in modify mode
 	currentMenuTab       int                   // Current tab in menu modify mode (0=Menu Data, 1=Menu Commands)
 	menuDataFields       []SubmenuItem         // Preserve menu data fields when editing commands

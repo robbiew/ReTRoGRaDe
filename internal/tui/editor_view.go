@@ -6,8 +6,31 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/robbiew/retrograde/internal/database"
 	"github.com/robbiew/retrograde/internal/ui"
 )
+
+func sanitizeBracketInput(value, fallback string) string {
+	runes := []rune(value)
+	if len(runes) == 0 {
+		return fallback
+	}
+	if len(runes) > 2 {
+		runes = runes[:2]
+	}
+	return string(runes)
+}
+
+func sanitizeDisplayModeValue(value string) string {
+	switch value {
+	case database.DisplayModeHeaderGenerated, database.DisplayModeThemeOnly:
+		return value
+	case database.DisplayModeTitlesGenerated:
+		return value
+	default:
+		return database.DisplayModeTitlesGenerated
+	}
+}
 
 // ============================================================================
 // View Rendering with Layered Approach
@@ -280,7 +303,7 @@ func (m Model) renderCommandEditBreadcrumb() string {
 		Foreground(lipgloss.Color("9")). // Basic 16: bright red
 		Bold(true)
 
-	// Show: Editors -> Edit Menu: MAIN -> Menu Commands -> Edit Command: R
+	// Show: Editors -> Edit Menu: MainMenu -> Menu Commands -> Edit Command: R
 	path.WriteString(categoryStyle.Render("Editors"))
 	path.WriteString(arrowStyle.Render(" -> "))
 	path.WriteString(detailStyle.Render("Edit Menu: " + m.editingMenu.Name))
@@ -353,7 +376,7 @@ func (m Model) renderMenuModifyBreadcrumb() string {
 		Foreground(lipgloss.Color("196")).
 		Bold(true)
 
-	// Show: Editors -> Edit Menu: MAIN -> Field -> EDITING
+	// Show: Editors -> Edit Menu: MainMenu -> Field -> EDITING
 	path.WriteString(categoryStyle.Render("Editors"))
 	path.WriteString(arrowStyle.Render(" -> "))
 	path.WriteString(detailStyle.Render("Edit Menu: " + m.editingMenu.Name))
@@ -1661,10 +1684,7 @@ func (m Model) renderSelectingValueView() string {
 
 		// Add the option line (only implemented commands shown)
 		// Use fixed-width format for Value to ensure alignment
-		line := fmt.Sprintf(" [%-3s] %-25s %s", opt.Value, opt.Label, opt.Description)
-		if len(line) > modalWidth-4 {
-			line = line[:modalWidth-7] + "..."
-		}
+		line := fmt.Sprintf(" [%-3s] %-25s", opt.Value, opt.Label)
 		displayLines = append(displayLines, displayLine{
 			text:       line,
 			isCategory: false,
@@ -1702,46 +1722,35 @@ func (m Model) renderSelectingValueView() string {
 		dl := displayLines[i]
 		if dl.isCategory {
 			content.WriteString(dl.text + "\n")
-		} else if dl.isSelected {
-			style := lipgloss.NewStyle().
+			lineCount++
+			continue
+		}
+		style := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorTextNormal))
+		if dl.isSelected {
+			style = lipgloss.NewStyle().
 				Foreground(lipgloss.Color(ColorTextBright)).
 				Background(lipgloss.Color(ColorAccent)).
 				Bold(true)
-			content.WriteString(style.Render(dl.text) + "\n")
-		} else {
-			style := lipgloss.NewStyle().
-				Foreground(lipgloss.Color(ColorTextNormal))
-			content.WriteString(style.Render(dl.text) + "\n")
 		}
+		content.WriteString(style.Render(dl.text) + "\n")
 		lineCount++
+		if dl.isSelected && dl.optIndex >= 0 && dl.optIndex < len(m.editingItem.SelectOptions) {
+			desc := m.editingItem.SelectOptions[dl.optIndex].Description
+			if desc != "" {
+				content.WriteString("  " + lipgloss.NewStyle().
+					Foreground(lipgloss.Color(ColorTextDim)).
+					Italic(true).
+					Render(desc) + "\n")
+				lineCount++
+			}
+		}
 	}
 
-	// Pad with empty lines to maintain consistent height
 	for lineCount < visibleItems {
 		content.WriteString("\n")
 		lineCount++
 	}
 
-	// Scrollbar indicator
-	if len(options) > visibleItems {
-		// Calculate which actual options are visible (not display lines)
-		firstVisibleOpt := 0
-		lastVisibleOpt := 0
-		for i := displayStart; i < displayEnd && i < len(displayLines); i++ {
-			if !displayLines[i].isCategory && displayLines[i].text != "" {
-				if firstVisibleOpt == 0 {
-					firstVisibleOpt = displayLines[i].optIndex + 1
-				}
-				lastVisibleOpt = displayLines[i].optIndex + 1
-			}
-		}
-		scrollInfo := fmt.Sprintf(" %d-%d of %d ", firstVisibleOpt, lastVisibleOpt, len(options))
-		content.WriteString("\n" + lipgloss.NewStyle().
-			Foreground(lipgloss.Color(ColorTextDim)).
-			Render(scrollInfo))
-	}
-
-	// Help text
 	help := " ↑↓ Navigate | Enter Select | Esc Cancel "
 	helpStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(ColorTextDim)).
@@ -1856,6 +1865,25 @@ func (m *Model) setupMenuEditDataModal() {
 			},
 		},
 		{
+			ID:       "menu-display-mode",
+			Label:    "Display Mode",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "menu-display-mode",
+				Label:     "Display Mode",
+				ValueType: SelectValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenu.DisplayMode },
+					SetValue: func(v interface{}) error {
+						m.editingMenu.DisplayMode = sanitizeDisplayModeValue(v.(string))
+						return nil
+					},
+				},
+				SelectOptions: getMenuDisplayModeOptions(),
+				HelpText:      "Choose how this menu is rendered",
+			},
+		},
+		{
 			ID:       "menu-prompt",
 			Label:    "Prompt",
 			ItemType: EditableField,
@@ -1907,6 +1935,42 @@ func (m *Model) setupMenuEditDataModal() {
 					},
 				},
 				HelpText: "Number of columns for generic display",
+			},
+		},
+		{
+			ID:       "menu-left-bracket",
+			Label:    "Left Bracket",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "menu-left-bracket",
+				Label:     "Left Bracket",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenu.LeftBracket },
+					SetValue: func(v interface{}) error {
+						m.editingMenu.LeftBracket = sanitizeBracketInput(v.(string), "[")
+						return nil
+					},
+				},
+				HelpText: "Characters shown before menu keys (max 2)",
+			},
+		},
+		{
+			ID:       "menu-right-bracket",
+			Label:    "Right Bracket",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "menu-right-bracket",
+				Label:     "Right Bracket",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenu.RightBracket },
+					SetValue: func(v interface{}) error {
+						m.editingMenu.RightBracket = sanitizeBracketInput(v.(string), "]")
+						return nil
+					},
+				},
+				HelpText: "Characters shown after menu keys (max 2)",
 			},
 		},
 		{

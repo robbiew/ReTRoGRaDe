@@ -29,7 +29,7 @@ func GetDefaultConfig() *Config {
 	// Configuration.General
 	cfg.Configuration.General.BBSLocation = "Your City, State"
 	cfg.Configuration.General.BBSName = "Another Retrograde BBS"
-	cfg.Configuration.General.StartMenu = "MAIN"
+	cfg.Configuration.General.StartMenu = "MainMenu"
 	cfg.Configuration.General.SysOpName = "SysOp"
 	cfg.Configuration.General.TimeoutMinutes = 3
 

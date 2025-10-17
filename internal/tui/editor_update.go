@@ -17,6 +17,36 @@ import (
 // Helper Functions
 // ============================================================================
 
+func commandsEqual(a, b *database.MenuCommand) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+
+	return a.CommandNumber == b.CommandNumber &&
+		a.Keys == b.Keys &&
+		a.ShortDescription == b.ShortDescription &&
+		a.LongDescription == b.LongDescription &&
+		a.ACSRequired == b.ACSRequired &&
+		a.CmdKeys == b.CmdKeys &&
+		a.Options == b.Options &&
+		a.Active == b.Active &&
+		a.Hidden == b.Hidden
+}
+
+func commandHasValues(cmd *database.MenuCommand) bool {
+	if cmd == nil {
+		return false
+	}
+	return cmd.Keys != "" ||
+		cmd.ShortDescription != "" ||
+		cmd.LongDescription != "" ||
+		cmd.ACSRequired != "" ||
+		cmd.CmdKeys != "" ||
+		cmd.Options != "" ||
+		!cmd.Active ||
+		cmd.Hidden
+}
+
 // setTextInputValueWithCursor sets the text input value and positions cursor at the end
 func (m *Model) setTextInputValueWithCursor(value string) {
 	m.textInput.SetValue(value)
@@ -439,6 +469,7 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 
 				m.editingMenuCommand = nil
+				m.originalMenuCommand = nil
 			} else if m.editingMenu != nil {
 				// Save menu changes - use CreateMenu for new menus (ID=0), UpdateMenu for existing
 				if m.editingMenu.ID == 0 {
@@ -577,6 +608,7 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					copy(m.modalFields, m.menuDataFields)
 				}
 				m.editingMenuCommand = nil
+				m.originalMenuCommand = nil
 			} else if m.editingMenu != nil {
 				// Only discard menu changes if we're editing the menu itself
 				m.menuModified = false
@@ -1450,6 +1482,19 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					// Initialize text input based on value type
 					if m.editingItem.ValueType == BoolValue {
 						m.textInput.SetValue("")
+					} else if m.editingItem.ValueType == SelectValue {
+						m.navMode = SelectingValue
+						m.selectListIndex = 0
+						if currentValue, ok := m.editingItem.Field.GetValue().(string); ok {
+							for i, opt := range m.editingItem.SelectOptions {
+								if opt.Value == currentValue {
+									m.selectListIndex = i
+									break
+								}
+							}
+						}
+						m.message = ""
+						return m, nil
 					} else {
 						currentValue := m.editingItem.Field.GetValue()
 						m.setTextInputValueWithCursor(formatValue(currentValue, m.editingItem.ValueType))
@@ -1494,6 +1539,8 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if len(m.menuCommandsList) > 0 && m.selectedCommandIndex < len(m.menuCommandsList) {
 				// Create a copy of the command for editing
 				selectedCmd := m.menuCommandsList[m.selectedCommandIndex]
+				m.originalMenuCommand = &database.MenuCommand{}
+				*m.originalMenuCommand = selectedCmd
 				m.editingMenuCommand = &database.MenuCommand{
 					ID:               selectedCmd.ID,
 					MenuID:           selectedCmd.MenuID,
@@ -1529,6 +1576,7 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				Hidden:           false,
 			}
 			m.editingMenuCommand = newCommand
+			m.originalMenuCommand = nil
 			// Set up modal fields for command editing
 			m.setupMenuEditCommandModal()
 			m.navMode = MenuEditCommandMode
@@ -1782,15 +1830,10 @@ func (m Model) handleMenuEditCommand(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Check if command was modified and prompt to save
 		commandModified := false
 		if m.editingMenuCommand != nil {
-			// Check if any fields were changed
-			if m.editingMenuCommand.Keys != "" ||
-				m.editingMenuCommand.ShortDescription != "" ||
-				m.editingMenuCommand.LongDescription != "" ||
-				m.editingMenuCommand.ACSRequired != "" ||
-				m.editingMenuCommand.CmdKeys != "" ||
-				m.editingMenuCommand.Options != "" ||
-				m.editingMenuCommand.Hidden {
-				commandModified = true
+			if m.originalMenuCommand == nil {
+				commandModified = commandHasValues(m.editingMenuCommand)
+			} else {
+				commandModified = !commandsEqual(m.editingMenuCommand, m.originalMenuCommand)
 			}
 		}
 
@@ -1811,6 +1854,7 @@ func (m Model) handleMenuEditCommand(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					}
 				}
 
+				m.originalMenuCommand = nil
 				m.menuModified = true
 				m.editingMenuCommand = nil
 
@@ -1845,6 +1889,7 @@ func (m Model) handleMenuEditCommand(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Return to MenuModifyMode
 		m.navMode = MenuModifyMode
 		m.editingMenuCommand = nil
+		m.originalMenuCommand = nil
 		m.modalFieldIndex = 0
 		m.modalSectionName = ""
 		m.message = ""
@@ -2178,6 +2223,9 @@ func (m Model) handleMenuManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				GenericCommandColor: originalMenu.GenericCommandColor,
 				GenericDescColor:    originalMenu.GenericDescColor,
 				ClearScreen:         originalMenu.ClearScreen,
+				LeftBracket:         originalMenu.LeftBracket,
+				RightBracket:        originalMenu.RightBracket,
+				DisplayMode:         originalMenu.DisplayMode,
 			}
 
 			// Make a working copy
@@ -2192,6 +2240,9 @@ func (m Model) handleMenuManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				GenericCommandColor: originalMenu.GenericCommandColor,
 				GenericDescColor:    originalMenu.GenericDescColor,
 				ClearScreen:         originalMenu.ClearScreen,
+				LeftBracket:         originalMenu.LeftBracket,
+				RightBracket:        originalMenu.RightBracket,
+				DisplayMode:         originalMenu.DisplayMode,
 			}
 
 			if err := m.loadMenuCommandsForEditing(); err != nil {
@@ -2210,9 +2261,12 @@ func (m Model) handleMenuManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					CommandNumber:    cmd.CommandNumber,
 					Keys:             cmd.Keys,
 					ShortDescription: cmd.ShortDescription,
+					LongDescription:  cmd.LongDescription,
 					ACSRequired:      cmd.ACSRequired,
 					CmdKeys:          cmd.CmdKeys,
 					Options:          cmd.Options,
+					Active:           cmd.Active,
+					Hidden:           cmd.Hidden,
 				}
 			}
 
@@ -2241,6 +2295,9 @@ func (m Model) handleMenuManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			GenericCommandColor: 9,
 			GenericDescColor:    1,
 			ClearScreen:         false,
+			LeftBracket:         "[",
+			RightBracket:        "]",
+			DisplayMode:         database.DisplayModeTitlesGenerated,
 		}
 		// Initialize empty commands list for new menu
 		m.menuCommandsList = []database.MenuCommand{}

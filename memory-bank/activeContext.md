@@ -29,4 +29,4 @@
 - Message base UI integration with main BBS interface
 - Echomail routing and network connectivity implementation
 - Integration of IceEdit, legacy DOSemu-based BBS Full Screen Editor
-- Creation of "prelogin" menu that can run scripts, dosemu programs/doors and other commands after a user logs in, and before loading first menu (e.g. MAIN)
+- Creation of "prelogin" menu that can run scripts, dosemu programs/doors and other commands after a user logs in, and before loading first menu (e.g. MainMenu)

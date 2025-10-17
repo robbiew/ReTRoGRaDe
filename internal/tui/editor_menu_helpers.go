@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/robbiew/retrograde/internal/database"
 	"github.com/robbiew/retrograde/internal/menu"
 )
 
@@ -68,4 +69,27 @@ func (m *Model) getSecurityLevelSelectOptions() []SelectOption {
 	}
 
 	return options
+}
+
+func getMenuDisplayModeOptions() []SelectOption {
+	return []SelectOption{
+		{
+			Value:       database.DisplayModeTitlesGenerated,
+			Label:       "Titles + Generic Menu",
+			Description: "Generic titles + menu",
+			Implemented: true,
+		},
+		{
+			Value:       database.DisplayModeHeaderGenerated,
+			Label:       "[MenuName].hdr.ans/asc + Generic Menu",
+			Description: "Render [Menu].hdr before menu",
+			Implemented: true,
+		},
+		{
+			Value:       database.DisplayModeThemeOnly,
+			Label:       "[MenuName].ans/asc",
+			Description: "Render [Menu].ans only",
+			Implemented: true,
+		},
+	}
 }

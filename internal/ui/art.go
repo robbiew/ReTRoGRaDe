@@ -32,6 +32,11 @@ func getThemeDirectory() string {
 	return config.ThemeDirectory
 }
 
+// GetThemeDirectory returns the currently configured theme directory.
+func GetThemeDirectory() string {
+	return getThemeDirectory()
+}
+
 // PrintAnsiTerminal displays ANSI art content with optional line delay and height limit
 func PrintAnsiTerminal(term InteractiveTerminal, artName string, delay, height int) error {
 	lines, err := LoadAnsiLines(artName)
@@ -153,6 +158,11 @@ func stripSauce(content string) string {
 	}
 
 	return content
+}
+
+// StripSauce removes SAUCE metadata (exported helper)
+func StripSauce(content string) string {
+	return stripSauce(content)
 }
 
 // trimLastChar removes the last character from a string
