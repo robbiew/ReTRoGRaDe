@@ -92,6 +92,9 @@ func (r *CmdKeyRegistry) GetDefinitionsByCategory(category string) []*CmdKeyDefi
 // registerDefaults registers the default command key handlers with their definitions
 func (r *CmdKeyRegistry) registerDefaults() {
 	defs := []CmdKeyDefinition{
+
+		// These are from Chapter 11 of the Renegade BBS Sysop Manual. They are placeholders for now.
+
 		// Offline Mail
 		{CmdKey: "!D", Name: "Download QWK Packet", Description: "Download offline mail in .QWK format", Category: "Offline Mail"},
 		{CmdKey: "!P", Name: "Set Message Pointers", Description: "Set offline message pointers", Category: "Offline Mail"},
