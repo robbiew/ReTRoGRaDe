@@ -272,6 +272,7 @@ type GeoLocation struct {
 // SecurityManager manages all security operations
 type SecurityManager struct {
 	Config            *SecurityConfig
+	Paths             *PathsConfig
 	ConnectionTracker map[string]*ConnectionAttempt
 	Blacklist         map[string]*IPListEntry
 	Whitelist         map[string]*IPListEntry

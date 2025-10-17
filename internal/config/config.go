@@ -72,6 +72,8 @@ func initializeDatabaseWithConfig(dbPath string, cfg *Config) error {
 		return fmt.Errorf("failed to create database directory: %w", err)
 	}
 
+	normalizeSecurityFileReferences(cfg)
+
 	dbConfig := database.ConnectionConfig{
 		Path:    dbPath,
 		Timeout: 5,
@@ -106,6 +108,8 @@ func SaveConfig(config *Config, filePath string) error {
 		return fmt.Errorf("database not initialized")
 	}
 
+	normalizeSecurityFileReferences(config)
+
 	// Create required directories before saving
 	if err := EnsureRequiredPaths(config); err != nil {
 		return fmt.Errorf("failed to create required directories: %w", err)
@@ -135,6 +139,8 @@ func LoadConfigFromDB(db database.Database) (*Config, error) {
 	for _, v := range values {
 		mapValueToConfig(cfg, v)
 	}
+
+	normalizeSecurityFileReferences(cfg)
 
 	return cfg, nil
 }
@@ -375,6 +381,7 @@ func configToValues(cfg *Config) []database.ConfigValue {
 		database.ConfigValue{Section: "Configuration.Paths", Key: "Message_Base", Value: cfg.Configuration.Paths.MessageBase, ValueType: "path"},
 		database.ConfigValue{Section: "Configuration.Paths", Key: "System", Value: cfg.Configuration.Paths.System, ValueType: "path"},
 		database.ConfigValue{Section: "Configuration.Paths", Key: "Themes", Value: cfg.Configuration.Paths.Themes, ValueType: "path"},
+		database.ConfigValue{Section: "Configuration.Paths", Key: "Security", Value: cfg.Configuration.Paths.Security, ValueType: "path"},
 	)
 
 	// Configuration.General
@@ -540,6 +547,101 @@ func parseListValue(value string) []string {
 	return result
 }
 
+func normalizeSecurityFileReferences(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+
+	cfg.Servers.Security.LocalLists.BlacklistFile = normalizeFileReference(cfg.Servers.Security.LocalLists.BlacklistFile, cfg.Configuration.Paths.Security)
+	cfg.Servers.Security.LocalLists.WhitelistFile = normalizeFileReference(cfg.Servers.Security.LocalLists.WhitelistFile, cfg.Configuration.Paths.Security)
+	cfg.Servers.Security.Logs.SecurityLogFile = normalizeFileReference(cfg.Servers.Security.Logs.SecurityLogFile, cfg.Configuration.Paths.Logs)
+}
+
+func normalizeFileReference(value, baseDir string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+
+	cleanValue := filepath.Clean(value)
+
+	// If value is absolute and outside the configured base, keep it as-is
+	if filepath.IsAbs(cleanValue) {
+		baseDir = strings.TrimSpace(baseDir)
+		if baseDir != "" {
+			baseClean := filepath.Clean(baseDir)
+			if rel, err := filepath.Rel(baseClean, cleanValue); err == nil && !strings.HasPrefix(rel, "..") && rel != "." {
+				return filepath.Base(cleanValue)
+			}
+		}
+		return cleanValue
+	}
+
+	base := filepath.Base(cleanValue)
+	if base == "." || base == string(os.PathSeparator) {
+		return ""
+	}
+
+	return base
+}
+
+// SecurityFilePath resolves a security-related filename against the configured security path.
+func (cfg *Config) SecurityFilePath(name string) string {
+	if cfg == nil {
+		return ""
+	}
+	return resolveConfiguredPath(cfg.Configuration.Paths.Security, name)
+}
+
+// LogsFilePath resolves a log filename against the configured logs path.
+func (cfg *Config) LogsFilePath(name string) string {
+	if cfg == nil {
+		return ""
+	}
+	return resolveConfiguredPath(cfg.Configuration.Paths.Logs, name)
+}
+
+// SecurityFilePath resolves a filename against the security path stored in the manager.
+func (sm *SecurityManager) SecurityFilePath(name string) string {
+	if sm == nil {
+		return ""
+	}
+	var base string
+	if sm.Paths != nil {
+		base = sm.Paths.Security
+	}
+	return resolveConfiguredPath(base, name)
+}
+
+// LogsFilePath resolves a log filename against the stored logs path.
+func (sm *SecurityManager) LogsFilePath(name string) string {
+	if sm == nil {
+		return ""
+	}
+	var base string
+	if sm.Paths != nil {
+		base = sm.Paths.Logs
+	}
+	return resolveConfiguredPath(base, name)
+}
+
+func resolveConfiguredPath(baseDir, name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+
+	if filepath.IsAbs(name) {
+		return filepath.Clean(name)
+	}
+
+	if baseDir == "" {
+		return name
+	}
+
+	return filepath.Join(baseDir, name)
+}
+
 func formatBoolValue(value bool) string {
 	if value {
 		return "true"
@@ -601,7 +703,7 @@ func CheckRequiredPathsExist(cfg *Config) bool {
 		cfg.Configuration.Paths.FileBase,
 		// Skip System path as it's always the current directory
 		cfg.Configuration.Paths.Themes,
-		filepath.Dir(cfg.Servers.Security.LocalLists.BlacklistFile), // security directory
+		cfg.Configuration.Paths.Security,
 	}
 
 	for _, path := range pathsToCheck {
@@ -623,7 +725,7 @@ func EnsureRequiredPaths(cfg *Config) error {
 		cfg.Configuration.Paths.FileBase,
 		// Skip System path as it's always the current directory
 		cfg.Configuration.Paths.Themes,
-		filepath.Dir(cfg.Servers.Security.LocalLists.BlacklistFile), // security directory
+		cfg.Configuration.Paths.Security,
 	}
 
 	for _, path := range pathsToCreate {

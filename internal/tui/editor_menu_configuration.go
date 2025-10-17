@@ -126,6 +126,24 @@ func configurationMenu(cfg *config.Config) MenuCategory {
 							HelpText: "Path to themes directory",
 						},
 					},
+					{
+						ID:       "security-path",
+						Label:    "Security",
+						ItemType: EditableField,
+						EditableItem: &MenuItem{
+							ID:        "config.paths.security",
+							Label:     "Security",
+							ValueType: PathValue,
+							Field: ConfigField{
+								GetValue: func() interface{} { return cfg.Configuration.Paths.Security },
+								SetValue: func(v interface{}) error {
+									cfg.Configuration.Paths.Security = v.(string)
+									return nil
+								},
+							},
+							HelpText: "Path to security lists directory",
+						},
+					},
 				},
 			},
 			{

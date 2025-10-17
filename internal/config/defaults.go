@@ -87,9 +87,9 @@ func GetDefaultConfig() *Config {
 
 	// Servers.Security.LocalLists
 	cfg.Servers.Security.LocalLists.BlacklistEnabled = true
-	cfg.Servers.Security.LocalLists.BlacklistFile = filepath.Join(cwd, "security", "blacklist.txt")
+	cfg.Servers.Security.LocalLists.BlacklistFile = "blacklist.txt"
 	cfg.Servers.Security.LocalLists.WhitelistEnabled = false
-	cfg.Servers.Security.LocalLists.WhitelistFile = filepath.Join(cwd, "security", "whitelist.txt")
+	cfg.Servers.Security.LocalLists.WhitelistFile = "whitelist.txt"
 
 	// Servers.Security.ExternalLists
 	cfg.Servers.Security.ExternalLists.Enabled = true
@@ -109,7 +109,7 @@ func GetDefaultConfig() *Config {
 	// Servers.Security.Logs
 	cfg.Servers.Security.Logs.LogBlockedAttempts = true
 	cfg.Servers.Security.Logs.LogSecurityEvents = true
-	cfg.Servers.Security.Logs.SecurityLogFile = filepath.Join(cwd, "logs", "security.log")
+	cfg.Servers.Security.Logs.SecurityLogFile = "security.log"
 
 	// Other.Discord
 	cfg.Other.Discord.Enabled = false
@@ -117,6 +117,8 @@ func GetDefaultConfig() *Config {
 	cfg.Other.Discord.Title = "New User Application:"
 	cfg.Other.Discord.Username = "Retrograde Bot"
 	cfg.Other.Discord.WebhookURL = "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN"
+
+	normalizeSecurityFileReferences(cfg)
 
 	return cfg
 }

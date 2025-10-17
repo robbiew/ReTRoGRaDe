@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/robbiew/retrograde/internal/config"
@@ -188,9 +189,14 @@ func serversMenu(cfg *config.Config) MenuCategory {
 							Label:     "Blacklist File",
 							ValueType: PathValue,
 							Field: ConfigField{
-								GetValue: func() interface{} { return cfg.Servers.Security.LocalLists.BlacklistFile },
+								GetValue: func() interface{} { return filepath.Base(cfg.Servers.Security.LocalLists.BlacklistFile) },
 								SetValue: func(v interface{}) error {
-									cfg.Servers.Security.LocalLists.BlacklistFile = v.(string)
+									filename := strings.TrimSpace(v.(string))
+									base := filepath.Base(filename)
+									if base == "." || base == string(filepath.Separator) {
+										base = ""
+									}
+									cfg.Servers.Security.LocalLists.BlacklistFile = base
 									return nil
 								},
 							},
@@ -224,9 +230,14 @@ func serversMenu(cfg *config.Config) MenuCategory {
 							Label:     "Whitelist File",
 							ValueType: PathValue,
 							Field: ConfigField{
-								GetValue: func() interface{} { return cfg.Servers.Security.LocalLists.WhitelistFile },
+								GetValue: func() interface{} { return filepath.Base(cfg.Servers.Security.LocalLists.WhitelistFile) },
 								SetValue: func(v interface{}) error {
-									cfg.Servers.Security.LocalLists.WhitelistFile = v.(string)
+									filename := strings.TrimSpace(v.(string))
+									base := filepath.Base(filename)
+									if base == "." || base == string(filepath.Separator) {
+										base = ""
+									}
+									cfg.Servers.Security.LocalLists.WhitelistFile = base
 									return nil
 								},
 							},
@@ -484,9 +495,14 @@ func serversMenu(cfg *config.Config) MenuCategory {
 							Label:     "Log File",
 							ValueType: PathValue,
 							Field: ConfigField{
-								GetValue: func() interface{} { return cfg.Servers.Security.Logs.SecurityLogFile },
+								GetValue: func() interface{} { return filepath.Base(cfg.Servers.Security.Logs.SecurityLogFile) },
 								SetValue: func(v interface{}) error {
-									cfg.Servers.Security.Logs.SecurityLogFile = v.(string)
+									filename := strings.TrimSpace(v.(string))
+									base := filepath.Base(filename)
+									if base == "." || base == string(filepath.Separator) {
+										base = ""
+									}
+									cfg.Servers.Security.Logs.SecurityLogFile = base
 									return nil
 								},
 							},

@@ -28,6 +28,7 @@ func InitializeSecurity(cfg *config.Config) {
 
 	securityManager = &config.SecurityManager{
 		Config:            &cfg.Servers.Security,
+		Paths:             &cfg.Configuration.Paths,
 		ConnectionTracker: make(map[string]*config.ConnectionAttempt),
 		Blacklist:         make(map[string]*config.IPListEntry),
 		Whitelist:         make(map[string]*config.IPListEntry),
@@ -38,10 +39,12 @@ func InitializeSecurity(cfg *config.Config) {
 
 	// Load IP lists from files
 	if cfg.Servers.Security.LocalLists.BlacklistEnabled {
-		loadIPList(cfg.Servers.Security.LocalLists.BlacklistFile, securityManager.Blacklist)
+		blacklistPath := cfg.SecurityFilePath(cfg.Servers.Security.LocalLists.BlacklistFile)
+		loadIPList(blacklistPath, securityManager.Blacklist)
 	}
 	if cfg.Servers.Security.LocalLists.WhitelistEnabled {
-		loadIPList(cfg.Servers.Security.LocalLists.WhitelistFile, securityManager.Whitelist)
+		whitelistPath := cfg.SecurityFilePath(cfg.Servers.Security.LocalLists.WhitelistFile)
+		loadIPList(whitelistPath, securityManager.Whitelist)
 	}
 
 	// Load external threat intelligence
@@ -501,12 +504,13 @@ func AddToBlacklist(ipAddr, reason, source string, expiresAt *time.Time) {
 
 // saveIPToBlacklistFile appends an IP to the blacklist file for permanent storage
 func saveIPToBlacklistFile(ipAddr, reason, source string) {
-	if securityManager.Config.LocalLists.BlacklistFile == "" {
+	path := securityManager.SecurityFilePath(securityManager.Config.LocalLists.BlacklistFile)
+	if path == "" {
 		return
 	}
 
 	// Open file for appending
-	file, err := os.OpenFile(securityManager.Config.LocalLists.BlacklistFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Printf("Error writing to blacklist file: %v\n", err)
 		return
@@ -630,8 +634,8 @@ func logSecurityEvent(eventType, ipAddr, reason, action string) {
 		event.EventType, event.IPAddress, event.Reason, event.Action)
 
 	// File logging
-	if cfg.Logs.SecurityLogFile != "" {
-		logSecurityEventToFile(event, cfg.Logs.SecurityLogFile)
+	if path := securityManager.LogsFilePath(cfg.Logs.SecurityLogFile); path != "" {
+		logSecurityEventToFile(event, path)
 	}
 }
 
