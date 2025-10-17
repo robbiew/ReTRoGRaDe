@@ -221,38 +221,6 @@ func (s *SQLiteDB) InitializeUserSchema() error {
 		)`,
 	}
 
-	columnMigrations := []struct {
-		table      string
-		column     string
-		definition string
-	}{
-		{"users", "first_name", "TEXT"},
-		{"users", "last_name", "TEXT"},
-		{"users", "password_algo", "TEXT"},
-		{"users", "password_updated_at", "TEXT"},
-		{"users", "failed_attempts", "INTEGER NOT NULL DEFAULT 0"},
-		{"users", "locked_until", "TEXT"},
-		{"users", "locations", "TEXT"},
-	}
-
-	addColumnIfMissing := func(tx *sql.Tx, table, column, definition string) error {
-		stmt := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, definition)
-		if _, err := tx.Exec(stmt); err != nil {
-			lower := strings.ToLower(err.Error())
-			if strings.Contains(lower, "duplicate column name") || strings.Contains(lower, "no such table") {
-				return nil
-			}
-			return err
-		}
-		return nil
-	}
-
-	for _, col := range columnMigrations {
-		if err := addColumnIfMissing(tx, col.table, col.column, col.definition); err != nil {
-			return fmt.Errorf("failed to add column %s.%s: %w", col.table, col.column, err)
-		}
-	}
-
 	for _, stmt := range createStatements {
 		if _, err := tx.Exec(stmt); err != nil {
 			return fmt.Errorf("failed to execute schema statement: %w", err)

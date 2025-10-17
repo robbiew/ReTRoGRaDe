@@ -512,7 +512,7 @@ func RegisterPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *con
 
 	// Show helpful message
 	if session.Width > 0 {
-		io.Print(ui.Ansi.BlackHi + fmt.Sprintf("\r\n Detected terminal size: %dx%d (press Enter to accept or edit)\r\n", session.Width, session.Height-1) + ui.Ansi.Reset)
+		io.Print(ui.Ansi.BlackHi + fmt.Sprintf("\r\n Detected terminal size: %dx%d (press Enter to accept or edit)\r\n", session.Width, session.Height) + ui.Ansi.Reset)
 	} else {
 		io.Print(ui.Ansi.YellowHi + " Unable to detect terminal size. Using defaults (press Enter to accept)\r\n" + ui.Ansi.Reset)
 	}
