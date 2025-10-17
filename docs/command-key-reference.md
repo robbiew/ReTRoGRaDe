@@ -2,6 +2,8 @@
 
 ## Most Common Commands
 
+Note, these are 100% lifted from Renegade BBS. They will need to be tweaked.
+
 ### Message Commands
 | CmdKey | Name | Description |
 |--------|------|-------------|
@@ -107,7 +109,7 @@
 
 ## Implementation Status
 
-✅ **Implemented**: MM, MP, G
+✅ **Implemented**: G
 ⏸️ **Placeholder**: All others (return "not yet implemented" message)
 
 ## Usage in Menu Configuration
@@ -165,5 +167,3 @@ Keys: Q  | Short Desc: Quit         | CmdKeys: -"
 - GitHub repository: https://github.com/robbiew/retrograde
 - Implementation files:
   - `/mnt/user-data/outputs/cmdkeys.go` - Full command registry
-  - `/mnt/user-data/outputs/tui-cmdkey-select-implementation.md` - Implementation guide
-  - `/mnt/user-data/outputs/IMPLEMENTATION_SUMMARY.md` - Visual overview
