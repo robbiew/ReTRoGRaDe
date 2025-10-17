@@ -1551,6 +1551,7 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					ACSRequired:      selectedCmd.ACSRequired,
 					CmdKeys:          selectedCmd.CmdKeys,
 					Options:          selectedCmd.Options,
+					NodeActivity:     selectedCmd.NodeActivity,
 					Active:           selectedCmd.Active,
 					Hidden:           selectedCmd.Hidden,
 				}
@@ -1572,6 +1573,7 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				ACSRequired:      "",
 				CmdKeys:          "",
 				Options:          "",
+				NodeActivity:     "",
 				Active:           true,
 				Hidden:           false,
 			}
@@ -2226,6 +2228,7 @@ func (m Model) handleMenuManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				LeftBracket:         originalMenu.LeftBracket,
 				RightBracket:        originalMenu.RightBracket,
 				DisplayMode:         originalMenu.DisplayMode,
+				NodeActivity:        originalMenu.NodeActivity,
 			}
 
 			// Make a working copy
@@ -2243,6 +2246,7 @@ func (m Model) handleMenuManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				LeftBracket:         originalMenu.LeftBracket,
 				RightBracket:        originalMenu.RightBracket,
 				DisplayMode:         originalMenu.DisplayMode,
+				NodeActivity:        originalMenu.NodeActivity,
 			}
 
 			if err := m.loadMenuCommandsForEditing(); err != nil {
@@ -2265,6 +2269,7 @@ func (m Model) handleMenuManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					ACSRequired:      cmd.ACSRequired,
 					CmdKeys:          cmd.CmdKeys,
 					Options:          cmd.Options,
+					NodeActivity:     cmd.NodeActivity,
 					Active:           cmd.Active,
 					Hidden:           cmd.Hidden,
 				}
@@ -2298,6 +2303,7 @@ func (m Model) handleMenuManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			LeftBracket:         "[",
 			RightBracket:        "]",
 			DisplayMode:         database.DisplayModeTitlesGenerated,
+			NodeActivity:        "",
 		}
 		// Initialize empty commands list for new menu
 		m.menuCommandsList = []database.MenuCommand{}

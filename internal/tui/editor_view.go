@@ -1587,6 +1587,24 @@ func (m *Model) setupMenuEditCommandModal() {
 			},
 		},
 		{
+			ID:       "command-node-activity",
+			Label:    "Node Activity",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "command-node-activity",
+				Label:     "Node Activity",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenuCommand.NodeActivity },
+					SetValue: func(v interface{}) error {
+						m.editingMenuCommand.NodeActivity = strings.TrimSpace(v.(string))
+						return nil
+					},
+				},
+				HelpText: "Status text shown to other nodes",
+			},
+		},
+		{
 			ID:       "command-hidden",
 			Label:    "Hidden",
 			ItemType: EditableField,
@@ -2043,6 +2061,24 @@ func (m *Model) setupMenuEditDataModal() {
 					},
 				},
 				HelpText: "Clear screen before menu display",
+			},
+		},
+		{
+			ID:       "menu-node-activity",
+			Label:    "Node Activity",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "menu-node-activity",
+				Label:     "Node Activity",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenu.NodeActivity },
+					SetValue: func(v interface{}) error {
+						m.editingMenu.NodeActivity = strings.TrimSpace(v.(string))
+						return nil
+					},
+				},
+				HelpText: "Status text shown to other nodes",
 			},
 		},
 	}

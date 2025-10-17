@@ -544,8 +544,8 @@ func (s *SQLiteDB) DeleteMenu(id int64) error {
 // CreateMenuCommand creates a new menu command
 func (s *SQLiteDB) CreateMenuCommand(cmd *MenuCommand) (int64, error) {
 	result, err := s.db.Exec(`
-		INSERT INTO menu_commands (menu_id, command_number, keys, short_description, long_description, acs_required, cmdkeys, options, active, hidden)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO menu_commands (menu_id, command_number, keys, short_description, long_description, acs_required, cmdkeys, options, node_activity, active, hidden)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		cmd.MenuID, cmd.CommandNumber, cmd.Keys, cmd.ShortDescription, cmd.LongDescription, cmd.ACSRequired, cmd.CmdKeys, cmd.Options, cmd.NodeActivity, cmd.Active, cmd.Hidden)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create menu command: %w", err)
@@ -587,7 +587,7 @@ func (s *SQLiteDB) UpdateMenuCommand(cmd *MenuCommand) error {
 	_, err := s.db.Exec(`
 		UPDATE menu_commands SET menu_id = ?, command_number = ?, keys = ?, short_description = ?, long_description = ?, acs_required = ?, cmdkeys = ?, options = ?, node_activity = ?, active = ?, hidden = ?
 		WHERE id = ?`,
-		cmd.MenuID, cmd.CommandNumber, cmd.Keys, cmd.ShortDescription, cmd.LongDescription, cmd.ACSRequired, cmd.CmdKeys, cmd.Options, cmd.Active, cmd.Hidden, cmd.ID)
+		cmd.MenuID, cmd.CommandNumber, cmd.Keys, cmd.ShortDescription, cmd.LongDescription, cmd.ACSRequired, cmd.CmdKeys, cmd.Options, cmd.NodeActivity, cmd.Active, cmd.Hidden, cmd.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update menu command: %w", err)
 	}
