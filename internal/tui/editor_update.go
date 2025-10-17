@@ -93,8 +93,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleSavePrompt(msg)
 		case SaveChangesPrompt:
 			return m.handleSaveChangesPrompt(msg)
-		case DeleteConfirmPrompt: // ✅ Add this here
+		case DeleteConfirmPrompt:
 			return m.handleDeleteConfirm(msg)
+		case SelectingValue:
+			return m.handleSelectingValue(msg)
 		}
 	}
 
@@ -1686,6 +1688,19 @@ func (m Model) handleMenuEditCommand(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// Initialize text input based on value type
 			if m.editingItem.ValueType == BoolValue {
 				m.textInput.SetValue("")
+			} else if m.editingItem.ValueType == SelectValue {
+				// NEW: Handle SelectValue - create a selection list
+				m.navMode = SelectingValue
+				m.selectListIndex = 0
+				// Find current value in options
+				currentValue := m.editingItem.Field.GetValue().(string)
+				for i, opt := range m.editingItem.SelectOptions {
+					if opt.Value == currentValue {
+						m.selectListIndex = i
+						break
+					}
+				}
+				m.message = ""
 			} else {
 				currentValue := m.editingItem.Field.GetValue()
 				m.setTextInputValueWithCursor(formatValue(currentValue, m.editingItem.ValueType))
@@ -1705,24 +1720,24 @@ func (m Model) handleMenuEditCommand(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.textInput.CharLimit = 200
 					m.textInput.Width = 49 // Fixed width for scrolling
 				}
-			}
 
-			m.textInput.Focus()
-			// Add this in each place where you enter EditingValue mode:
-			m.textInput.TextStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color(ColorTextBright)).
-				Background(lipgloss.Color(ColorPrimary))
-			m.textInput.Cursor.Style = lipgloss.NewStyle().
-				Foreground(lipgloss.Color(ColorTextBright))
-			m.textInput.PromptStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color(ColorPrimary))
-			m.textInput.PlaceholderStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color(ColorTextDim)).
-				Background(lipgloss.Color(ColorPrimary))
-			m.navMode = EditingValue
-			m.textInput.CursorEnd() // Move cursor to end
-			m.textInput.Focus()     // Ensure it's focused
-			m.message = ""
+				m.textInput.Focus()
+				m.textInput.CursorEnd() // Move cursor to end
+				m.textInput.Focus()     // Ensure it's focused
+				// Add this in each place where you enter EditingValue mode:
+				m.textInput.TextStyle = lipgloss.NewStyle().
+					Foreground(lipgloss.Color(ColorTextBright)).
+					Background(lipgloss.Color(ColorPrimary))
+				m.textInput.Cursor.Style = lipgloss.NewStyle().
+					Foreground(lipgloss.Color(ColorTextBright))
+				m.textInput.PromptStyle = lipgloss.NewStyle().
+					Background(lipgloss.Color(ColorPrimary))
+				m.textInput.PlaceholderStyle = lipgloss.NewStyle().
+					Foreground(lipgloss.Color(ColorTextDim)).
+					Background(lipgloss.Color(ColorPrimary))
+				m.navMode = EditingValue
+				m.message = ""
+			}
 		}
 		return m, nil
 	case "esc":
@@ -1795,6 +1810,98 @@ func (m Model) handleMenuEditCommand(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.message = ""
 		return m, nil
 	}
+	return m, nil
+}
+
+// handleSelectingValue processes input when selecting from a list
+func (m Model) handleSelectingValue(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.editingItem == nil || m.editingItem.ValueType != SelectValue {
+		m.navMode = m.returnToMenuModifyOrModal()
+		return m, nil
+	}
+
+	options := m.editingItem.SelectOptions
+
+	switch msg.String() {
+	case "up", "k":
+		if m.selectListIndex > 0 {
+			m.selectListIndex--
+		}
+		m.message = ""
+		return m, nil
+
+	case "down", "j":
+		if m.selectListIndex < len(options)-1 {
+			m.selectListIndex++
+		}
+		m.message = ""
+		return m, nil
+
+	case "pgup":
+		m.selectListIndex -= 10
+		if m.selectListIndex < 0 {
+			m.selectListIndex = 0
+		}
+		m.message = ""
+		return m, nil
+
+	case "pgdown":
+		m.selectListIndex += 10
+		if m.selectListIndex >= len(options) {
+			m.selectListIndex = len(options) - 1
+		}
+		m.message = ""
+		return m, nil
+
+	case "home":
+		m.selectListIndex = 0
+		m.message = ""
+		return m, nil
+
+	case "end":
+		m.selectListIndex = len(options) - 1
+		m.message = ""
+		return m, nil
+
+	case "enter":
+		// Select the current option
+		selectedOption := options[m.selectListIndex]
+		if err := m.editingItem.Field.SetValue(selectedOption.Value); err != nil {
+			m.editingError = err.Error()
+			return m, nil
+		}
+
+		// Mark as modified
+		m.modifiedCount++
+		if m.editingMenu != nil {
+			m.menuModified = true
+		}
+
+		// Return to previous mode
+		m.navMode = m.returnToMenuModifyOrModal()
+		m.editingItem = nil
+		m.editingError = ""
+		m.message = fmt.Sprintf("CmdKey set to: %s (%s)", selectedOption.Value, selectedOption.Label)
+		m.messageTime = time.Now()
+		m.messageType = SuccessMessage
+		return m, nil
+
+	case "esc":
+		// Cancel selection
+		m.navMode = m.returnToMenuModifyOrModal()
+		m.editingItem = nil
+		m.editingError = ""
+		m.message = ""
+		return m, nil
+
+	case "/":
+		// Future: implement filtering
+		m.message = "Filtering not yet implemented"
+		m.messageTime = time.Now()
+		m.messageType = InfoMessage
+		return m, nil
+	}
+
 	return m, nil
 }
 

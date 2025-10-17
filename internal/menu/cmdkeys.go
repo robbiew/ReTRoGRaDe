@@ -15,31 +15,43 @@ type CmdKeyHandler func(ctx *ExecutionContext, options string) error
 
 // ExecutionContext holds the context for executing a command
 type ExecutionContext struct {
-	UserID       int64
-	Username     string
-	IO           *telnet.TelnetIO
-	Session      *config.TelnetSession
-	MenuExecutor *MenuExecutor
+	UserID   int64
+	Username string
+	IO       *telnet.TelnetIO
+	Session  *config.TelnetSession
 	// Add more context as needed: session, database, etc.
+}
+
+// CmdKeyDefinition describes a command key with its metadata
+type CmdKeyDefinition struct {
+	CmdKey      string // The 2-letter command key (e.g., "MM", "MP", "G")
+	Name        string // Human-readable name (e.g., "Read Mail", "Post Message")
+	Description string // Detailed description of what the command does
+	Category    string // Category for grouping (e.g., "Message", "File", "System")
+	Handler     CmdKeyHandler
 }
 
 // CmdKeyRegistry holds the registered command key handlers
 type CmdKeyRegistry struct {
-	handlers map[string]CmdKeyHandler
+	handlers    map[string]CmdKeyHandler
+	definitions map[string]*CmdKeyDefinition
 }
 
 // NewCmdKeyRegistry creates a new command key registry
 func NewCmdKeyRegistry() *CmdKeyRegistry {
 	r := &CmdKeyRegistry{
-		handlers: make(map[string]CmdKeyHandler),
+		handlers:    make(map[string]CmdKeyHandler),
+		definitions: make(map[string]*CmdKeyDefinition),
 	}
 	r.registerDefaults()
 	return r
 }
 
-// Register registers a handler for a command key
-func (r *CmdKeyRegistry) Register(cmdKey string, handler CmdKeyHandler) {
-	r.handlers[strings.ToUpper(cmdKey)] = handler
+// Register registers a handler for a command key with its definition
+func (r *CmdKeyRegistry) Register(def *CmdKeyDefinition) {
+	key := strings.ToUpper(def.CmdKey)
+	r.handlers[key] = def.Handler
+	r.definitions[key] = def
 }
 
 // Execute executes a command key with the given context and options
@@ -51,13 +63,505 @@ func (r *CmdKeyRegistry) Execute(cmdKey string, ctx *ExecutionContext, options s
 	return handler(ctx, options)
 }
 
-// registerDefaults registers the default command key handlers
+// GetDefinition returns the definition for a command key
+func (r *CmdKeyRegistry) GetDefinition(cmdKey string) *CmdKeyDefinition {
+	return r.definitions[strings.ToUpper(cmdKey)]
+}
+
+// GetAllDefinitions returns all registered command key definitions
+func (r *CmdKeyRegistry) GetAllDefinitions() []*CmdKeyDefinition {
+	defs := make([]*CmdKeyDefinition, 0, len(r.definitions))
+	for _, def := range r.definitions {
+		defs = append(defs, def)
+	}
+	return defs
+}
+
+// GetDefinitionsByCategory returns all command key definitions for a specific category
+func (r *CmdKeyRegistry) GetDefinitionsByCategory(category string) []*CmdKeyDefinition {
+	defs := make([]*CmdKeyDefinition, 0)
+	for _, def := range r.definitions {
+		if def.Category == category {
+			defs = append(defs, def)
+		}
+	}
+	return defs
+}
+
+// registerDefaults registers the default command key handlers with their definitions
 func (r *CmdKeyRegistry) registerDefaults() {
-	r.Register("MM", handleReadMail)
-	r.Register("MP", handlePostMessage)
-	r.Register("G", handleGoodbye)
-	r.Register("_^", handleGotoMenu)
-	r.Register("_\\", handleReturnToPreviousMenu)
+	// Offline Mail Commands
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "!D",
+		Name:        "Download QWK Packet",
+		Description: "Download offline mail in .QWK format",
+		Category:    "Offline Mail",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "!P",
+		Name:        "Set Message Pointers",
+		Description: "Set message read pointers for offline mail",
+		Category:    "Offline Mail",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "!U",
+		Name:        "Upload REP Packet",
+		Description: "Upload offline mail replies in .REP format",
+		Category:    "Offline Mail",
+		Handler:     handleNotImplemented,
+	})
+
+	// Message System Commands
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "MA",
+		Name:        "Change Message Base",
+		Description: "Change to a different message base",
+		Category:    "Message",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "ME",
+		Name:        "Enter Message",
+		Description: "Enter a new message to current base",
+		Category:    "Message",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "MK",
+		Name:        "Kill Message Scan",
+		Description: "Stop scanning messages",
+		Category:    "Message",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "ML",
+		Name:        "List Messages",
+		Description: "List message titles in current base",
+		Category:    "Message",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "MM",
+		Name:        "Read Mail",
+		Description: "Read messages addressed to you",
+		Category:    "Message",
+		Handler:     handleReadMail,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "MN",
+		Name:        "New Message Scan",
+		Description: "Scan all new messages",
+		Category:    "Message",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "MP",
+		Name:        "Post Message",
+		Description: "Post a new message to current base",
+		Category:    "Message",
+		Handler:     handlePostMessage,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "MR",
+		Name:        "Read Messages",
+		Description: "Read messages in current base",
+		Category:    "Message",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "MS",
+		Name:        "Scan Messages",
+		Description: "Quick scan of message subjects",
+		Category:    "Message",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "MU",
+		Name:        "Your Messages",
+		Description: "Read messages you've posted",
+		Category:    "Message",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "MY",
+		Name:        "Your Mail Scan",
+		Description: "Scan your personal mail",
+		Category:    "Message",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "MZ",
+		Name:        "Global New Scan",
+		Description: "Scan new messages across all bases",
+		Category:    "Message",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "M#",
+		Name:        "Read Message Number",
+		Description: "Read a specific message by number",
+		Category:    "Message",
+		Handler:     handleNotImplemented,
+	})
+
+	// File System Commands
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "FA",
+		Name:        "Change File Base",
+		Description: "Change to a different file area",
+		Category:    "File",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "FB",
+		Name:        "Batch Download",
+		Description: "Add files to batch download queue",
+		Category:    "File",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "FD",
+		Name:        "Download File",
+		Description: "Download a file from current area",
+		Category:    "File",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "FF",
+		Name:        "Find File",
+		Description: "Search for files across all areas",
+		Category:    "File",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "FL",
+		Name:        "List Files",
+		Description: "List files in current area",
+		Category:    "File",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "FN",
+		Name:        "New Files Scan",
+		Description: "Scan for new files",
+		Category:    "File",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "FP",
+		Name:        "File Points",
+		Description: "Display your file points/ratio",
+		Category:    "File",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "FS",
+		Name:        "Search Files",
+		Description: "Search for files by keyword",
+		Category:    "File",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "FU",
+		Name:        "Upload File",
+		Description: "Upload a file to current area",
+		Category:    "File",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "FV",
+		Name:        "View File",
+		Description: "View a file's description or contents",
+		Category:    "File",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "FZ",
+		Name:        "Global File Search",
+		Description: "Search all file areas",
+		Category:    "File",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "F@",
+		Name:        "Your Uploads",
+		Description: "List files you've uploaded",
+		Category:    "File",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "F#",
+		Name:        "Contents",
+		Description: "View archive contents",
+		Category:    "File",
+		Handler:     handleNotImplemented,
+	})
+
+	// Batch Transfer Commands
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "BC",
+		Name:        "Clear Batch Queue",
+		Description: "Clear your batch transfer queue",
+		Category:    "Batch",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "BD",
+		Name:        "Batch Download",
+		Description: "Download all files in batch queue",
+		Category:    "Batch",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "BL",
+		Name:        "List Batch Queue",
+		Description: "List files in your batch queue",
+		Category:    "Batch",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "BR",
+		Name:        "Remove from Batch",
+		Description: "Remove a file from batch queue",
+		Category:    "Batch",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "BU",
+		Name:        "Batch Upload",
+		Description: "Upload multiple files at once",
+		Category:    "Batch",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "B?",
+		Name:        "Batch Queue Status",
+		Description: "Display number of files in batch queue",
+		Category:    "Batch",
+		Handler:     handleNotImplemented,
+	})
+
+	// System/User Commands
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "G",
+		Name:        "Goodbye / Logoff",
+		Description: "Log off the BBS",
+		Category:    "System",
+		Handler:     handleGoodbye,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "HC",
+		Name:        "Careful Logoff",
+		Description: "Prompt before logging off",
+		Category:    "System",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "HI",
+		Name:        "Instant Logoff",
+		Description: "Immediate logoff without prompt",
+		Category:    "System",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "HM",
+		Name:        "Main Menu",
+		Description: "Return to main menu",
+		Category:    "System",
+		Handler:     handleNotImplemented,
+	})
+
+	// User Information Commands
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "O1",
+		Name:        "Logon to BBS",
+		Description: "Login (shuttle mode)",
+		Category:    "User",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "OA",
+		Name:        "Apply for Access",
+		Description: "New user application",
+		Category:    "User",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "OB",
+		Name:        "Bulletins",
+		Description: "Read system bulletins",
+		Category:    "User",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "OC",
+		Name:        "Page Sysop",
+		Description: "Page the system operator",
+		Category:    "User",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "OE",
+		Name:        "User Editor",
+		Description: "Edit your user settings",
+		Category:    "User",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "OF",
+		Name:        "Feedback",
+		Description: "Send feedback to sysop",
+		Category:    "User",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "OG",
+		Name:        "Goodbye Script",
+		Description: "Display goodbye and logoff",
+		Category:    "User",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "OL",
+		Name:        "Last Callers",
+		Description: "View list of recent callers",
+		Category:    "User",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "ON",
+		Name:        "Node List",
+		Description: "View active nodes/users",
+		Category:    "User",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "OP",
+		Name:        "Page User",
+		Description: "Page another user",
+		Category:    "User",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "OR",
+		Name:        "Your Stats",
+		Description: "View your usage statistics",
+		Category:    "User",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "OS",
+		Name:        "System Information",
+		Description: "View BBS system information",
+		Category:    "User",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "OU",
+		Name:        "User List",
+		Description: "View list of users",
+		Category:    "User",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "OV",
+		Name:        "Version Info",
+		Description: "View BBS software version",
+		Category:    "User",
+		Handler:     handleNotImplemented,
+	})
+
+	// Voting Commands
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "VA",
+		Name:        "Add Voting Question",
+		Description: "Add a new voting question",
+		Category:    "Voting",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "VL",
+		Name:        "List Voting Questions",
+		Description: "List all voting questions",
+		Category:    "Voting",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "VR",
+		Name:        "View Voting Results",
+		Description: "View results of voting questions",
+		Category:    "Voting",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "VV",
+		Name:        "Vote on All",
+		Description: "Vote on all unvoted questions",
+		Category:    "Voting",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "V#",
+		Name:        "Vote on Question",
+		Description: "Vote on a specific question",
+		Category:    "Voting",
+		Handler:     handleNotImplemented,
+	})
+
+	// Menu Navigation Commands
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "-^",
+		Name:        "Go to Menu",
+		Description: "Navigate to a different menu",
+		Category:    "Navigation",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "-/",
+		Name:        "Gosub Menu",
+		Description: "Go to menu and return",
+		Category:    "Navigation",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "-\"",
+		Name:        "Return from Menu",
+		Description: "Return to previous menu",
+		Category:    "Navigation",
+		Handler:     handleNotImplemented,
+	})
+
+	// Miscellaneous Commands
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "-!",
+		Name:        "Execute Program",
+		Description: "Execute an external program",
+		Category:    "Misc",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "-&",
+		Name:        "Display File",
+		Description: "Display a text file",
+		Category:    "Misc",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "-%",
+		Name:        "Display String",
+		Description: "Display a text string",
+		Category:    "Misc",
+		Handler:     handleNotImplemented,
+	})
+	r.Register(&CmdKeyDefinition{
+		CmdKey:      "-$",
+		Name:        "Prompt for Password",
+		Description: "Prompt user for password",
+		Category:    "Misc",
+		Handler:     handleNotImplemented,
+	})
 }
 
 // handleReadMail handles the MM command (read mail)
@@ -92,25 +596,8 @@ func handleGoodbye(ctx *ExecutionContext, options string) error {
 	return nil
 }
 
-// handleGotoMenu handles the _^ command (goto menu)
-func handleGotoMenu(ctx *ExecutionContext, options string) error {
-	if ctx.MenuExecutor == nil {
-		return fmt.Errorf("menu executor not available")
-	}
-	if options == "" {
-		return fmt.Errorf("menu file option required")
-	}
-	// Execute the specified menu
-	return ctx.MenuExecutor.ExecuteMenu(options, ctx)
-}
-
-// handleReturnToPreviousMenu handles the _\ command (return to previous menu)
-func handleReturnToPreviousMenu(ctx *ExecutionContext, options string) error {
-	if ctx.MenuExecutor == nil {
-		return fmt.Errorf("menu executor not available")
-	}
-	// TODO: Implement logic to return to previous menu
-	// This might require tracking menu history in the session or context
-	ctx.IO.Printf("Returning to previous menu\r\n")
+// handleNotImplemented is a placeholder for commands not yet implemented
+func handleNotImplemented(ctx *ExecutionContext, options string) error {
+	ctx.IO.Print("This command is not yet implemented.\r\n")
 	return nil
 }

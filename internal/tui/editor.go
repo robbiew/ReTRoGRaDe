@@ -80,6 +80,7 @@ const (
 	Level3MenuNavigation                        // Level 3: Submenu offset lower left from Level 2
 	Level4ModalNavigation                       // Level 4: Centered modal for final menus
 	EditingValue                                // Editing a value in modal form
+	SelectingValue                              // Selecting from list of options
 	UserManagementMode                          // User management interface
 	SecurityLevelsMode                          // Security levels management interface
 	MenuManagementMode                          // Menu management interface
@@ -126,6 +127,10 @@ type Model struct {
 	textInput     textinput.Model
 	editingError  string
 	originalValue interface{}
+
+	// Selection state
+	selectListIndex int // Currently selected option index
+	// selectFilterText string // Optional filter text, not yet implemented
 
 	// User management state
 	userList []database.UserRecord // List of users for management
@@ -218,12 +223,21 @@ const (
 
 // MenuItem represents an editable configuration value
 type MenuItem struct {
-	ID         string         // Unique identifier
-	Label      string         // Display label
-	Field      ConfigField    // Link to configuration field
-	ValueType  ValueType      // Data type
-	Validation ValidationFunc // Validation function
-	HelpText   string         // Help text for editing
+	ID            string         // Unique identifier
+	Label         string         // Display label
+	Field         ConfigField    // Link to configuration field
+	ValueType     ValueType      // Data type
+	Validation    ValidationFunc // Validation function
+	HelpText      string         // Help text for editing
+	SelectOptions []SelectOption // Options for SelectValue type
+}
+
+// SelectOption represents a selectable option
+type SelectOption struct {
+	Value       string // The actual value to store (e.g., "MM", "MP", "G")
+	Label       string // Display name (e.g., "Read Mail", "Post Message")
+	Description string // Additional info shown in selection list
+	Category    string // Optional category for grouping
 }
 
 // ConfigField provides access to configuration values
@@ -239,9 +253,10 @@ const (
 	StringValue ValueType = iota
 	IntValue
 	BoolValue
-	ListValue // Comma-separated list
-	PortValue // Integer with port range validation
-	PathValue // File/directory path
+	ListValue   // Comma-separated list
+	PortValue   // Integer with port range validation
+	PathValue   // File/directory path
+	SelectValue // electable list of options
 )
 
 // ValidationFunc validates input based on value type

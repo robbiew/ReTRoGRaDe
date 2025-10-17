@@ -177,6 +177,27 @@ func (m Model) View() string {
 		return m.canvasToString(canvas)
 	}
 
+	// Layer 1.12: SelectingValue mode - show selection list over command modal (NEW)
+	if m.navMode == SelectingValue {
+		// Show the command edit modal in the background
+		menuEditCommandStr := m.renderMenuEditCommand()
+		m.overlayStringCenteredWithClear(canvas, menuEditCommandStr)
+
+		// Overlay the selection list on top
+		selectionModal := m.renderSelectingValueView()
+		m.overlayStringCentered(canvas, selectionModal)
+
+		// Add breadcrumb
+		breadcrumb := m.renderCommandEditBreadcrumb()
+		m.overlayString(canvas, breadcrumb, m.screenHeight-3, 0)
+
+		// Add footer
+		footer := m.renderFooter()
+		m.overlayString(canvas, footer, m.screenHeight-1, 0)
+
+		return m.canvasToString(canvas)
+	}
+
 	// Layer 2: Submenu (centered when visible and not showing modal)
 	if m.navMode >= Level2MenuNavigation && !showAsModal && m.navMode != MenuEditCommandMode {
 		isDimmed := m.navMode > Level2MenuNavigation
@@ -1391,7 +1412,7 @@ func (m *Model) setupMenuEditCommandModal() {
 						return nil
 					},
 				},
-				HelpText: "Hotkeys for this command",
+				HelpText: "Key(s) user presses (e.g., R, P, G)",
 			},
 		},
 		{
@@ -1437,7 +1458,7 @@ func (m *Model) setupMenuEditCommandModal() {
 			EditableItem: &MenuItem{
 				ID:        "command-cmdkeys",
 				Label:     "CmdKeys",
-				ValueType: StringValue,
+				ValueType: SelectValue, // THIS ONE - Keep SelectValue
 				Field: ConfigField{
 					GetValue: func() interface{} { return m.editingMenuCommand.CmdKeys },
 					SetValue: func(v interface{}) error {
@@ -1445,9 +1466,11 @@ func (m *Model) setupMenuEditCommandModal() {
 						return nil
 					},
 				},
-				HelpText: "Command key for execution handler",
+				HelpText:      "Command key for execution handler",
+				SelectOptions: getCmdKeySelectOptions(), // Keep this
 			},
 		},
+		// REMOVE THE DUPLICATE CmdKeys FIELD THAT WAS HERE
 		{
 			ID:       "command-options",
 			Label:    "Options",
@@ -1470,6 +1493,160 @@ func (m *Model) setupMenuEditCommandModal() {
 
 	m.modalFieldIndex = 0
 	m.modalSectionName = fmt.Sprintf("Edit Command: %s", m.editingMenuCommand.Keys)
+}
+
+// renderSelectingValueView renders the selection list modal
+func (m Model) renderSelectingValueView() string {
+	if m.editingItem == nil || m.editingItem.ValueType != SelectValue {
+		return ""
+	}
+
+	var b strings.Builder
+	options := m.editingItem.SelectOptions
+
+	// Modal dimensions
+	modalWidth := 78
+	modalHeight := 19
+	visibleItems := modalHeight - 6 // Account for header, footer, borders
+
+	// Title
+	title := fmt.Sprintf(" Select %s ", m.editingItem.Label)
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(ColorTextBright)).
+		Background(lipgloss.Color(ColorPrimary)).
+		Bold(true)
+
+	// Build content with fixed line count
+	var content strings.Builder
+	content.WriteString(titleStyle.Render(title) + "\n\n")
+
+	// Build a list of display lines with their metadata
+	type displayLine struct {
+		text       string
+		isCategory bool
+		isSelected bool
+		optIndex   int
+	}
+
+	var displayLines []displayLine
+	lastCategory := ""
+
+	for i := 0; i < len(options); i++ {
+		opt := options[i]
+
+		// Add category header if it changed
+		if opt.Category != lastCategory {
+			if lastCategory != "" {
+				displayLines = append(displayLines, displayLine{text: "", isCategory: false}) // blank line
+			}
+			categoryStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorAccent)).
+				Bold(true)
+			displayLines = append(displayLines, displayLine{
+				text:       categoryStyle.Render(fmt.Sprintf("— %s —", opt.Category)),
+				isCategory: true,
+			})
+			lastCategory = opt.Category
+		}
+
+		// Add the option line
+		line := fmt.Sprintf(" [%s] %-25s %s", opt.Value, opt.Label, opt.Description)
+		if len(line) > modalWidth-4 {
+			line = line[:modalWidth-7] + "..."
+		}
+		displayLines = append(displayLines, displayLine{
+			text:       line,
+			isCategory: false,
+			isSelected: i == m.selectListIndex,
+			optIndex:   i,
+		})
+	}
+
+	// Calculate visible window based on selected item's display line
+	selectedDisplayLine := 0
+	for i, dl := range displayLines {
+		if !dl.isCategory && dl.optIndex == m.selectListIndex {
+			selectedDisplayLine = i
+			break
+		}
+	}
+
+	// Calculate scroll window
+	displayStart := selectedDisplayLine - (visibleItems / 2)
+	if displayStart < 0 {
+		displayStart = 0
+	}
+	displayEnd := displayStart + visibleItems
+	if displayEnd > len(displayLines) {
+		displayEnd = len(displayLines)
+		displayStart = displayEnd - visibleItems
+		if displayStart < 0 {
+			displayStart = 0
+		}
+	}
+
+	// Render visible lines and count them
+	lineCount := 0
+	for i := displayStart; i < displayEnd && i < len(displayLines); i++ {
+		dl := displayLines[i]
+		if dl.isCategory {
+			content.WriteString(dl.text + "\n")
+		} else if dl.isSelected {
+			style := lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorTextBright)).
+				Background(lipgloss.Color(ColorAccent)).
+				Bold(true)
+			content.WriteString(style.Render(dl.text) + "\n")
+		} else {
+			style := lipgloss.NewStyle().
+				Foreground(lipgloss.Color(ColorTextNormal))
+			content.WriteString(style.Render(dl.text) + "\n")
+		}
+		lineCount++
+	}
+
+	// Pad with empty lines to maintain consistent height
+	for lineCount < visibleItems {
+		content.WriteString("\n")
+		lineCount++
+	}
+
+	// Scrollbar indicator
+	if len(options) > visibleItems {
+		// Calculate which actual options are visible (not display lines)
+		firstVisibleOpt := 0
+		lastVisibleOpt := 0
+		for i := displayStart; i < displayEnd && i < len(displayLines); i++ {
+			if !displayLines[i].isCategory && displayLines[i].text != "" {
+				if firstVisibleOpt == 0 {
+					firstVisibleOpt = displayLines[i].optIndex + 1
+				}
+				lastVisibleOpt = displayLines[i].optIndex + 1
+			}
+		}
+		scrollInfo := fmt.Sprintf(" %d-%d of %d ", firstVisibleOpt, lastVisibleOpt, len(options))
+		content.WriteString("\n" + lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorTextDim)).
+			Render(scrollInfo))
+	}
+
+	// Help text
+	help := " ↑↓ Navigate | Enter Select | Esc Cancel "
+	helpStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(ColorTextDim)).
+		Italic(true)
+	content.WriteString("\n" + helpStyle.Render(help))
+
+	// Create modal box
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(ColorPrimary)).
+		Padding(1, 2).
+		Width(modalWidth)
+
+	b.WriteString(boxStyle.Render(content.String()))
+
+	return b.String()
 }
 
 // setupMenuEditDataModal sets up modal fields for menu data editing

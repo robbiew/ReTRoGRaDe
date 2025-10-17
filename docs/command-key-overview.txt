@@ -1,0 +1,206 @@
+┌───────────────────────────────────────────────────────────────────┐
+│                CmdKeys Selection Feature Package                  │
+│                   Retrograde BBS Enhancement                       │
+│                                                                    │
+│  Transform menu command editing with a modern selection UI        │
+│  Reference: https://github.com/robbiew/retrograde                 │
+└───────────────────────────────────────────────────────────────────┘
+
+📦 PACKAGE CONTENTS
+═══════════════════════════════════════════════════════════════════
+
+📄 README.md (9 KB)
+   ├─ Quick start guide
+   ├─ Package overview
+   ├─ Implementation timeline
+   ├─ Troubleshooting tips
+   └─ Next steps
+
+📄 cmdkeys.go (17 KB)
+   ├─ Enhanced command registry
+   ├─ 60+ Renegade commands defined
+   ├─ Organized by category
+   ├─ Complete metadata (name, description, category)
+   └─ Ready to replace internal/menu/cmdkeys.go
+
+📄 tui-cmdkey-select-implementation.md (12 KB)
+   ├─ Step-by-step implementation guide
+   ├─ Code examples for each change
+   ├─ New types and structures
+   ├─ Navigation mode additions
+   ├─ Input handlers
+   ├─ View rendering
+   └─ Testing instructions
+
+📄 IMPLEMENTATION_SUMMARY.md (8 KB)
+   ├─ Visual before/after comparison
+   ├─ ASCII art UI flow
+   ├─ Benefits summary
+   ├─ Command categories
+   ├─ High-level steps
+   └─ Example definitions
+
+📄 COMMAND_KEYS_REFERENCE.md (7 KB)
+   ├─ Complete command reference
+   ├─ Organized by category
+   ├─ Usage examples
+   ├─ Menu configuration tips
+   └─ Quick lookup tables
+
+
+🎯 WHAT THIS DOES
+═══════════════════════════════════════════════════════════════════
+
+BEFORE: Type "MM" manually for Read Mail command
+        └─ Easy to make typos
+        └─ Must memorize codes
+        └─ No discovery
+
+AFTER:  Press Enter → Beautiful selection list appears
+        └─ [MM] Read Mail - Read messages addressed to you
+        └─ [MP] Post Message - Post a new message
+        └─ [MA] Change Message Base - Switch message areas
+        └─ Navigate with arrows, select with Enter
+        └─ Organized by category
+        └─ Self-documenting
+
+
+🚀 QUICK START
+═══════════════════════════════════════════════════════════════════
+
+1. Read README.md for overview
+2. Replace internal/menu/cmdkeys.go with provided cmdkeys.go
+3. Follow tui-cmdkey-select-implementation.md step-by-step
+4. Test: ./retrograde config → Editors → Menus → Edit Command
+5. Press Enter on CmdKeys field to see selection UI
+
+⏱️  Estimated implementation time: 1.5-2 hours
+
+
+📋 COMMAND CATEGORIES
+═══════════════════════════════════════════════════════════════════
+
+Category          Commands  Examples
+────────────────────────────────────────────────────────────────
+Offline Mail      3         !D, !P, !U
+Message           15        MM, MP, MA, ML, MR, MS, MN, MZ, M#
+File              11        FA, FL, FD, FU, FF, FN, FV, FZ, F@
+Batch             6         BC, BD, BL, BR, BU, B?
+System            4         G, HC, HI, HM
+User              11        OA, OB, OC, OE, OF, OL, ON, OP, OS
+Voting            5         VA, VL, VR, VV, V#
+Navigation        3         -^, -/, -"
+Miscellaneous     4         -!, -&, -%, -$
+────────────────────────────────────────────────────────────────
+Total:            62 commands
+
+
+✨ KEY FEATURES
+═══════════════════════════════════════════════════════════════════
+
+User Experience:
+  ✓ Browse all available commands
+  ✓ See names and descriptions
+  ✓ Organized by category
+  ✓ Keyboard navigation
+  ✓ No typing errors
+  ✓ Discoverable commands
+
+Developer Experience:
+  ✓ Type-safe SelectValue field
+  ✓ Reusable UI pattern
+  ✓ Single source of truth
+  ✓ Easy to extend
+  ✓ Self-documenting
+  ✓ Maintainable codebase
+
+
+📖 DOCUMENT GUIDE
+═══════════════════════════════════════════════════════════════════
+
+Start Here:
+  1. README.md - Package overview and quick start
+
+Implementation:
+  2. tui-cmdkey-select-implementation.md - Detailed guide
+  3. IMPLEMENTATION_SUMMARY.md - Visual overview
+  4. cmdkeys.go - Replacement code file
+
+Reference:
+  5. COMMAND_KEYS_REFERENCE.md - Command lookup
+
+
+🔗 RELATED FILES
+═══════════════════════════════════════════════════════════════════
+
+GitHub Repository:
+  https://github.com/robbiew/retrograde
+
+Files You'll Modify:
+  internal/menu/cmdkeys.go               (replace entirely)
+  internal/tui/editor.go                 (add types)
+  internal/tui/editor_view.go            (update modal + add view)
+  internal/tui/editor_update.go          (add handlers)
+
+Optional New File:
+  internal/tui/editor_menu_helpers.go    (helper functions)
+
+
+💡 TIPS
+═══════════════════════════════════════════════════════════════════
+
+• Implement in phases - test each step
+• Start with cmdkeys.go replacement - compile first
+• Add TUI types before handlers
+• Test the UI immediately after each phase
+• Reference COMMAND_KEYS_REFERENCE.md while testing
+• Reuse this pattern for other selection fields later
+
+
+🎓 LEARNING RESOURCES
+═══════════════════════════════════════════════════════════════════
+
+Renegade BBS Reference: RGV130.DOC (original docs)
+BubbleTea Framework: https://github.com/charmbracelet/bubbletea
+Retrograde Source: https://github.com/robbiew/retrograde
+
+
+📝 VERSION HISTORY
+═══════════════════════════════════════════════════════════════════
+
+v1.0 - October 17, 2025
+  • Initial release
+  • 62 command keys defined
+  • Full TUI implementation guide
+  • Complete documentation package
+
+
+📧 NOTES
+═══════════════════════════════════════════════════════════════════
+
+• Based on Renegade BBS v1.30 command key system
+• Modernized for Go and BubbleTea TUI framework
+• Commands organized for better UX
+• Extensible for future enhancements
+• Most commands are placeholders - implement as needed
+
+
+🏁 SUCCESS CRITERIA
+═══════════════════════════════════════════════════════════════════
+
+You've successfully implemented when:
+  ✓ ./retrograde config runs without errors
+  ✓ Navigate to Editors → Menus → Edit Command
+  ✓ Press Enter on CmdKeys field
+  ✓ Selection list appears with categories
+  ✓ Can navigate with arrow keys
+  ✓ Can select a command with Enter
+  ✓ Selected value appears in CmdKeys field
+  ✓ Can save the menu command
+
+
+═══════════════════════════════════════════════════════════════════
+Created: October 17, 2025
+For: Retrograde BBS Menu System Enhancement
+GitHub: https://github.com/robbiew/retrograde
+═══════════════════════════════════════════════════════════════════
