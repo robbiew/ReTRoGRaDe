@@ -15,10 +15,11 @@ type CmdKeyHandler func(ctx *ExecutionContext, options string) error
 
 // ExecutionContext holds the context for executing a command
 type ExecutionContext struct {
-	UserID   int64
-	Username string
-	IO       *telnet.TelnetIO
-	Session  *config.TelnetSession
+	UserID       int64
+	Username     string
+	IO           *telnet.TelnetIO
+	Session      *config.TelnetSession
+	MenuExecutor *MenuExecutor
 	// Add more context as needed: session, database, etc.
 }
 
@@ -55,6 +56,8 @@ func (r *CmdKeyRegistry) registerDefaults() {
 	r.Register("MM", handleReadMail)
 	r.Register("MP", handlePostMessage)
 	r.Register("G", handleGoodbye)
+	r.Register("_^", handleGotoMenu)
+	r.Register("_\\", handleReturnToPreviousMenu)
 }
 
 // handleReadMail handles the MM command (read mail)
@@ -86,5 +89,28 @@ func handleGoodbye(ctx *ExecutionContext, options string) error {
 		ctx.Session.Conn.Close()
 	}
 
+	return nil
+}
+
+// handleGotoMenu handles the _^ command (goto menu)
+func handleGotoMenu(ctx *ExecutionContext, options string) error {
+	if ctx.MenuExecutor == nil {
+		return fmt.Errorf("menu executor not available")
+	}
+	if options == "" {
+		return fmt.Errorf("menu file option required")
+	}
+	// Execute the specified menu
+	return ctx.MenuExecutor.ExecuteMenu(options, ctx)
+}
+
+// handleReturnToPreviousMenu handles the _\ command (return to previous menu)
+func handleReturnToPreviousMenu(ctx *ExecutionContext, options string) error {
+	if ctx.MenuExecutor == nil {
+		return fmt.Errorf("menu executor not available")
+	}
+	// TODO: Implement logic to return to previous menu
+	// This might require tracking menu history in the session or context
+	ctx.IO.Printf("Returning to previous menu\r\n")
 	return nil
 }

@@ -293,33 +293,63 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			var err error
 
 			if m.editingMenu != nil {
-				// Save menu changes
-				err = m.db.UpdateMenu(m.editingMenu)
-				if err != nil {
-					m.message = fmt.Sprintf("Error saving menu: %v", err)
-					m.messageTime = time.Now()
-					m.messageType = ErrorMessage
-					m.savePrompt = false
-					m.navMode = m.returnToMode
-					return m, nil
-				}
-
-				// Save all command changes
-				for _, cmd := range m.menuCommandsList {
-					if cmd.ID == 0 {
-						// New command - insert
-						_, err = m.db.CreateMenuCommand(&cmd)
-					} else {
-						// Existing command - update
-						err = m.db.UpdateMenuCommand(&cmd)
-					}
-					if err != nil {
-						m.message = fmt.Sprintf("Error saving command: %v", err)
+				// Save menu changes - use CreateMenu for new menus (ID=0), UpdateMenu for existing
+				if m.editingMenu.ID == 0 {
+					// New menu - create it
+					newID, createErr := m.db.CreateMenu(m.editingMenu)
+					if createErr != nil {
+						m.message = fmt.Sprintf("Error creating menu: %v", createErr)
 						m.messageTime = time.Now()
 						m.messageType = ErrorMessage
 						m.savePrompt = false
 						m.navMode = m.returnToMode
 						return m, nil
+					}
+					// Update the menu ID with the new ID from database
+					m.editingMenu.ID = int(newID)
+
+					// CRITICAL: Update all commands' MenuID to the newly created menu's ID
+					for i := range m.menuCommandsList {
+						m.menuCommandsList[i].MenuID = int(newID)
+					}
+				} else {
+					// Existing menu - update it
+					err = m.db.UpdateMenu(m.editingMenu)
+					if err != nil {
+						m.message = fmt.Sprintf("Error saving menu: %v", err)
+						m.messageTime = time.Now()
+						m.messageType = ErrorMessage
+						m.savePrompt = false
+						m.navMode = m.returnToMode
+						return m, nil
+					}
+				}
+
+				// Save all command changes
+				for i := range m.menuCommandsList { // ✅ Use index to allow modification
+					if m.menuCommandsList[i].ID == 0 {
+						// New command - insert
+						newID, err := m.db.CreateMenuCommand(&m.menuCommandsList[i]) // ✅ Capture the new ID
+						if err != nil {
+							m.message = fmt.Sprintf("Error saving command: %v", err)
+							m.messageTime = time.Now()
+							m.messageType = ErrorMessage
+							m.savePrompt = false
+							m.navMode = m.returnToMode
+							return m, nil
+						}
+						m.menuCommandsList[i].ID = int(newID) // ✅ Update the ID in the list
+					} else {
+						// Existing command - update
+						err := m.db.UpdateMenuCommand(&m.menuCommandsList[i])
+						if err != nil {
+							m.message = fmt.Sprintf("Error saving command: %v", err)
+							m.messageTime = time.Now()
+							m.messageType = ErrorMessage
+							m.savePrompt = false
+							m.navMode = m.returnToMode
+							return m, nil
+						}
 					}
 				}
 
@@ -336,6 +366,52 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.menuCommandsList = nil
 				m.originalMenuCommands = nil
 				m.menuDataFields = nil
+			} else if m.editingMenuCommand != nil {
+				// Save menu command changes
+				if m.editingMenuCommand.ID == 0 {
+					// New command - insert
+					newID, createErr := m.db.CreateMenuCommand(m.editingMenuCommand)
+					if createErr != nil {
+						m.message = fmt.Sprintf("Error creating menu command: %v", createErr)
+						m.messageTime = time.Now()
+						m.messageType = ErrorMessage
+						m.savePrompt = false
+						m.navMode = m.returnToMode
+						return m, nil
+					}
+					// Update the command ID with the new ID from database
+					m.editingMenuCommand.ID = int(newID)
+				} else {
+					// Existing command - update
+					err = m.db.UpdateMenuCommand(m.editingMenuCommand)
+					if err != nil {
+						m.message = fmt.Sprintf("Error saving menu command: %v", err)
+						m.messageTime = time.Now()
+						m.messageType = ErrorMessage
+						m.savePrompt = false
+						m.navMode = m.returnToMode
+						return m, nil
+					}
+				}
+
+				// Add the command to the menu commands list if it's new
+				if m.editingMenuCommand.ID != 0 {
+					found := false
+					for i, cmd := range m.menuCommandsList {
+						if cmd.ID == m.editingMenuCommand.ID {
+							// Update existing command in list
+							m.menuCommandsList[i] = *m.editingMenuCommand
+							found = true
+							break
+						}
+					}
+					if !found {
+						// Add new command to list
+						m.menuCommandsList = append(m.menuCommandsList, *m.editingMenuCommand)
+					}
+				}
+
+				m.editingMenuCommand = nil
 			} else if m.editingSecurityLevel != nil {
 				// Save security level changes
 				err = m.db.UpdateSecurityLevel(m.editingSecurityLevel)
@@ -1321,7 +1397,7 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "i", "I":
 		// Insert new command (only works in Commands tab)
 		if m.currentMenuTab == 1 { // FIXED: Was 0, should be 1 for commands tab
-			m.editingMenuCommand = &database.MenuCommand{
+			newCommand := &database.MenuCommand{
 				MenuID:           m.editingMenu.ID,
 				CommandNumber:    len(m.menuCommandsList) + 1,
 				Keys:             "",
@@ -1330,6 +1406,7 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				CmdKeys:          "",
 				Options:          "",
 			}
+			m.editingMenuCommand = newCommand
 			// Set up modal fields for command editing
 			m.setupMenuEditCommandModal()
 			m.navMode = MenuEditCommandMode
@@ -1498,9 +1575,18 @@ func (m Model) handleMenuEditData(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "esc":
-		// Check if there are unsaved changes
-		hasUnsavedChanges := false
-		// TODO: Implement change detection for menu data
+		// Check if there are unsaved changes or if this is a new menu
+		if m.editingMenu != nil && m.editingMenu.ID == 0 {
+			// This is a new menu that hasn't been saved yet
+			// Prompt to save before proceeding
+			m.savePrompt = true
+			m.savePromptSelection = 1
+			m.returnToMode = MenuManagementMode
+			m.navMode = SaveChangesPrompt
+			return m, nil
+		}
+
+		hasUnsavedChanges := m.menuModified || m.modifiedCount > 0
 		if hasUnsavedChanges {
 			m.savePrompt = true
 			m.savePromptSelection = 1
@@ -1587,6 +1673,29 @@ func (m Model) handleMenuEditCommand(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "esc":
+		// Check if command was modified and prompt to save
+		commandModified := false
+		if m.editingMenuCommand != nil {
+			// Check if any fields were changed
+			if m.editingMenuCommand.Keys != "" ||
+				m.editingMenuCommand.ShortDescription != "" ||
+				m.editingMenuCommand.ACSRequired != "" ||
+				m.editingMenuCommand.CmdKeys != "" ||
+				m.editingMenuCommand.Options != "" {
+				commandModified = true
+			}
+		}
+
+		if commandModified {
+			// Command was modified, showing save prompt
+			m.savePrompt = true
+			m.savePromptSelection = 1 // Default to Yes
+			m.returnToMode = MenuModifyMode
+			m.navMode = SaveChangesPrompt
+			return m, nil
+		}
+
+		// No changes, return directly
 		// Restore menu data fields from backup
 		if len(m.menuDataFields) > 0 {
 			m.modalFields = make([]SubmenuItem, len(m.menuDataFields))
@@ -1902,13 +2011,22 @@ func (m Model) handleMenuManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			GenericDescColor:    1,
 			ClearScreen:         false,
 		}
+		// Initialize empty commands list for new menu
+		m.menuCommandsList = []database.MenuCommand{}
+		m.originalMenuCommands = []database.MenuCommand{}
 		// CRITICAL: Set up modal fields for new menu editing
-		// ADD THIS: Initialize modal fields for the new menu
 		m.setupMenuEditDataModal()
 		m.modalFieldIndex = 0
 
-		m.navMode = MenuEditDataMode
-		m.message = "Creating new menu"
+		// SAVE the menu data fields for later restoration
+		m.menuDataFields = make([]SubmenuItem, len(m.modalFields))
+		copy(m.menuDataFields, m.modalFields)
+
+		m.menuModified = true      // Mark as modified since it's new
+		m.navMode = MenuModifyMode // Go directly to modify mode, not edit data mode
+		m.selectedCommandIndex = 0
+		m.currentMenuTab = 0
+		m.message = "Creating new menu - fill in details and add commands"
 		m.messageTime = time.Now()
 		m.messageType = InfoMessage
 		return m, nil
