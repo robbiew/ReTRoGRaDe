@@ -476,8 +476,8 @@ func (d securityLevelDelegate) Render(w io.Writer, m list.Model, index int, list
 	var str string
 	isSelected := index == m.Index()
 
-	// Format: [SecLevel] [Label]
-	itemText := fmt.Sprintf(" [%d] %s", item.securityLevel.SecLevel, item.securityLevel.Name)
+	// Format with fixed-width columns to match headers: Name (20 chars), Level (10 chars)
+	itemText := fmt.Sprintf(" %-20s %-10d", item.securityLevel.Name, item.securityLevel.SecLevel)
 
 	// Truncate if text is too long
 	if len(itemText) > d.maxWidth {

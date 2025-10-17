@@ -30,7 +30,7 @@ func (m Model) View() string {
 	// Render ANSI art background only on the main menu
 	if m.navMode == MainMenuNavigation && len(m.ansiArtLines) > 0 {
 		artWidth := 80
-		startRow := 2 // just under the persistent header
+		startRow := 1
 		startCol := 0
 		if m.screenWidth > artWidth {
 			startCol = (m.screenWidth - artWidth) / 2
@@ -1019,9 +1019,17 @@ func (m Model) renderSecurityLevelsManagement() string {
 		Width(52)
 	separator := separatorStyle.Render(strings.Repeat("-", 52))
 
+	// Add column headers
+	columnHeaders := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorBgMedium)).
+		Foreground(lipgloss.Color(ColorTextBright)).
+		Bold(true).
+		Width(52).
+		Render(fmt.Sprintf(" %-20s %-10s", "Name", "Level"))
+
 	listView := strings.TrimSpace(m.securityLevelsUI.View())
 
-	allLines := []string{header, separator, listView, separator}
+	allLines := []string{header, separator, columnHeaders, separator, listView, separator}
 
 	combined := strings.Join(allLines, "\n")
 
@@ -1335,14 +1343,22 @@ func (m Model) renderMenuDataListWithEditing(width int) []string {
 func (m Model) renderCommandList(width int) []string {
 	var commandLines []string
 
-	// Add column header with dark grey background
+	// Add column header matching User Management style
 	columnHeader := lipgloss.NewStyle().
-		Background(lipgloss.Color("8")).
+		Background(lipgloss.Color(ColorBgMedium)).
 		Foreground(lipgloss.Color(ColorTextBright)).
 		Bold(true).
 		Width(width).
 		Render(fmt.Sprintf(" %-4s %-4s %-30s %-6s", "#", "Key", "Description", "Active"))
 	commandLines = append(commandLines, columnHeader)
+
+	// Add separator line after header
+	separatorStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorBgMedium)).
+		Foreground(lipgloss.Color(ColorPrimary)).
+		Width(width)
+	separator := separatorStyle.Render(strings.Repeat("-", width))
+	commandLines = append(commandLines, separator)
 
 	for i, cmd := range m.menuCommandsList {
 		// Format: [CommandNumber] [Keys] [ShortDescription] [Active Status]
