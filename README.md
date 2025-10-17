@@ -42,7 +42,10 @@ As a hobbyist Go developer, I'm leveraging AI tools like Roo Code, Codex and Cla
 | Native Door Support             | 0%       | Linux native door launcher (menu action)                                           |
 | DOS Door Support                | 0%       | Dosemu2 launch door (menu action)                                                  |
 | MCI Codes                       | 0%       | Support for MCI codes                                                              |
-| Pipe Colors                     | 0%       | Support for Renegade-style pipe colors                                             |
+| Pipe Colors                     | 100%     | Support for Renegade-style pipe colors                                             |
+| Upload/Download Functions       | 0%       | SexyZ file transfer, Up/Down, DIZ extraction, File search                          |
+| Archivers                       | 0%       | zip, arj, lzh                                                                      |
+| Achievements                    | 0%       | Implement achievement tracking and rewards                                         |
 
 ## Quick Start
 

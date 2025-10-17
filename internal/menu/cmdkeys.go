@@ -91,557 +91,204 @@ func (r *CmdKeyRegistry) GetDefinitionsByCategory(category string) []*CmdKeyDefi
 
 // registerDefaults registers the default command key handlers with their definitions
 func (r *CmdKeyRegistry) registerDefaults() {
-	// Offline Mail Commands
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "!D",
-		Name:        "Download QWK Packet",
-		Description: "Download offline mail in .QWK",
-		Category:    "Offline Mail",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "!P",
-		Name:        "Set Message Pointers",
-		Description: "Set pointers for offline mail",
-		Category:    "Offline Mail",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "!U",
-		Name:        "Upload REP Packet",
-		Description: "Upload offline mail in .REP",
-		Category:    "Offline Mail",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
+	defs := []CmdKeyDefinition{
+		// Offline Mail
+		{CmdKey: "!D", Name: "Download QWK Packet", Description: "Download offline mail in .QWK format", Category: "Offline Mail"},
+		{CmdKey: "!P", Name: "Set Message Pointers", Description: "Set offline message pointers", Category: "Offline Mail"},
+		{CmdKey: "!U", Name: "Upload REP Packet", Description: "Upload offline replies in .REP format", Category: "Offline Mail"},
 
-	// Message System Commands
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "MA",
-		Name:        "Change Message Base",
-		Description: "Change to a different message base",
-		Category:    "Message",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "ME",
-		Name:        "Enter Message",
-		Description: "Enter a new message to current base",
-		Category:    "Message",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "MK",
-		Name:        "Kill Message Scan",
-		Description: "Stop scanning messages",
-		Category:    "Message",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "ML",
-		Name:        "List Messages",
-		Description: "List message titles in current base",
-		Category:    "Message",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "MM",
-		Name:        "Read Mail",
-		Description: "Read messages addressed to you",
-		Category:    "Message",
-		Implemented: false,
-		Handler:     handleReadMail,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "MN",
-		Name:        "New Message Scan",
-		Description: "Scan all new messages",
-		Category:    "Message",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "MP",
-		Name:        "Post Message",
-		Description: "Post a new message to current base",
-		Category:    "Message",
-		Implemented: false,
-		Handler:     handlePostMessage,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "MR",
-		Name:        "Read Messages",
-		Description: "Read messages in current base",
-		Category:    "Message",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "MS",
-		Name:        "Scan Messages",
-		Description: "Quick scan of message subjects",
-		Category:    "Message",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "MU",
-		Name:        "Your Messages",
-		Description: "Read messages you've posted",
-		Category:    "Message",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "MY",
-		Name:        "Your Mail Scan",
-		Description: "Scan your personal mail",
-		Category:    "Message",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "MZ",
-		Name:        "Global New Scan",
-		Description: "Scan new messages across all bases",
-		Category:    "Message",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "M#",
-		Name:        "Read Message Number",
-		Description: "Read a specific message by number",
-		Category:    "Message",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
+		// Timebank
+		{CmdKey: "$D", Name: "Deposit Time", Description: "Deposit time into the timebank", Category: "Timebank"},
+		{CmdKey: "$W", Name: "Withdraw Time", Description: "Withdraw time from the timebank", Category: "Timebank"},
 
-	// File System Commands
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "FA",
-		Name:        "Change File Base",
-		Description: "Change to a different file area",
-		Category:    "File",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "FB",
-		Name:        "Batch Download",
-		Description: "Add files to batch download queue",
-		Category:    "File",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "FD",
-		Name:        "Download File",
-		Description: "Download a file from current area",
-		Category:    "File",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "FF",
-		Name:        "Find File",
-		Description: "Search for files across all areas",
-		Category:    "File",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "FL",
-		Name:        "List Files",
-		Description: "List files in current area",
-		Category:    "File",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "FN",
-		Name:        "New Files Scan",
-		Description: "Scan for new files",
-		Category:    "File",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "FP",
-		Name:        "File Points",
-		Description: "Display your file points/ratio",
-		Category:    "File",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "FS",
-		Name:        "Search Files",
-		Description: "Search for files by keyword",
-		Category:    "File",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "FU",
-		Name:        "Upload File",
-		Description: "Upload a file to current area",
-		Category:    "File",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "FV",
-		Name:        "View File",
-		Description: "View a file's description or contents",
-		Category:    "File",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "FZ",
-		Name:        "Global File Search",
-		Description: "Search all file areas",
-		Category:    "File",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "F@",
-		Name:        "Your Uploads",
-		Description: "List files you've uploaded",
-		Category:    "File",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "F#",
-		Name:        "Contents",
-		Description: "View archive contents",
-		Category:    "File",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
+		// Credit System
+		{CmdKey: "$+", Name: "Increase Credit", Description: "Increase a user's credit balance", Category: "Credit"},
+		{CmdKey: "$-", Name: "Increase Debit", Description: "Increase a user's debit balance", Category: "Credit"},
 
-	// Batch Transfer Commands
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "BC",
-		Name:        "Clear Batch Queue",
-		Description: "Clear your batch transfer queue",
-		Category:    "Batch",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "BD",
-		Name:        "Batch Download",
-		Description: "Download all files in batch queue",
-		Category:    "Batch",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "BL",
-		Name:        "List Batch Queue",
-		Description: "List files in your batch queue",
-		Category:    "Batch",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "BR",
-		Name:        "Remove from Batch",
-		Description: "Remove a file from batch queue",
-		Category:    "Batch",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "BU",
-		Name:        "Batch Upload",
-		Description: "Upload multiple files at once",
-		Category:    "Batch",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "B?",
-		Name:        "Batch Queue Status",
-		Description: "Display number of files in batch queue",
-		Category:    "Batch",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
+		// Sysop Functions
+		{CmdKey: "*B", Name: "Edit Message Bases", Description: "Enter the message base editor", Category: "Sysop"},
+		{CmdKey: "*C", Name: "Change User Account", Description: "Switch to another user's account", Category: "Sysop"},
+		{CmdKey: "*D", Name: "Mini-DOS Shell", Description: "Enter the Mini-DOS environment", Category: "Sysop"},
+		{CmdKey: "*E", Name: "Edit Events", Description: "Enter the event editor", Category: "Sysop"},
+		{CmdKey: "*F", Name: "Edit File Bases", Description: "Enter the file base editor", Category: "Sysop"},
+		{CmdKey: "*L", Name: "View SysOp Log", Description: "Display the SysOp log for a day", Category: "Sysop"},
+		{CmdKey: "*N", Name: "Edit Text File", Description: "Edit a text file", Category: "Sysop"},
+		{CmdKey: "*P", Name: "System Configuration", Description: "Enter the system configuration editor", Category: "Sysop"},
+		{CmdKey: "*R", Name: "Conference Editor", Description: "Enter the conference editor", Category: "Sysop"},
+		{CmdKey: "*U", Name: "User Editor", Description: "Enter the user editor", Category: "Sysop"},
+		{CmdKey: "*V", Name: "Voting Editor", Description: "Enter the voting editor", Category: "Sysop"},
+		{CmdKey: "*X", Name: "Protocol Editor", Description: "Enter the protocol editor", Category: "Sysop"},
+		{CmdKey: "*Z", Name: "Activity Log", Description: "Display the system activity log", Category: "Sysop"},
+		{CmdKey: "*1", Name: "Edit Files in Base", Description: "Edit files in the current file base", Category: "Sysop"},
+		{CmdKey: "*2", Name: "Sort File Bases", Description: "Sort all file bases by name", Category: "Sysop"},
+		{CmdKey: "*3", Name: "Read All Private Mail", Description: "Read every user's private mail", Category: "Sysop"},
+		{CmdKey: "*4", Name: "Download Any File", Description: "Download any system file (prompt if unknown)", Category: "Sysop"},
+		{CmdKey: "*5", Name: "Recheck Files", Description: "Recheck files for size and online status", Category: "Sysop"},
+		{CmdKey: "*6", Name: "Upload Missing Files", Description: "Upload files not already listed", Category: "Sysop"},
+		{CmdKey: "*7", Name: "Validate Files", Description: "Validate unvalidated files", Category: "Sysop"},
+		{CmdKey: "*8", Name: "Add GIF Specs", Description: "Add resolution specs to GIF files", Category: "Sysop"},
+		{CmdKey: "*9", Name: "Pack Message Bases", Description: "Pack the message bases", Category: "Sysop"},
+		{CmdKey: "*#", Name: "Menu Editor", Description: "Enter the menu editor", Category: "Sysop"},
+		{CmdKey: "*$", Name: "Long DOS Directory", Description: "Show long DOS directory of current file base", Category: "Sysop"},
+		{CmdKey: "*%", Name: "Short DOS Directory", Description: "Show condensed DOS directory of current file base", Category: "Sysop"},
 
-	// System/User Commands
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "G",
-		Name:        "Goodbye / Logoff",
-		Description: "Log off the BBS",
-		Category:    "System",
-		Implemented: true,
-		Handler:     handleGoodbye,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "HC",
-		Name:        "Careful Logoff",
-		Description: "Prompt before logging off",
-		Category:    "System",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "HI",
-		Name:        "Instant Logoff",
-		Description: "Immediate logoff without prompt",
-		Category:    "System",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "HM",
-		Name:        "Main Menu",
-		Description: "Return to main menu",
-		Category:    "System",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
+		// Navigation / Display & Flow
+		{CmdKey: "-C", Name: "SysOp Window Message", Description: "Display a message on the SysOp window", Category: "Navigation/Display"},
+		{CmdKey: "-F", Name: "Display File (MCI)", Description: "Display a text file (MCI codes enabled)", Category: "Navigation/Display"},
+		{CmdKey: "/F", Name: "Display File (Literal)", Description: "Display a text file without MCI expansion", Category: "Navigation/Display"},
+		{CmdKey: "-L", Name: "Display Line", Description: "Display a single line of text", Category: "Navigation/Display"},
+		{CmdKey: "-N", Name: "Prompt: Yes Shows Quote", Description: "Prompt the user; show quote if they answer Yes", Category: "Navigation/Display"},
+		{CmdKey: "-Q", Name: "Read Infoform", Description: "Read an Infoform questionnaire", Category: "Navigation/Display"},
+		{CmdKey: "-R", Name: "Read Infoform Answers", Description: "Display answers to an Infoform questionnaire", Category: "Navigation/Display"},
+		{CmdKey: "-S", Name: "Append SysOp Log", Description: "Append a line to the SysOp log", Category: "Navigation/Display"},
+		{CmdKey: "-Y", Name: "Prompt: No Shows Quote", Description: "Prompt the user; show quote if they answer No", Category: "Navigation/Display"},
+		{CmdKey: "-;", Name: "Execute Macro", Description: "Execute a macro string (substitutes ';' with <CR>)", Category: "Navigation/Display"},
+		{CmdKey: "-$", Name: "Prompt for Password", Description: "Prompt the user for a password", Category: "Navigation/Display"},
+		{CmdKey: "-^", Name: "Go To Menu", Description: "Jump to another menu", Category: "Navigation/Display"},
+		{CmdKey: "-/", Name: "Gosub Menu", Description: "Jump to a menu and return", Category: "Navigation/Display"},
+		{CmdKey: "-\\", Name: "Return from Menu", Description: "Return to the previous menu", Category: "Navigation/Display"},
+		{CmdKey: "-\"", Name: "Return from Menu (Legacy)", Description: "Legacy alias for returning to the previous menu", Category: "Navigation/Display"},
 
-	// User Information Commands
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "O1",
-		Name:        "Logon to BBS",
-		Description: "Login (shuttle mode)",
-		Category:    "User",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "OA",
-		Name:        "Apply for Access",
-		Description: "New user application",
-		Category:    "User",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "OB",
-		Name:        "Bulletins",
-		Description: "Read system bulletins",
-		Category:    "User",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "OC",
-		Name:        "Page Sysop",
-		Description: "Page the system operator",
-		Category:    "User",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "OE",
-		Name:        "User Editor",
-		Description: "Edit your user settings",
-		Category:    "User",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "OF",
-		Name:        "Feedback",
-		Description: "Send feedback to sysop",
-		Category:    "User",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "OG",
-		Name:        "Goodbye Script",
-		Description: "Display goodbye and logoff",
-		Category:    "User",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "OL",
-		Name:        "Last Callers",
-		Description: "View list of recent callers",
-		Category:    "User",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "ON",
-		Name:        "Node List",
-		Description: "View active nodes/users",
-		Category:    "User",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "OP",
-		Name:        "Page User",
-		Description: "Page another user",
-		Category:    "User",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "OR",
-		Name:        "Your Stats",
-		Description: "View your usage statistics",
-		Category:    "User",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "OS",
-		Name:        "System Information",
-		Description: "View BBS system information",
-		Category:    "User",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "OU",
-		Name:        "User List",
-		Description: "View list of users",
-		Category:    "User",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "OV",
-		Name:        "Version Info",
-		Description: "View BBS software version",
-		Category:    "User",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
+		// Archive Management
+		{CmdKey: "AA", Name: "Add to Archive", Description: "Add files to an archive", Category: "Archive"},
+		{CmdKey: "AC", Name: "Convert Archive", Description: "Convert between archive formats", Category: "Archive"},
+		{CmdKey: "AE", Name: "Extract Archive", Description: "Extract files from an archive", Category: "Archive"},
+		{CmdKey: "AG", Name: "Manage Extracted Files", Description: "Manipulate files extracted from archives", Category: "Archive"},
+		{CmdKey: "AM", Name: "Modify Archive Comments", Description: "Edit comment fields within an archive", Category: "Archive"},
+		{CmdKey: "AR", Name: "Re-Archive", Description: "Re-archive files using the same format", Category: "Archive"},
+		{CmdKey: "AT", Name: "Test Archive", Description: "Run an integrity test on an archive", Category: "Archive"},
 
-	// Voting Commands
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "VA",
-		Name:        "Add Voting Question",
-		Description: "Add a new voting question",
-		Category:    "Voting",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "VL",
-		Name:        "List Voting Questions",
-		Description: "List all voting questions",
-		Category:    "Voting",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "VR",
-		Name:        "View Voting Results",
-		Description: "View results of voting questions",
-		Category:    "Voting",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "VV",
-		Name:        "Vote on All",
-		Description: "Vote on all unvoted questions",
-		Category:    "Voting",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "V#",
-		Name:        "Vote on Question",
-		Description: "Vote on a specific question",
-		Category:    "Voting",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
+		// Batch Transfer
+		{CmdKey: "BC", Name: "Clear Batch Queue", Description: "Clear the batch transfer queue", Category: "Batch Transfer"},
+		{CmdKey: "BD", Name: "Download Batch Queue", Description: "Download the batch queue", Category: "Batch Transfer"},
+		{CmdKey: "BL", Name: "List Batch Queue", Description: "List files in the batch queue", Category: "Batch Transfer"},
+		{CmdKey: "BR", Name: "Remove Batch Item", Description: "Remove a file from the batch queue", Category: "Batch Transfer"},
+		{CmdKey: "BU", Name: "Upload Batch Queue", Description: "Upload the batch queue", Category: "Batch Transfer"},
+		{CmdKey: "B?", Name: "Batch Queue Count", Description: "Display number of files in the batch queue", Category: "Batch Transfer"},
 
-	// Menu Navigation Commands
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "-^",
-		Name:        "Go to Menu",
-		Description: "Navigate to a different menu",
-		Category:    "Navigation",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "-/",
-		Name:        "Gosub Menu",
-		Description: "Go to menu and return",
-		Category:    "Navigation",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "-\"",
-		Name:        "Return from Menu",
-		Description: "Return to previous menu",
-		Category:    "Navigation",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
+		// Dropfile / Door Launch
+		{CmdKey: "DC", Name: "Create CHAIN.TXT", Description: "Create CHAIN.TXT (WWIV) and execute command", Category: "Dropfile"},
+		{CmdKey: "DD", Name: "Create DORINFO1.DEF", Description: "Create DORINFO1.DEF (RBBS) and execute command", Category: "Dropfile"},
+		{CmdKey: "DG", Name: "Create DOOR.SYS", Description: "Create DOOR.SYS (GAP) and execute command", Category: "Dropfile"},
+		{CmdKey: "DP", Name: "Create PCBOARD.SYS", Description: "Create PCBOARD.SYS and execute command", Category: "Dropfile"},
+		{CmdKey: "DS", Name: "Create SFDOORS.DAT", Description: "Create SFDOORS.DAT (Spitfire) and execute command", Category: "Dropfile"},
+		{CmdKey: "DW", Name: "Create CALLINFO.BBS", Description: "Create CALLINFO.BBS (Wildcat!) and execute command", Category: "Dropfile"},
+		{CmdKey: "D-", Name: "Execute Without Dropfile", Description: "Execute command without creating a dropfile", Category: "Dropfile"},
 
-	// Miscellaneous Commands
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "-!",
-		Name:        "Execute Program",
-		Description: "Execute an external program",
-		Category:    "Misc",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "-&",
-		Name:        "Display File",
-		Description: "Display a text file",
-		Category:    "Misc",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "-%",
-		Name:        "Display String",
-		Description: "Display a text string",
-		Category:    "Misc",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-	r.Register(&CmdKeyDefinition{
-		CmdKey:      "-$",
-		Name:        "Prompt for Password",
-		Description: "Prompt user for password",
-		Category:    "Misc",
-		Implemented: false,
-		Handler:     handleNotImplemented,
-	})
-}
+		// File System
+		{CmdKey: "FA", Name: "Change File Base", Description: "Change to a different file base", Category: "File"},
+		{CmdKey: "FB", Name: "Add to Batch Download", Description: "Add a file to the batch download list", Category: "File"},
+		{CmdKey: "FD", Name: "Download File", Description: "Download a file from the BBS", Category: "File"},
+		{CmdKey: "FF", Name: "Search Descriptions", Description: "Search all file bases for a description", Category: "File"},
+		{CmdKey: "FL", Name: "List Filespec", Description: "List a filespec in the current file base", Category: "File"},
+		{CmdKey: "FN", Name: "New File Scan", Description: "Scan file bases for new files", Category: "File"},
+		{CmdKey: "FP", Name: "Set File Pointer Date", Description: "Change the pointer date used for new files", Category: "File"},
+		{CmdKey: "FS", Name: "Search Filespec", Description: "Search file bases for a filespec", Category: "File"},
+		{CmdKey: "FU", Name: "Upload File", Description: "Upload a file to the BBS", Category: "File"},
+		{CmdKey: "FV", Name: "View Archive Contents", Description: "List contents of an archive file", Category: "File"},
+		{CmdKey: "FZ", Name: "Set File NewScan List", Description: "Select file bases to include in new scan", Category: "File"},
+		{CmdKey: "F@", Name: "Create Temporary Base", Description: "Create a temporary file base", Category: "File"},
+		{CmdKey: "F#", Name: "Quick File Base Change", Description: "Prompt for a file base to change to", Category: "File"},
 
-// handleReadMail handles the MM command (read mail)
-func handleReadMail(ctx *ExecutionContext, options string) error {
-	// TODO: Implement mail reading logic
-	ctx.IO.Printf("User %s is reading mail\r\n", ctx.Username)
-	return nil
-}
+		// Hangup / Logoff
+		{CmdKey: "HC", Name: "Careful Logoff", Description: "Prompt and then log off if confirmed", Category: "Hangup"},
+		{CmdKey: "HI", Name: "Immediate Logoff", Description: "Log off immediately", Category: "Hangup"},
+		{CmdKey: "HM", Name: "Display & Logoff", Description: "Display a string and log off the user", Category: "Hangup"},
 
-// handlePostMessage handles the MP command (post message)
-func handlePostMessage(ctx *ExecutionContext, options string) error {
-	// TODO: Implement message posting logic
-	ctx.IO.Printf("User %s is posting a message\r\n", ctx.Username)
-	return nil
+		// Message System
+		{CmdKey: "MA", Name: "Change Message Base", Description: "Change to another message base", Category: "Message"},
+		{CmdKey: "ME", Name: "Send Private Mail", Description: "Send private mail to a user", Category: "Message"},
+		{CmdKey: "MK", Name: "Edit Outgoing Mail", Description: "Edit or delete outgoing private mail", Category: "Message"},
+		{CmdKey: "ML", Name: "Send Mass Mail", Description: "Send private mail to multiple users", Category: "Message"},
+		{CmdKey: "MM", Name: "Read Private Mail", Description: "Read your private mail", Category: "Message"},
+		{CmdKey: "MN", Name: "New Message Scan", Description: "Scan for new messages", Category: "Message"},
+		{CmdKey: "MP", Name: "Post Message", Description: "Post a message in the current base", Category: "Message"},
+		{CmdKey: "MR", Name: "Read Messages", Description: "Read messages in the current base", Category: "Message"},
+		{CmdKey: "MS", Name: "Scan Current Base", Description: "Scan the current message base", Category: "Message"},
+		{CmdKey: "MU", Name: "List Base Access", Description: "List users with access to the current base", Category: "Message"},
+		{CmdKey: "MY", Name: "Scan for Personal Mail", Description: "Scan message bases for personal messages", Category: "Message"},
+		{CmdKey: "MZ", Name: "Set Message NewScan List", Description: "Select message bases to include in new scan", Category: "Message"},
+		{CmdKey: "M#", Name: "Quick Message Base Change", Description: "Prompt for a message base to change to", Category: "Message"},
+
+		// Multinode
+		{CmdKey: "NA", Name: "Toggle Page Availability", Description: "Toggle whether this node can be paged", Category: "Multinode"},
+		{CmdKey: "ND", Name: "Hangup Node", Description: "Disconnect another node", Category: "Multinode"},
+		{CmdKey: "NG", Name: "Join Group Chat", Description: "Join the multi-node group chat", Category: "Multinode"},
+		{CmdKey: "NO", Name: "View All Nodes", Description: "Display users on all nodes", Category: "Multinode"},
+		{CmdKey: "NP", Name: "Page Node", Description: "Page another node for chat", Category: "Multinode"},
+		{CmdKey: "NS", Name: "Send Node Message", Description: "Send a message to another node", Category: "Multinode"},
+		{CmdKey: "NT", Name: "Toggle Stealth Mode", Description: "Toggle stealth mode on or off", Category: "Multinode"},
+		{CmdKey: "NW", Name: "Set Activity String", Description: "Display a string under node activity", Category: "Multinode"},
+
+		// User / System Operations (O*)
+		{CmdKey: "O1", Name: "Logon (Shuttle)", Description: "Log on to the BBS when using the shuttle menu", Category: "User"},
+		{CmdKey: "O2", Name: "Apply as New User", Description: "Apply for access using the shuttle menu", Category: "User"},
+		{CmdKey: "OA", Name: "Auto-Validate User", Description: "Allow auto-validation with password and level", Category: "User"},
+		{CmdKey: "OB", Name: "User Statistics", Description: "View Top 10 user statistics", Category: "User"},
+		{CmdKey: "OC", Name: "Page the SysOp", Description: "Page the SysOp or leave a message", Category: "User"},
+		{CmdKey: "OE", Name: "Pause Screen", Description: "Toggle or force a pause in output", Category: "User"},
+		{CmdKey: "OF", Name: "Modify AR Flags", Description: "Set, reset, or toggle AR flags", Category: "User"},
+		{CmdKey: "OG", Name: "Modify AC Flags", Description: "Set, reset, or toggle AC flags", Category: "User"},
+		{CmdKey: "OL", Name: "List Today's Callers", Description: "Display today's caller list", Category: "User"},
+		{CmdKey: "ON", Name: "Clear Screen", Description: "Clear the caller's screen", Category: "User"},
+		{CmdKey: "OP", Name: "Modify User Information", Description: "Modify specific user information fields", Category: "User"},
+		{CmdKey: "OR", Name: "Change Conference", Description: "Switch to a different conference", Category: "User"},
+		{CmdKey: "OS", Name: "Bulletins Menu", Description: "Go to the bulletins menu", Category: "User"},
+		{CmdKey: "OU", Name: "User Listing", Description: "Display the user listing", Category: "User"},
+		{CmdKey: "OV", Name: "BBS Listing", Description: "Display the BBS list", Category: "User"},
+
+		// Automessage
+		{CmdKey: "UA", Name: "Reply to Automessage", Description: "Reply to the current automessage author", Category: "Automessage"},
+		{CmdKey: "UR", Name: "Display Automessage", Description: "Display the current automessage", Category: "Automessage"},
+		{CmdKey: "UW", Name: "Write Automessage", Description: "Write a new automessage", Category: "Automessage"},
+
+		// Voting
+		{CmdKey: "VA", Name: "Add Voting Topic", Description: "Add a new voting topic", Category: "Voting"},
+		{CmdKey: "VL", Name: "List Voting Topics", Description: "List available voting topics", Category: "Voting"},
+		{CmdKey: "VR", Name: "View Voting Results", Description: "View results for a voting topic", Category: "Voting"},
+		{CmdKey: "VT", Name: "Track User Vote", Description: "Track how a user voted", Category: "Voting"},
+		{CmdKey: "VU", Name: "View Topic Voters", Description: "View users who voted on a topic", Category: "Voting"},
+		{CmdKey: "VV", Name: "Vote on All Topics", Description: "Vote on all un-voted topics", Category: "Voting"},
+		{CmdKey: "V#", Name: "Vote on Topic", Description: "Vote on a specific topic number", Category: "Voting"},
+
+		// File Scanning (FILEP.MNU)
+		{CmdKey: "L1", Name: "Continue Listing", Description: "Continue listing during file scan", Category: "File Scanning"},
+		{CmdKey: "L2", Name: "Quit Listing", Description: "Quit listing during file scan", Category: "File Scanning"},
+		{CmdKey: "L3", Name: "Next File Base", Description: "Move to the next file base", Category: "File Scanning"},
+		{CmdKey: "L4", Name: "Toggle NewScan", Description: "Toggle newscan for the current file base", Category: "File Scanning"},
+
+		// Message Scanning (READP.MNU)
+		{CmdKey: "RA", Name: "Read Again", Description: "Re-read the current message", Category: "Message Scanning"},
+		{CmdKey: "RB", Name: "Back in Thread", Description: "Move backward in the message thread", Category: "Message Scanning"},
+		{CmdKey: "RC", Name: "Continuous Reading", Description: "Toggle continuous message reading", Category: "Message Scanning"},
+		{CmdKey: "RD", Name: "Delete Message", Description: "Delete the current message", Category: "Message Scanning"},
+		{CmdKey: "RE", Name: "Edit Message", Description: "Edit the current message", Category: "Message Scanning"},
+		{CmdKey: "RF", Name: "Forward in Thread", Description: "Move forward in the message thread", Category: "Message Scanning"},
+		{CmdKey: "RG", Name: "Next Message Base", Description: "Go to the next message base", Category: "Message Scanning"},
+		{CmdKey: "RH", Name: "Set High-Read Pointer", Description: "Set the high-read pointer", Category: "Message Scanning"},
+		{CmdKey: "RI", Name: "Ignore Remaining Messages", Description: "Ignore remaining messages and set pointer", Category: "Message Scanning"},
+		{CmdKey: "RL", Name: "List Messages", Description: "List messages in the current base", Category: "Message Scanning"},
+		{CmdKey: "RM", Name: "Move Message", Description: "Move the current message", Category: "Message Scanning"},
+		{CmdKey: "RN", Name: "Next Message", Description: "Read the next message", Category: "Message Scanning"},
+		{CmdKey: "RQ", Name: "Quit Reading", Description: "Quit the message reader", Category: "Message Scanning"},
+		{CmdKey: "RR", Name: "Reply to Message", Description: "Reply to the current message", Category: "Message Scanning"},
+		{CmdKey: "RT", Name: "Toggle Base NewScan", Description: "Toggle newscan for the message base", Category: "Message Scanning"},
+		{CmdKey: "RU", Name: "Edit Message Author", Description: "Edit the user associated with the message", Category: "Message Scanning"},
+		{CmdKey: "RX", Name: "Extract Message", Description: "Extract the message to a file", Category: "Message Scanning"},
+		{CmdKey: "R#", Name: "Jump to Message", Description: "Jump directly to a message number", Category: "Message Scanning"},
+		{CmdKey: "R-", Name: "Previous Message", Description: "Read the previous message", Category: "Message Scanning"},
+
+		// System
+		{CmdKey: "G", Name: "Goodbye / Logoff", Description: "Log off the BBS", Category: "System", Implemented: true, Handler: handleGoodbye},
+	}
+
+	for _, def := range defs {
+		d := def
+		if d.Handler == nil {
+			d.Handler = handleNotImplemented
+		}
+		r.Register(&d)
+	}
 }
 
 // handleGoodbye handles the G command (logout)
