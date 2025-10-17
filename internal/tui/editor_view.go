@@ -1329,7 +1329,7 @@ func (m Model) renderCommandList(width int) []string {
 		Background(lipgloss.Color("8")).
 		Foreground(lipgloss.Color(ColorTextBright)).
 		Bold(true).
-		Width(width - 4).
+		Width(width).
 		Render(fmt.Sprintf(" %-4s %-4s %-30s %-6s", "#", "Key", "Description", "Active"))
 	commandLines = append(commandLines, columnHeader)
 
@@ -1340,11 +1340,11 @@ func (m Model) renderCommandList(width int) []string {
 			activeIndicator = "[X]"
 		}
 		line := fmt.Sprintf(" %-4s %-4s %-30s %-6s", fmt.Sprintf("%d.", cmd.CommandNumber), cmd.Keys, cmd.ShortDescription, activeIndicator)
-		if len(line) > width-4 {
-			line = ui.TruncateWithPipeCodes(line, width-4)
+		if len(line) > width {
+			line = ui.TruncateWithPipeCodes(line, width)
 		}
-		if len(line) < width-4 {
-			line += strings.Repeat(" ", width-4-len(line))
+		if len(line) < width {
+			line += strings.Repeat(" ", width-len(line))
 		}
 
 		var style lipgloss.Style
@@ -1353,12 +1353,12 @@ func (m Model) renderCommandList(width int) []string {
 				Foreground(lipgloss.Color(ColorTextBright)).
 				Background(lipgloss.Color(ColorAccent)).
 				Bold(true).
-				Width(width - 4)
+				Width(width)
 		} else {
 			style = lipgloss.NewStyle().
 				Foreground(lipgloss.Color(ColorTextNormal)).
 				Background(lipgloss.Color(ColorBgMedium)).
-				Width(width - 4)
+				Width(width)
 		}
 		commandLines = append(commandLines, style.Render(line))
 	}
@@ -1368,7 +1368,7 @@ func (m Model) renderCommandList(width int) []string {
 		commandLines = append(commandLines, lipgloss.NewStyle().
 			Foreground(lipgloss.Color(ColorTextDim)).
 			Background(lipgloss.Color(ColorBgMedium)).
-			Width(width-4).
+			Width(width).
 			Render(" No commands defined - press 'I' to add"))
 	}
 
@@ -1376,7 +1376,7 @@ func (m Model) renderCommandList(width int) []string {
 	for len(commandLines) < 14 {
 		commandLines = append(commandLines, lipgloss.NewStyle().
 			Background(lipgloss.Color(ColorBgMedium)).
-			Width(width-4).
+			Width(width).
 			Render(""))
 	}
 
