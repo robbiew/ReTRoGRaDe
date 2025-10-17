@@ -27,6 +27,7 @@ func SeedDefaultMainMenu(db Database) error {
 				ACSRequired:      "",
 				CmdKeys:          "G",
 				Options:          "",
+				NodeActivity:     "Logging off.",
 				Active:           true,
 				Hidden:           false,
 			},
@@ -54,6 +55,7 @@ func SeedDefaultMainMenu(db Database) error {
 		ClearScreen:         true,
 		LeftBracket:         "[",
 		RightBracket:        "]",
+		NodeActivity:        "Browsing the main menu.",
 	}
 
 	menuID, err := db.CreateMenu(menu)
@@ -72,6 +74,7 @@ func SeedDefaultMainMenu(db Database) error {
 			ACSRequired:      "",
 			CmdKeys:          "G",
 			Options:          "",
+			NodeActivity:     "Logging off.",
 			Active:           true,
 			Hidden:           false,
 		},

@@ -53,6 +53,7 @@ type Menu struct {
 	LeftBracket         string
 	RightBracket        string
 	DisplayMode         string
+	NodeActivity        string
 }
 
 // MenuCommand represents a command in a menu
@@ -66,6 +67,7 @@ type MenuCommand struct {
 	ACSRequired      string
 	CmdKeys          string
 	Options          string
+	NodeActivity     string
 	Active           bool
 	Hidden           bool
 }

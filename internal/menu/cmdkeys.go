@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/robbiew/retrograde/internal/config"
 	"github.com/robbiew/retrograde/internal/logging"
@@ -24,12 +25,13 @@ type ExecutionContext struct {
 
 // CmdKeyDefinition describes a command key with its metadata
 type CmdKeyDefinition struct {
-	CmdKey      string // The 2-letter command key (e.g., "MM", "MP", "G")
-	Name        string // Human-readable name (e.g., "Read Mail", "Post Message")
-	Description string // Detailed description of what the command does
-	Category    string // Category for grouping (e.g., "Message", "File", "System")
-	Implemented bool   // Whether this command is fully implemented
-	Handler     CmdKeyHandler
+	CmdKey       string // The 2-letter command key (e.g., "MM", "MP", "G")
+	Name         string // Human-readable name (e.g., "Read Mail", "Post Message")
+	Description  string // Detailed description of what the command does
+	Category     string // Category for grouping (e.g., "Message", "File", "System")
+	NodeActivity string // Default node activity text shown to other users
+	Implemented  bool   // Whether this command is fully implemented
+	Handler      CmdKeyHandler
 }
 
 // CmdKeyRegistry holds the registered command key handlers
@@ -51,6 +53,7 @@ func NewCmdKeyRegistry() *CmdKeyRegistry {
 // Register registers a handler for a command key with its definition
 func (r *CmdKeyRegistry) Register(def *CmdKeyDefinition) {
 	key := strings.ToUpper(def.CmdKey)
+	def.NodeActivity = computeNodeActivity(def)
 	r.handlers[key] = def.Handler
 	r.definitions[key] = def
 }
@@ -282,7 +285,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		{CmdKey: "R-", Name: "Previous Message", Description: "Read the previous message", Category: "Message Scanning"},
 
 		// System
-		{CmdKey: "G", Name: "Goodbye / Logoff", Description: "Log off the BBS", Category: "System", Implemented: true, Handler: handleGoodbye},
+		{CmdKey: "G", Name: "Goodbye / Logoff", Description: "Log off the BBS", Category: "System", NodeActivity: "Logging off.", Implemented: true, Handler: handleGoodbye},
 	}
 
 	for _, def := range defs {
@@ -316,4 +319,164 @@ func handleGoodbye(ctx *ExecutionContext, options string) error {
 func handleNotImplemented(ctx *ExecutionContext, options string) error {
 	ctx.IO.Print("This command is not yet implemented.\r\n")
 	return nil
+}
+
+func computeNodeActivity(def *CmdKeyDefinition) string {
+	if def == nil {
+		return ""
+	}
+
+	if activity := strings.TrimSpace(def.NodeActivity); activity != "" {
+		return ensureSentence(activity)
+	}
+
+	if desc := strings.TrimSpace(def.Description); desc != "" {
+		return ensureSentence(toPresentProgressive(desc))
+	}
+
+	if name := strings.TrimSpace(def.Name); name != "" {
+		return ensureSentence(fmt.Sprintf("Using %s", name))
+	}
+
+	if def.CmdKey != "" {
+		return ensureSentence(fmt.Sprintf("Using %s command", strings.ToUpper(def.CmdKey)))
+	}
+
+	return "Performing command."
+}
+
+func ensureSentence(text string) string {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return trimmed
+	}
+	runes := []rune(trimmed)
+	last := runes[len(runes)-1]
+	if last == '.' || last == '!' || last == '?' {
+		return trimmed
+	}
+	return trimmed + "."
+}
+
+func toPresentProgressive(phrase string) string {
+	trimmed := strings.TrimSpace(phrase)
+	if trimmed == "" {
+		return trimmed
+	}
+
+	words := strings.Fields(trimmed)
+	if len(words) == 0 {
+		return trimmed
+	}
+
+	first := words[0]
+	if !isAlphabeticWord(first) {
+		return trimmed
+	}
+
+	lower := strings.ToLower(first)
+	gerund := irregularGerunds[lower]
+	if gerund == "" {
+		gerund = makeGerund(lower)
+	}
+
+	switch {
+	case isAllUpper(first):
+		gerund = strings.ToUpper(gerund)
+	case unicode.IsUpper([]rune(first)[0]):
+		gerund = capitalize(gerund)
+	}
+
+	words[0] = gerund
+	return strings.Join(words, " ")
+}
+
+func makeGerund(word string) string {
+	if word == "" {
+		return word
+	}
+	if strings.HasSuffix(word, "ing") {
+		return word
+	}
+	if strings.HasSuffix(word, "ie") && len(word) > 2 {
+		return word[:len(word)-2] + "ying"
+	}
+	if strings.HasSuffix(word, "e") && len(word) > 1 && word != "be" {
+		return word[:len(word)-1] + "ing"
+	}
+	if isConsonantVowelConsonant(word) {
+		return word + word[len(word)-1:] + "ing"
+	}
+	return word + "ing"
+}
+
+func isConsonantVowelConsonant(word string) bool {
+	if len(word) < 3 {
+		return false
+	}
+	runes := []rune(word)
+	last := runes[len(runes)-1]
+	middle := runes[len(runes)-2]
+	first := runes[len(runes)-3]
+	return !isVowel(last) && shouldDouble(last) && isVowel(middle) && !isVowel(first)
+}
+
+func shouldDouble(r rune) bool {
+	switch r {
+	case 'b', 'd', 'g', 'm', 'n', 'p', 'r', 't':
+		return true
+	}
+	return false
+}
+
+func isVowel(r rune) bool {
+	switch unicode.ToLower(r) {
+	case 'a', 'e', 'i', 'o', 'u':
+		return true
+	}
+	return false
+}
+
+func isAlphabeticWord(word string) bool {
+	for _, r := range word {
+		if !unicode.IsLetter(r) {
+			return false
+		}
+	}
+	return true
+}
+
+func isAllUpper(word string) bool {
+	hasLetter := false
+	for _, r := range word {
+		if unicode.IsLetter(r) {
+			hasLetter = true
+			if !unicode.IsUpper(r) {
+				return false
+			}
+		}
+	}
+	return hasLetter
+}
+
+func capitalize(word string) string {
+	if word == "" {
+		return ""
+	}
+	runes := []rune(word)
+	runes[0] = unicode.ToUpper(runes[0])
+	for i := 1; i < len(runes); i++ {
+		runes[i] = unicode.ToLower(runes[i])
+	}
+	return string(runes)
+}
+
+var irregularGerunds = map[string]string{
+	"be":   "being",
+	"die":  "dying",
+	"see":  "seeing",
+	"flee": "fleeing",
+	"lie":  "lying",
+	"tie":  "tying",
+	"quit": "quitting",
 }
