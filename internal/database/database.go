@@ -53,10 +53,12 @@ type MenuCommand struct {
 	CommandNumber    int
 	Keys             string
 	ShortDescription string
+	LongDescription  string
 	ACSRequired      string
 	CmdKeys          string
 	Options          string
 	Active           bool
+	Hidden           bool
 }
 
 // Database interface defines all database operations

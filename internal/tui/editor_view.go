@@ -1362,7 +1362,7 @@ func (m Model) renderCommandList(width int) []string {
 		Foreground(lipgloss.Color(ColorTextBright)).
 		Bold(true).
 		Width(width).
-		Render(fmt.Sprintf(" %-4s %-4s %-30s %-6s", "#", "Key", "Description", "Active"))
+		Render(fmt.Sprintf(" %-4s %-4s %-26s %-6s %-6s", "#", "Key", "Description", "Active", "Hidden"))
 	commandLines = append(commandLines, columnHeader)
 
 	// Add separator line after header
@@ -1379,7 +1379,11 @@ func (m Model) renderCommandList(width int) []string {
 		if !cmd.Active {
 			activeIndicator = "[X]"
 		}
-		line := fmt.Sprintf(" %-4s %-4s %-30s %-6s", fmt.Sprintf("%d.", cmd.CommandNumber), cmd.Keys, cmd.ShortDescription, activeIndicator)
+		hiddenIndicator := "[ ]"
+		if cmd.Hidden {
+			hiddenIndicator = "[H]"
+		}
+		line := fmt.Sprintf(" %-4s %-4s %-26s %-6s %-6s", fmt.Sprintf("%d.", cmd.CommandNumber), cmd.Keys, cmd.ShortDescription, activeIndicator, hiddenIndicator)
 		if len(line) > width {
 			line = ui.TruncateWithPipeCodes(line, width)
 		}
@@ -1486,6 +1490,24 @@ func (m *Model) setupMenuEditCommandModal() {
 			},
 		},
 		{
+			ID:       "command-long-description",
+			Label:    "Long Description",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "command-long-description",
+				Label:     "Long Desc",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenuCommand.LongDescription },
+					SetValue: func(v interface{}) error {
+						m.editingMenuCommand.LongDescription = v.(string)
+						return nil
+					},
+				},
+				HelpText: "Extended description shown in detailed help",
+			},
+		},
+		{
 			ID:       "command-acs-required",
 			Label:    "ACS Required",
 			ItemType: EditableField,
@@ -1539,6 +1561,24 @@ func (m *Model) setupMenuEditCommandModal() {
 					},
 				},
 				HelpText: "Command options/parameters",
+			},
+		},
+		{
+			ID:       "command-hidden",
+			Label:    "Hidden",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "command-hidden",
+				Label:     "Hidden",
+				ValueType: BoolValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return m.editingMenuCommand.Hidden },
+					SetValue: func(v interface{}) error {
+						m.editingMenuCommand.Hidden = v.(bool)
+						return nil
+					},
+				},
+				HelpText: "Hide this command from menu display",
 			},
 		},
 		{

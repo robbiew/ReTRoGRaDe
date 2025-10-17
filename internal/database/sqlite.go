@@ -125,10 +125,12 @@ func (s *SQLiteDB) InitializeSchema() error {
 			command_number INTEGER NOT NULL,
 			keys TEXT,
 			short_description TEXT,
+			long_description TEXT,
 			acs_required TEXT,
 			cmdkeys TEXT,
 			options TEXT,
 			active BOOLEAN DEFAULT 1,
+			hidden BOOLEAN DEFAULT 0,
 			FOREIGN KEY (menu_id) REFERENCES menus(id) ON DELETE CASCADE
 		)
 	`)
@@ -141,6 +143,18 @@ func (s *SQLiteDB) InitializeSchema() error {
 					  ON menu_commands(menu_id)`)
 	if err != nil {
 		return fmt.Errorf("failed to create menu_commands index: %w", err)
+	}
+
+	// Ensure new columns exist for legacy databases
+	if _, err := tx.Exec(`ALTER TABLE menu_commands ADD COLUMN long_description TEXT`); err != nil {
+		if !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+			return fmt.Errorf("failed to add long_description column: %w", err)
+		}
+	}
+	if _, err := tx.Exec(`ALTER TABLE menu_commands ADD COLUMN hidden BOOLEAN DEFAULT 0`); err != nil {
+		if !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+			return fmt.Errorf("failed to add hidden column: %w", err)
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -464,9 +478,9 @@ func (s *SQLiteDB) DeleteMenu(id int64) error {
 // CreateMenuCommand creates a new menu command
 func (s *SQLiteDB) CreateMenuCommand(cmd *MenuCommand) (int64, error) {
 	result, err := s.db.Exec(`
-		INSERT INTO menu_commands (menu_id, command_number, keys, short_description, acs_required, cmdkeys, options, active)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		cmd.MenuID, cmd.CommandNumber, cmd.Keys, cmd.ShortDescription, cmd.ACSRequired, cmd.CmdKeys, cmd.Options, cmd.Active)
+		INSERT INTO menu_commands (menu_id, command_number, keys, short_description, long_description, acs_required, cmdkeys, options, active, hidden)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		cmd.MenuID, cmd.CommandNumber, cmd.Keys, cmd.ShortDescription, cmd.LongDescription, cmd.ACSRequired, cmd.CmdKeys, cmd.Options, cmd.Active, cmd.Hidden)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create menu command: %w", err)
 	}
@@ -482,7 +496,7 @@ func (s *SQLiteDB) CreateMenuCommand(cmd *MenuCommand) (int64, error) {
 // GetMenuCommands retrieves all commands for a menu
 func (s *SQLiteDB) GetMenuCommands(menuID int) ([]MenuCommand, error) {
 	rows, err := s.db.Query(`
-		SELECT id, menu_id, command_number, keys, short_description, acs_required, cmdkeys, options, active
+		SELECT id, menu_id, command_number, keys, short_description, long_description, acs_required, cmdkeys, options, active, hidden
 		FROM menu_commands WHERE menu_id = ? ORDER BY command_number`, menuID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query menu commands: %w", err)
@@ -492,7 +506,7 @@ func (s *SQLiteDB) GetMenuCommands(menuID int) ([]MenuCommand, error) {
 	var commands []MenuCommand
 	for rows.Next() {
 		var cmd MenuCommand
-		err := rows.Scan(&cmd.ID, &cmd.MenuID, &cmd.CommandNumber, &cmd.Keys, &cmd.ShortDescription, &cmd.ACSRequired, &cmd.CmdKeys, &cmd.Options, &cmd.Active)
+		err := rows.Scan(&cmd.ID, &cmd.MenuID, &cmd.CommandNumber, &cmd.Keys, &cmd.ShortDescription, &cmd.LongDescription, &cmd.ACSRequired, &cmd.CmdKeys, &cmd.Options, &cmd.Active, &cmd.Hidden)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan menu command: %w", err)
 		}
@@ -505,9 +519,9 @@ func (s *SQLiteDB) GetMenuCommands(menuID int) ([]MenuCommand, error) {
 // UpdateMenuCommand updates a menu command
 func (s *SQLiteDB) UpdateMenuCommand(cmd *MenuCommand) error {
 	_, err := s.db.Exec(`
-		UPDATE menu_commands SET menu_id = ?, command_number = ?, keys = ?, short_description = ?, acs_required = ?, cmdkeys = ?, options = ?, active = ?
+		UPDATE menu_commands SET menu_id = ?, command_number = ?, keys = ?, short_description = ?, long_description = ?, acs_required = ?, cmdkeys = ?, options = ?, active = ?, hidden = ?
 		WHERE id = ?`,
-		cmd.MenuID, cmd.CommandNumber, cmd.Keys, cmd.ShortDescription, cmd.ACSRequired, cmd.CmdKeys, cmd.Options, cmd.Active, cmd.ID)
+		cmd.MenuID, cmd.CommandNumber, cmd.Keys, cmd.ShortDescription, cmd.LongDescription, cmd.ACSRequired, cmd.CmdKeys, cmd.Options, cmd.Active, cmd.Hidden, cmd.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update menu command: %w", err)
 	}

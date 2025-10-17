@@ -273,7 +273,7 @@ func (e *MenuExecutor) displayCommandsInColumns(commands []database.MenuCommand,
 	// Filter commands that have short descriptions and are active
 	var displayCommands []database.MenuCommand
 	for _, cmd := range commands {
-		if cmd.ShortDescription != "" && cmd.Active {
+		if cmd.ShortDescription != "" && cmd.Active && !cmd.Hidden {
 			displayCommands = append(displayCommands, cmd)
 		}
 	}

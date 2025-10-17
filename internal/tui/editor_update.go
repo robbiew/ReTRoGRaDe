@@ -1500,10 +1500,12 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					CommandNumber:    selectedCmd.CommandNumber,
 					Keys:             selectedCmd.Keys,
 					ShortDescription: selectedCmd.ShortDescription,
+					LongDescription:  selectedCmd.LongDescription,
 					ACSRequired:      selectedCmd.ACSRequired,
 					CmdKeys:          selectedCmd.CmdKeys,
 					Options:          selectedCmd.Options,
 					Active:           selectedCmd.Active,
+					Hidden:           selectedCmd.Hidden,
 				}
 				// Set up modal fields for command editing
 				m.setupMenuEditCommandModal()
@@ -1519,10 +1521,12 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				CommandNumber:    len(m.menuCommandsList) + 1,
 				Keys:             "",
 				ShortDescription: "",
+				LongDescription:  "",
 				ACSRequired:      "",
 				CmdKeys:          "",
 				Options:          "",
 				Active:           true,
+				Hidden:           false,
 			}
 			m.editingMenuCommand = newCommand
 			// Set up modal fields for command editing
@@ -1781,9 +1785,11 @@ func (m Model) handleMenuEditCommand(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// Check if any fields were changed
 			if m.editingMenuCommand.Keys != "" ||
 				m.editingMenuCommand.ShortDescription != "" ||
+				m.editingMenuCommand.LongDescription != "" ||
 				m.editingMenuCommand.ACSRequired != "" ||
 				m.editingMenuCommand.CmdKeys != "" ||
-				m.editingMenuCommand.Options != "" {
+				m.editingMenuCommand.Options != "" ||
+				m.editingMenuCommand.Hidden {
 				commandModified = true
 			}
 		}

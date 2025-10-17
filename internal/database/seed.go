@@ -23,10 +23,12 @@ func SeedDefaultMainMenu(db Database) error {
 				CommandNumber:    3,
 				Keys:             "G",
 				ShortDescription: "Goodbye",
+				LongDescription:  "Disconnect from the BBS",
 				ACSRequired:      "",
 				CmdKeys:          "G",
 				Options:          "",
 				Active:           true,
+				Hidden:           false,
 			},
 		}
 		for _, cmd := range defaultCommands {
@@ -63,10 +65,12 @@ func SeedDefaultMainMenu(db Database) error {
 			CommandNumber:    3,
 			Keys:             "G",
 			ShortDescription: "Goodbye",
+			LongDescription:  "Disconnect from the BBS",
 			ACSRequired:      "",
 			CmdKeys:          "G",
 			Options:          "",
 			Active:           true,
+			Hidden:           false,
 		},
 	}
 
