@@ -196,6 +196,17 @@ func (m Model) View() string {
 		m.overlayStringCenteredWithClear(canvas, modalStr)
 	}
 
+	// Layer 5: Delete confirmation prompt
+	if m.navMode == DeleteConfirmPrompt && m.savePrompt {
+		promptStr := m.renderSavePrompt()
+		m.overlayStringCentered(canvas, promptStr)
+
+		footer := m.renderFooter()
+		m.overlayString(canvas, footer, m.screenHeight-1, 0)
+
+		return m.canvasToString(canvas)
+	}
+
 	// Add breadcrumb near bottom (row screenHeight - 3)
 	if m.navMode > MainMenuNavigation {
 		breadcrumb := m.renderBreadcrumb()
@@ -1703,6 +1714,8 @@ func (m Model) renderFooter() string {
 	var footerText string
 
 	switch m.navMode {
+	case DeleteConfirmPrompt:
+		footerText = "  Y Yes   N No   ESC Cancel"
 	case MainMenuNavigation:
 		footerText = "  Up/Down Navigate   ENTER Select   ESC Exit"
 	case Level2MenuNavigation:

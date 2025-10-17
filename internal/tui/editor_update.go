@@ -91,9 +91,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleMenuEditCommand(msg)
 		case SavePrompt:
 			return m.handleSavePrompt(msg)
-		case SaveChangesPrompt: // ADD THIS
+		case SaveChangesPrompt:
 			return m.handleSaveChangesPrompt(msg)
-
+		case DeleteConfirmPrompt: // ✅ Add this here
+			return m.handleDeleteConfirm(msg)
 		}
 	}
 
@@ -115,6 +116,88 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	return m, nil
+}
+
+// handleDeleteConfirm processes input during delete confirmation
+func (m Model) handleDeleteConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "left", "h", "right", "l", "tab":
+		// Toggle between Yes and No
+		m.savePromptSelection = (m.savePromptSelection + 1) % 2
+		return m, nil
+	case "up", "k":
+		// Move to No (0)
+		m.savePromptSelection = 0
+		return m, nil
+	case "down", "j":
+		// Move to Yes (1)
+		m.savePromptSelection = 1
+		return m, nil
+	case "enter":
+		if m.savePromptSelection == 1 {
+			// Yes - Delete
+			switch m.confirmAction {
+			case "delete_menu":
+				if err := m.db.DeleteMenu(m.confirmMenuID); err != nil {
+					m.message = fmt.Sprintf("Error deleting menu: %v", err)
+					m.messageTime = time.Now()
+					m.messageType = ErrorMessage
+				} else {
+					// Reload menu list
+					if err := m.loadMenus(); err != nil {
+						m.message = fmt.Sprintf("Error reloading menus: %v", err)
+						m.messageTime = time.Now()
+						m.messageType = ErrorMessage
+					} else {
+						m.message = "Menu deleted successfully"
+						m.messageTime = time.Now()
+						m.messageType = SuccessMessage
+					}
+				}
+			case "delete_command":
+				if err := m.db.DeleteMenuCommand(m.confirmMenuID); err != nil {
+					m.message = fmt.Sprintf("Error deleting command: %v", err)
+					m.messageTime = time.Now()
+					m.messageType = ErrorMessage
+				} else {
+					// Reload commands
+					if err := m.loadMenuCommandsForEditing(); err != nil {
+						m.message = fmt.Sprintf("Error reloading commands: %v", err)
+						m.messageTime = time.Now()
+						m.messageType = ErrorMessage
+					} else {
+						m.message = "Command deleted successfully"
+						m.messageTime = time.Now()
+						m.messageType = SuccessMessage
+						// Adjust selection if necessary
+						if m.selectedCommandIndex >= len(m.menuCommandsList) && len(m.menuCommandsList) > 0 {
+							m.selectedCommandIndex = len(m.menuCommandsList) - 1
+						}
+					}
+				}
+			}
+		}
+		// Either way (Yes or No), clear the confirmation state and return
+		m.confirmAction = ""
+		m.confirmMenuID = 0
+		m.confirmPromptText = ""
+		m.savePrompt = false
+		m.navMode = m.returnToMode
+		return m, nil
+	case "y", "Y":
+		// Quick Yes
+		m.savePromptSelection = 1
+		return m.handleDeleteConfirm(tea.KeyMsg{Type: tea.KeyEnter})
+	case "n", "N", "esc":
+		// Quick No or Cancel
+		m.confirmAction = ""
+		m.confirmMenuID = 0
+		m.confirmPromptText = ""
+		m.savePrompt = false
+		m.navMode = m.returnToMode
+		return m, nil
+	}
 	return m, nil
 }
 
@@ -292,7 +375,54 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// Yes - Save changes
 			var err error
 
-			if m.editingMenu != nil {
+			// ✅ CHECK editingMenuCommand FIRST (before editingMenu)
+			if m.editingMenuCommand != nil {
+				// Save menu command changes
+				if m.editingMenuCommand.ID == 0 {
+					// New command - insert
+					newID, createErr := m.db.CreateMenuCommand(m.editingMenuCommand)
+					if createErr != nil {
+						m.message = fmt.Sprintf("Error creating menu command: %v", createErr)
+						m.messageTime = time.Now()
+						m.messageType = ErrorMessage
+						m.savePrompt = false
+						m.navMode = m.returnToMode
+						return m, nil
+					}
+					// Update the command ID with the new ID from database
+					m.editingMenuCommand.ID = int(newID)
+
+					// Add new command to list
+					m.menuCommandsList = append(m.menuCommandsList, *m.editingMenuCommand)
+				} else {
+					// Existing command - update
+					err = m.db.UpdateMenuCommand(m.editingMenuCommand)
+					if err != nil {
+						m.message = fmt.Sprintf("Error saving menu command: %v", err)
+						m.messageTime = time.Now()
+						m.messageType = ErrorMessage
+						m.savePrompt = false
+						m.navMode = m.returnToMode
+						return m, nil
+					}
+
+					// Update existing command in list
+					for i, cmd := range m.menuCommandsList {
+						if cmd.ID == m.editingMenuCommand.ID {
+							m.menuCommandsList[i] = *m.editingMenuCommand
+							break
+						}
+					}
+				}
+
+				// ✅ CRITICAL: Restore menu data fields when returning to MenuModifyMode
+				if m.returnToMode == MenuModifyMode && len(m.menuDataFields) > 0 {
+					m.modalFields = make([]SubmenuItem, len(m.menuDataFields))
+					copy(m.modalFields, m.menuDataFields)
+				}
+
+				m.editingMenuCommand = nil
+			} else if m.editingMenu != nil {
 				// Save menu changes - use CreateMenu for new menus (ID=0), UpdateMenu for existing
 				if m.editingMenu.ID == 0 {
 					// New menu - create it
@@ -326,10 +456,10 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 
 				// Save all command changes
-				for i := range m.menuCommandsList { // ✅ Use index to allow modification
+				for i := range m.menuCommandsList {
 					if m.menuCommandsList[i].ID == 0 {
 						// New command - insert
-						newID, err := m.db.CreateMenuCommand(&m.menuCommandsList[i]) // ✅ Capture the new ID
+						newID, err := m.db.CreateMenuCommand(&m.menuCommandsList[i])
 						if err != nil {
 							m.message = fmt.Sprintf("Error saving command: %v", err)
 							m.messageTime = time.Now()
@@ -338,7 +468,7 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 							m.navMode = m.returnToMode
 							return m, nil
 						}
-						m.menuCommandsList[i].ID = int(newID) // ✅ Update the ID in the list
+						m.menuCommandsList[i].ID = int(newID)
 					} else {
 						// Existing command - update
 						err := m.db.UpdateMenuCommand(&m.menuCommandsList[i])
@@ -360,58 +490,15 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.messageType = ErrorMessage
 				}
 
-				m.menuModified = false
-				m.editingMenu = nil
-				m.originalMenu = nil
-				m.menuCommandsList = nil
-				m.originalMenuCommands = nil
-				m.menuDataFields = nil
-			} else if m.editingMenuCommand != nil {
-				// Save menu command changes
-				if m.editingMenuCommand.ID == 0 {
-					// New command - insert
-					newID, createErr := m.db.CreateMenuCommand(m.editingMenuCommand)
-					if createErr != nil {
-						m.message = fmt.Sprintf("Error creating menu command: %v", createErr)
-						m.messageTime = time.Now()
-						m.messageType = ErrorMessage
-						m.savePrompt = false
-						m.navMode = m.returnToMode
-						return m, nil
-					}
-					// Update the command ID with the new ID from database
-					m.editingMenuCommand.ID = int(newID)
-				} else {
-					// Existing command - update
-					err = m.db.UpdateMenuCommand(m.editingMenuCommand)
-					if err != nil {
-						m.message = fmt.Sprintf("Error saving menu command: %v", err)
-						m.messageTime = time.Now()
-						m.messageType = ErrorMessage
-						m.savePrompt = false
-						m.navMode = m.returnToMode
-						return m, nil
-					}
+				// ✅ ONLY clear menu editing state if we're exiting to MenuManagementMode
+				if m.returnToMode == MenuManagementMode {
+					m.menuModified = false
+					m.editingMenu = nil
+					m.originalMenu = nil
+					m.menuCommandsList = nil
+					m.originalMenuCommands = nil
+					m.menuDataFields = nil
 				}
-
-				// Add the command to the menu commands list if it's new
-				if m.editingMenuCommand.ID != 0 {
-					found := false
-					for i, cmd := range m.menuCommandsList {
-						if cmd.ID == m.editingMenuCommand.ID {
-							// Update existing command in list
-							m.menuCommandsList[i] = *m.editingMenuCommand
-							found = true
-							break
-						}
-					}
-					if !found {
-						// Add new command to list
-						m.menuCommandsList = append(m.menuCommandsList, *m.editingMenuCommand)
-					}
-				}
-
-				m.editingMenuCommand = nil
 			} else if m.editingSecurityLevel != nil {
 				// Save security level changes
 				err = m.db.UpdateSecurityLevel(m.editingSecurityLevel)
@@ -466,8 +553,15 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.modifiedCount = 0
 		} else {
 			// No - Discard changes
-			if m.editingMenu != nil {
-				// Restore original menu and commands (not needed, we're discarding)
+			if m.editingMenuCommand != nil {
+				// Discarding command changes - restore menu data fields
+				if len(m.menuDataFields) > 0 {
+					m.modalFields = make([]SubmenuItem, len(m.menuDataFields))
+					copy(m.modalFields, m.menuDataFields)
+				}
+				m.editingMenuCommand = nil
+			} else if m.editingMenu != nil {
+				// Only discard menu changes if we're editing the menu itself
 				m.menuModified = false
 				m.editingMenu = nil
 				m.originalMenu = nil
@@ -927,9 +1021,14 @@ func (m Model) renderSavePrompt() string {
 		Align(lipgloss.Center)
 
 	var header string
-	var promptMsg string
+	var promptMsg string // ✅ Declare OUTSIDE the if blocks
 
-	if m.navMode == SaveChangesPrompt {
+	switch m.navMode {
+	case DeleteConfirmPrompt:
+		// Delete confirmation
+		header = headerStyle.Render("[ Confirm Delete ]")
+		promptMsg = m.confirmPromptText
+	case SaveChangesPrompt:
 		if m.editingMenu != nil {
 			// Saving menu changes
 			header = headerStyle.Render("[ Save Menu Changes? ]")
@@ -943,7 +1042,7 @@ func (m Model) renderSavePrompt() string {
 			header = headerStyle.Render(fmt.Sprintf("[ Save Changes? (%d) ]", m.modifiedCount))
 			promptMsg = "Save changes before exiting?"
 		}
-	} else {
+	default:
 		// Exiting application
 		if m.modifiedCount > 0 {
 			header = headerStyle.Render(fmt.Sprintf("[ Exit Config? (%d changes) ]", m.modifiedCount))
@@ -1009,23 +1108,8 @@ func (m Model) renderSavePrompt() string {
 		Align(lipgloss.Center).
 		Render(yesOption + noOption)
 
-	// Create footer separator
-	// footer separator defined below with correct width variable
-
-	// ASCII-safe header and separators
-	headerASCII := headerStyle.Render("[ Exit Config? ]")
-	if m.modifiedCount > 0 {
-		headerASCII = headerStyle.Render(fmt.Sprintf("[ Exit Config? (%d changes) ]", m.modifiedCount))
-	}
-	separatorASCII := separatorStyle.Render(strings.Repeat("-", modalWidth))
-	footerSeparatorASCII := separatorStyle.Render(strings.Repeat("-", modalWidth))
-	// Avoid unused original vars
-	_ = header
-	_ = separator
-	// no footerSeparator in this variant
-
-	// Build the modal (ASCII-safe)
-	allLines := []string{headerASCII, separatorASCII, promptLine, optionsLine, footerSeparatorASCII}
+	// Build the modal
+	allLines := []string{header, separator, promptLine, optionsLine, separator}
 	combined := strings.Join(allLines, "\n")
 
 	// Wrap with background
@@ -1414,13 +1498,15 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "d", "D":
 		// Delete selected command (only works in Commands tab)
-		if m.currentMenuTab == 1 && len(m.menuCommandsList) > 0 && m.selectedCommandIndex < len(m.menuCommandsList) { // FIXED: Was 0, should be 1
+		if m.currentMenuTab == 1 && len(m.menuCommandsList) > 0 && m.selectedCommandIndex < len(m.menuCommandsList) {
 			selectedCmd := m.menuCommandsList[m.selectedCommandIndex]
-			m.message = fmt.Sprintf("Delete command '%s'? (Y/N)", selectedCmd.Keys)
-			m.messageTime = time.Now()
-			m.messageType = WarningMessage
 			m.confirmAction = "delete_command"
 			m.confirmMenuID = int64(selectedCmd.ID)
+			m.confirmPromptText = fmt.Sprintf("Delete command '%s'? This action is permanent!", selectedCmd.Keys)
+			m.savePrompt = true
+			m.savePromptSelection = 0 // Default to No
+			m.navMode = DeleteConfirmPrompt
+			m.returnToMode = MenuModifyMode
 		}
 		return m, nil
 	case "x", "X":
@@ -1456,39 +1542,6 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.menuDataFields = nil
 		return m, nil
 	}
-
-	// Handle confirmation for delete
-	if m.confirmAction == "delete_command" && (msg.String() == "y" || msg.String() == "Y") {
-		if err := m.db.DeleteMenuCommand(m.confirmMenuID); err != nil {
-			m.message = fmt.Sprintf("Error deleting command: %v", err)
-			m.messageTime = time.Now()
-			m.messageType = ErrorMessage
-		} else {
-			// Reload commands
-			if err := m.loadMenuCommandsForEditing(); err != nil {
-				m.message = fmt.Sprintf("Error reloading commands: %v", err)
-				m.messageTime = time.Now()
-				m.messageType = ErrorMessage
-			} else {
-				m.message = "Command deleted successfully"
-				m.messageTime = time.Now()
-				m.messageType = SuccessMessage
-				// Adjust selection if necessary
-				if m.selectedCommandIndex >= len(m.menuCommandsList) && len(m.menuCommandsList) > 0 {
-					m.selectedCommandIndex = len(m.menuCommandsList) - 1
-				}
-			}
-		}
-		m.confirmAction = ""
-		m.confirmMenuID = 0
-		return m, nil
-	} else if m.confirmAction == "delete_command" && (msg.String() == "n" || msg.String() == "N" || msg.String() == "esc") {
-		m.message = ""
-		m.confirmAction = ""
-		m.confirmMenuID = 0
-		return m, nil
-	}
-
 	return m, nil
 }
 
@@ -1687,7 +1740,39 @@ func (m Model) handleMenuEditCommand(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 		if commandModified {
-			// Command was modified, showing save prompt
+			// ✅ For NEW menus (ID=0), don't prompt - just add to list and mark as modified
+			if m.editingMenu != nil && m.editingMenu.ID == 0 {
+				// Add/update command in the list
+				if m.editingMenuCommand.ID == 0 {
+					// New command - add to list
+					m.menuCommandsList = append(m.menuCommandsList, *m.editingMenuCommand)
+				} else {
+					// Update existing command in list
+					for i, cmd := range m.menuCommandsList {
+						if cmd.ID == m.editingMenuCommand.ID {
+							m.menuCommandsList[i] = *m.editingMenuCommand
+							break
+						}
+					}
+				}
+
+				m.menuModified = true
+				m.editingMenuCommand = nil
+
+				// Restore menu data fields
+				if len(m.menuDataFields) > 0 {
+					m.modalFields = make([]SubmenuItem, len(m.menuDataFields))
+					copy(m.modalFields, m.menuDataFields)
+				}
+
+				m.navMode = MenuModifyMode
+				m.message = "Command added - save menu when done to persist all changes"
+				m.messageTime = time.Now()
+				m.messageType = InfoMessage
+				return m, nil
+			}
+
+			// ✅ For EXISTING menus, prompt to save the command immediately
 			m.savePrompt = true
 			m.savePromptSelection = 1 // Default to Yes
 			m.returnToMode = MenuModifyMode
@@ -1926,8 +2011,7 @@ func (m Model) handleMenuManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.menuListUI.Select(len(items) - 1)
 		}
 		return m, nil
-		// In handleMenuManagement - when entering MenuModifyMode
-		// In handleMenuManagement - when entering MenuModifyMode, save the menu data fields
+
 	case "enter", "m", "M":
 		// Modify menu - open modify menu interface
 		selectedItem := m.menuListUI.SelectedItem()
@@ -2014,7 +2098,8 @@ func (m Model) handleMenuManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Initialize empty commands list for new menu
 		m.menuCommandsList = []database.MenuCommand{}
 		m.originalMenuCommands = []database.MenuCommand{}
-		// CRITICAL: Set up modal fields for new menu editing
+
+		// Set up modal fields for new menu editing
 		m.setupMenuEditDataModal()
 		m.modalFieldIndex = 0
 
@@ -2030,50 +2115,25 @@ func (m Model) handleMenuManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.messageTime = time.Now()
 		m.messageType = InfoMessage
 		return m, nil
+
 	case "d", "D":
 		// Delete menu - confirm first
 		selectedItem := m.menuListUI.SelectedItem()
 		if selectedItem != nil {
 			menuItem := selectedItem.(menuListItem)
-			m.message = fmt.Sprintf("Delete menu '%s'? (Y/N)", menuItem.menu.Name)
-			m.messageTime = time.Now()
-			m.messageType = WarningMessage
 			m.confirmAction = "delete_menu"
 			m.confirmMenuID = int64(menuItem.menu.ID)
+			m.confirmPromptText = fmt.Sprintf("Delete menu '%s'? This action is permanent!", menuItem.menu.Name)
+			m.savePrompt = true
+			m.savePromptSelection = 0 // Default to No
+			m.navMode = DeleteConfirmPrompt
+			m.returnToMode = MenuManagementMode
 		}
 		return m, nil
 	case "q", "Q", "esc":
 		// Return to Level 2 menu navigation (Editors menu)
 		m.navMode = Level2MenuNavigation
 		m.message = ""
-	}
-
-	// Handle confirmation for delete
-	if m.confirmAction == "delete_menu" && (msg.String() == "y" || msg.String() == "Y") {
-		if err := m.db.DeleteMenu(m.confirmMenuID); err != nil {
-			m.message = fmt.Sprintf("Error deleting menu: %v", err)
-			m.messageTime = time.Now()
-			m.messageType = ErrorMessage
-		} else {
-			// Reload menu list
-			if err := m.loadMenus(); err != nil {
-				m.message = fmt.Sprintf("Error reloading menus: %v", err)
-				m.messageTime = time.Now()
-				m.messageType = ErrorMessage
-			} else {
-				m.message = "Menu deleted successfully"
-				m.messageTime = time.Now()
-				m.messageType = SuccessMessage
-			}
-		}
-		m.confirmAction = ""
-		m.confirmMenuID = 0
-		return m, nil
-	} else if m.confirmAction == "delete_menu" && (msg.String() == "n" || msg.String() == "N" || msg.String() == "esc") {
-		m.message = ""
-		m.confirmAction = ""
-		m.confirmMenuID = 0
-		return m, nil
 	}
 
 	// Update the list for any other input (like filtering)

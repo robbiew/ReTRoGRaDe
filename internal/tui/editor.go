@@ -87,8 +87,8 @@ const (
 	MenuEditDataMode                            // Edit menu data modal
 	MenuEditCommandMode                         // Edit command modal
 	SavePrompt                                  // Confirming save on exit
-	SaveChangesPrompt                           // NEW: Prompt to save changes when exiting edit modal
-
+	SaveChangesPrompt                           // Prompt to save changes when exiting edit modal
+	DeleteConfirmPrompt                         // Confirm deletion
 )
 
 // Model represents the complete application state
@@ -142,8 +142,9 @@ type Model struct {
 	editingUser *database.UserRecord // Currently editing user
 
 	// Confirmation state
-	confirmAction string // Current confirmation action
-	confirmMenuID int64  // Menu ID for confirmation
+	confirmAction     string // Current confirmation action
+	confirmMenuID     int64  // Menu ID for confirmation
+	confirmPromptText string // NEW: Text to display in confirmation prompt
 
 	// UI state
 	screenWidth   int
