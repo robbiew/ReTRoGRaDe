@@ -491,14 +491,15 @@ func (m Model) renderModalForm() string {
 			currentValue := field.EditableItem.Field.GetValue()
 			currentValueStr := formatValue(currentValue, field.EditableItem.ValueType)
 
-			// Truncate long values to prevent wrapping
-			maxValueLen := 50
-			if len(currentValueStr) > maxValueLen {
-				currentValueStr = ui.TruncateWithPipeCodes(currentValueStr, maxValueLen-3)
-			}
-
 			// Check if this is the selected field
 			isSelected := i == m.modalFieldIndex
+
+			// Truncate long values to prevent wrapping - use almost full available space
+			// Label takes 16 chars (space + 14 + colon), space + value
+			maxValueLen := modalWidth - 18
+			if len(currentValueStr) > maxValueLen {
+				currentValueStr = ui.TruncateWithPipeCodes(currentValueStr, maxValueLen)
+			}
 
 			if isSelected && isEditing {
 				// EDITING MODE: Full row highlight with inline input
@@ -522,17 +523,27 @@ func (m Model) renderModalForm() string {
 					// Text input field - inline editing
 					// Set dynamic width for text input
 					availableInputWidth := modalWidth - 17
+					if availableInputWidth < 10 {
+						availableInputWidth = 10
+					}
 					m.textInput.Width = availableInputWidth
 
 					label := fmt.Sprintf(" %-14s:", field.EditableItem.Label)
+					inputView := " " + m.textInput.View()
+
+					// Don't use Width() as it causes wrapping - manually pad instead
+					inlineDisplay := label + inputView
+					// Calculate visual width (strips ANSI codes)
+					visualLen := len(label) + availableInputWidth + 1 // label + space + input width
+					if visualLen < modalWidth {
+						inlineDisplay += strings.Repeat(" ", modalWidth-visualLen)
+					}
 
 					fullRowStyle := lipgloss.NewStyle().
 						Background(lipgloss.Color(ColorPrimary)).
 						Foreground(lipgloss.Color(ColorTextBright)).
-						Bold(true).
-						Width(modalWidth)
+						Bold(true)
 
-					inlineDisplay := label + " " + m.textInput.View()
 					fieldLines = append(fieldLines, fullRowStyle.Render(inlineDisplay))
 				}
 			} else if isSelected && !isEditing {

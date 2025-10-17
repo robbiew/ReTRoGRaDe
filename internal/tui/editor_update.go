@@ -1004,7 +1004,7 @@ func (m Model) handleSavePrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.savePrompt = false
 				return m, nil
 			}
-			m.message = "Configuration saved to database" // Show ONLY this message
+			m.message = " Configuration saved to database"
 			m.quitting = true
 			return m, tea.Quit
 		} else {
@@ -1021,7 +1021,7 @@ func (m Model) handleSavePrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.savePrompt = false
 			return m, nil
 		}
-		m.message = "Configuration saved to database" // Show ONLY this message
+		m.message = " Configuration saved to database"
 		m.quitting = true
 		return m, tea.Quit
 	case "n", "N":

@@ -115,7 +115,7 @@ func SaveConfig(config *Config, filePath string) error {
 		return fmt.Errorf("failed to save to database: %w", err)
 	}
 
-	fmt.Println("Configuration saved to database")
+	fmt.Println(" Configuration saved to database")
 	return nil
 }
 
