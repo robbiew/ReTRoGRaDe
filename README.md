@@ -30,7 +30,9 @@ As a hobbyist Go developer, I'm leveraging AI tools like Roo Code, Codex and Cla
 | Node Management                 | 100%     | Max nodes, per-user limits, logging                                                |
 | Auth /Login UI                  | 100%     | Create New User, Login                                                             |
 | Event System                    | 0%       | e.g. Logon Event List -> main menu                                                 |
-| Menu Construction System        | 25%      | Renegade-style system (TUI) for constructing menus and prompts. Needs command work |
+| Menu Construction System        | 100%     | Renegade-style system (TUI) for constructing menus and prompts.                    |
+| Menu Command                    | 1%       | Only "Goodbye" command implemented so far                                          |
+| Menu Execution                  | 50%      | Execute Menu Command Logic (stacking, first run, etc)                              |
 | Message Base Configuration & UI | 0%       | Local message base configuration                                                   |
 | Message Base (FTN) Support      | 0%       | Read/write support for FTN message bases for echomail                              |
 | Netmail Support                 | 0%       | Read/write support for private Netmail                                             |
