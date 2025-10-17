@@ -22,7 +22,7 @@ func commandsEqual(a, b *database.MenuCommand) bool {
 		return a == b
 	}
 
-	return a.CommandNumber == b.CommandNumber &&
+	return a.PositionNumber == b.PositionNumber &&
 		a.Keys == b.Keys &&
 		a.ShortDescription == b.ShortDescription &&
 		a.LongDescription == b.LongDescription &&
@@ -45,6 +45,25 @@ func commandHasValues(cmd *database.MenuCommand) bool {
 		cmd.Options != "" ||
 		!cmd.Active ||
 		cmd.Hidden
+}
+
+func insertMenuCommandAt(list []database.MenuCommand, index int, cmd database.MenuCommand) []database.MenuCommand {
+	if index < 0 {
+		index = 0
+	}
+	if index > len(list) {
+		index = len(list)
+	}
+	list = append(list, database.MenuCommand{})
+	copy(list[index+1:], list[index:])
+	list[index] = cmd
+	return list
+}
+
+func renumberMenuCommandPositions(list []database.MenuCommand) {
+	for i := range list {
+		list[i].PositionNumber = i + 1
+	}
 }
 
 // setTextInputValueWithCursor sets the text input value and positions cursor at the end
@@ -116,6 +135,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleMenuManagement(msg)
 		case MenuModifyMode:
 			return m.handleMenuModify(msg)
+		case MenuCommandReorderMode:
+			return m.handleMenuCommandReorder(msg)
 		case MenuEditDataMode:
 			return m.handleMenuEditData(msg)
 		case MenuEditCommandMode:
@@ -404,6 +425,154 @@ func (m Model) handleLevel4ModalNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 	return m, nil
 }
 
+// handleMenuCommandReorder processes input when repositioning a menu command
+func (m Model) handleMenuCommandReorder(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	isInsert := m.reorderInserting && m.pendingNewCommand != nil
+	if m.currentMenuTab != 1 {
+		m.navMode = MenuModifyMode
+		m.reorderSourceIndex = -1
+		m.reorderInserting = false
+		m.pendingNewCommand = nil
+		return m, nil
+	}
+
+	if !isInsert && (len(m.menuCommandsList) == 0 || m.reorderSourceIndex < 0) {
+		m.navMode = MenuModifyMode
+		m.reorderSourceIndex = -1
+		return m, nil
+	}
+
+	maxIndex := len(m.menuCommandsList)
+
+	switch msg.String() {
+	case "up", "k":
+		if m.selectedCommandIndex <= 0 {
+			m.selectedCommandIndex = maxIndex
+		} else {
+			m.selectedCommandIndex--
+		}
+		return m, nil
+	case "down", "j":
+		if m.selectedCommandIndex >= maxIndex {
+			m.selectedCommandIndex = 0
+		} else {
+			m.selectedCommandIndex++
+		}
+		return m, nil
+	case "home":
+		m.selectedCommandIndex = 0
+		return m, nil
+	case "end":
+		m.selectedCommandIndex = maxIndex
+		return m, nil
+	case "esc":
+		source := m.reorderSourceIndex
+		if !isInsert && source >= 0 && source < len(m.menuCommandsList) {
+			m.selectedCommandIndex = source
+		} else if len(m.menuCommandsList) > 0 {
+			if m.selectedCommandIndex >= len(m.menuCommandsList) {
+				m.selectedCommandIndex = len(m.menuCommandsList) - 1
+			}
+		} else {
+			m.selectedCommandIndex = 0
+		}
+		m.navMode = MenuModifyMode
+		m.reorderSourceIndex = -1
+		m.reorderInserting = false
+		m.pendingNewCommand = nil
+		m.pendingInsertIndex = -1
+		m.message = "Position change cancelled"
+		m.messageTime = time.Now()
+		m.messageType = InfoMessage
+		return m, nil
+	case "enter":
+		target := m.selectedCommandIndex
+		if target < 0 {
+			target = 0
+		}
+		if target > maxIndex {
+			target = maxIndex
+		}
+
+		if isInsert {
+			insertIndex := target
+			m.pendingInsertIndex = insertIndex
+
+			newCmd := *m.pendingNewCommand
+			newCmd.PositionNumber = insertIndex + 1
+
+			m.editingMenuCommand = &newCmd
+			m.originalMenuCommand = nil
+
+			m.selectedCommandIndex = insertIndex
+			m.navMode = MenuModifyMode
+			m.reorderSourceIndex = -1
+			m.reorderInserting = false
+			m.pendingNewCommand = nil
+
+			m.setupMenuEditCommandModal()
+			m.navMode = MenuEditCommandMode
+			m.message = fmt.Sprintf("Editing new command at position %d", insertIndex+1)
+			m.messageTime = time.Now()
+			m.messageType = SuccessMessage
+			return m, nil
+		}
+
+		source := m.reorderSourceIndex
+		if source < 0 || source >= len(m.menuCommandsList) {
+			m.navMode = MenuModifyMode
+			m.reorderSourceIndex = -1
+			return m, nil
+		}
+
+		insertIndex := target
+		if target > source {
+			insertIndex = target - 1
+		}
+
+		if insertIndex == source {
+			m.selectedCommandIndex = source
+			m.navMode = MenuModifyMode
+			m.reorderSourceIndex = -1
+			m.message = "Position unchanged"
+			m.messageTime = time.Now()
+			m.messageType = InfoMessage
+			return m, nil
+		}
+
+		moving := m.menuCommandsList[source]
+
+		remaining := append([]database.MenuCommand{}, m.menuCommandsList[:source]...)
+		remaining = append(remaining, m.menuCommandsList[source+1:]...)
+
+		if insertIndex < 0 {
+			insertIndex = 0
+		}
+		if insertIndex > len(remaining) {
+			insertIndex = len(remaining)
+		}
+
+		updated := append([]database.MenuCommand{}, remaining[:insertIndex]...)
+		updated = append(updated, moving)
+		updated = append(updated, remaining[insertIndex:]...)
+
+		renumberMenuCommandPositions(updated)
+
+		m.menuCommandsList = updated
+		m.selectedCommandIndex = insertIndex
+		m.navMode = MenuModifyMode
+		m.reorderSourceIndex = -1
+		m.menuModified = true
+		m.message = fmt.Sprintf("Command moved to position %d", insertIndex+1)
+		m.messageTime = time.Now()
+		m.messageType = SuccessMessage
+
+		return m, nil
+	}
+
+	return m, nil
+}
+
 // Update handleSaveChangesPrompt to handle menu saving
 func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
@@ -434,13 +603,34 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 						m.messageType = ErrorMessage
 						m.savePrompt = false
 						m.navMode = m.returnToMode
+						m.pendingInsertIndex = -1
 						return m, nil
 					}
 					// Update the command ID with the new ID from database
 					m.editingMenuCommand.ID = int(newID)
 
-					// Add new command to list
-					m.menuCommandsList = append(m.menuCommandsList, *m.editingMenuCommand)
+					insertIndex := len(m.menuCommandsList)
+					if m.pendingInsertIndex >= 0 && m.pendingInsertIndex <= len(m.menuCommandsList) {
+						insertIndex = m.pendingInsertIndex
+					}
+					m.menuCommandsList = insertMenuCommandAt(m.menuCommandsList, insertIndex, *m.editingMenuCommand)
+					renumberMenuCommandPositions(m.menuCommandsList)
+
+					// Update command ordering in the database
+					for i := range m.menuCommandsList {
+						if m.menuCommandsList[i].ID == 0 {
+							continue
+						}
+						if err := m.db.UpdateMenuCommand(&m.menuCommandsList[i]); err != nil {
+							m.message = fmt.Sprintf("Error updating command ordering: %v", err)
+							m.messageTime = time.Now()
+							m.messageType = ErrorMessage
+							m.savePrompt = false
+							m.navMode = m.returnToMode
+							return m, nil
+						}
+					}
+					m.pendingInsertIndex = -1
 				} else {
 					// Existing command - update
 					err = m.db.UpdateMenuCommand(m.editingMenuCommand)
@@ -460,6 +650,7 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 							break
 						}
 					}
+					m.pendingInsertIndex = -1
 				}
 
 				// ✅ CRITICAL: Restore menu data fields when returning to MenuModifyMode
@@ -609,6 +800,7 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 				m.editingMenuCommand = nil
 				m.originalMenuCommand = nil
+				m.pendingInsertIndex = -1
 			} else if m.editingMenu != nil {
 				// Only discard menu changes if we're editing the menu itself
 				m.menuModified = false
@@ -1544,7 +1736,7 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.editingMenuCommand = &database.MenuCommand{
 					ID:               selectedCmd.ID,
 					MenuID:           selectedCmd.MenuID,
-					CommandNumber:    selectedCmd.CommandNumber,
+					PositionNumber:   selectedCmd.PositionNumber,
 					Keys:             selectedCmd.Keys,
 					ShortDescription: selectedCmd.ShortDescription,
 					LongDescription:  selectedCmd.LongDescription,
@@ -1566,7 +1758,7 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.currentMenuTab == 1 { // FIXED: Was 0, should be 1 for commands tab
 			newCommand := &database.MenuCommand{
 				MenuID:           m.editingMenu.ID,
-				CommandNumber:    len(m.menuCommandsList) + 1,
+				PositionNumber:   len(m.menuCommandsList) + 1,
 				Keys:             "",
 				ShortDescription: "",
 				LongDescription:  "",
@@ -1577,11 +1769,54 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				Active:           true,
 				Hidden:           false,
 			}
-			m.editingMenuCommand = newCommand
 			m.originalMenuCommand = nil
-			// Set up modal fields for command editing
-			m.setupMenuEditCommandModal()
-			m.navMode = MenuEditCommandMode
+
+			if len(m.menuCommandsList) == 0 {
+				// First command – skip position prompt
+				m.pendingInsertIndex = 0
+				m.pendingNewCommand = nil
+				m.reorderInserting = false
+				m.editingMenuCommand = newCommand
+				m.setupMenuEditCommandModal()
+				m.navMode = MenuEditCommandMode
+				m.selectedCommandIndex = 0
+				m.message = "Editing new command at position 1"
+				m.messageTime = time.Now()
+				m.messageType = InfoMessage
+				return m, nil
+			}
+
+			// Prompt for position before editing
+			m.pendingNewCommand = newCommand
+			m.reorderInserting = true
+			m.reorderSourceIndex = -1
+			m.pendingInsertIndex = -1
+			m.navMode = MenuCommandReorderMode
+			m.selectedCommandIndex = len(m.menuCommandsList) // Default to end position
+			m.message = "Select where to insert the new command, then press Enter."
+			m.messageTime = time.Now()
+			m.messageType = InfoMessage
+		}
+		return m, nil
+	case "p", "P":
+		if m.currentMenuTab == 1 {
+			if len(m.menuCommandsList) < 2 {
+				m.message = "Need at least two commands to change positions"
+				m.messageTime = time.Now()
+				m.messageType = InfoMessage
+				return m, nil
+			}
+			if m.selectedCommandIndex >= 0 && m.selectedCommandIndex < len(m.menuCommandsList) {
+				m.reorderSourceIndex = m.selectedCommandIndex
+				m.navMode = MenuCommandReorderMode
+				// Allow selecting "end" by defaulting to source position + 1 when possible
+				if m.selectedCommandIndex+1 <= len(m.menuCommandsList) {
+					m.selectedCommandIndex = m.selectedCommandIndex + 1
+				}
+				m.message = fmt.Sprintf("Moving '%s' – * shows original, > shows target. Press Enter to confirm.", m.menuCommandsList[m.reorderSourceIndex].Keys)
+				m.messageTime = time.Now()
+				m.messageType = InfoMessage
+			}
 		}
 		return m, nil
 	case "d", "D":
@@ -1604,7 +1839,7 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "f1":
 		// Show help
-		m.message = "Help: Arrow keys Navigate | ENTER Edit | TAB Switch | I Insert | D Delete | ESC Back"
+		m.message = "Help: Arrow keys Navigate | ENTER Edit | TAB Switch | I Insert | D Delete | P Position | ESC Back"
 		m.messageTime = time.Now()
 		m.messageType = InfoMessage
 		return m, nil
@@ -1628,6 +1863,10 @@ func (m Model) handleMenuModify(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.selectedCommandIndex = 0
 		m.currentMenuTab = 0
 		m.menuDataFields = nil
+		m.reorderSourceIndex = -1
+		m.reorderInserting = false
+		m.pendingNewCommand = nil
+		m.pendingInsertIndex = -1
 		return m, nil
 	}
 	return m, nil
@@ -1844,8 +2083,12 @@ func (m Model) handleMenuEditCommand(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.editingMenu != nil && m.editingMenu.ID == 0 {
 				// Add/update command in the list
 				if m.editingMenuCommand.ID == 0 {
-					// New command - add to list
-					m.menuCommandsList = append(m.menuCommandsList, *m.editingMenuCommand)
+					insertIndex := len(m.menuCommandsList)
+					if m.pendingInsertIndex >= 0 && m.pendingInsertIndex <= len(m.menuCommandsList) {
+						insertIndex = m.pendingInsertIndex
+					}
+					m.menuCommandsList = insertMenuCommandAt(m.menuCommandsList, insertIndex, *m.editingMenuCommand)
+					renumberMenuCommandPositions(m.menuCommandsList)
 				} else {
 					// Update existing command in list
 					for i, cmd := range m.menuCommandsList {
@@ -1859,6 +2102,7 @@ func (m Model) handleMenuEditCommand(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.originalMenuCommand = nil
 				m.menuModified = true
 				m.editingMenuCommand = nil
+				m.pendingInsertIndex = -1
 
 				// Restore menu data fields
 				if len(m.menuDataFields) > 0 {
@@ -1894,6 +2138,7 @@ func (m Model) handleMenuEditCommand(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.originalMenuCommand = nil
 		m.modalFieldIndex = 0
 		m.modalSectionName = ""
+		m.pendingInsertIndex = -1
 		m.message = ""
 		return m, nil
 	}
@@ -2262,7 +2507,7 @@ func (m Model) handleMenuManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.originalMenuCommands[i] = database.MenuCommand{
 					ID:               cmd.ID,
 					MenuID:           cmd.MenuID,
-					CommandNumber:    cmd.CommandNumber,
+					PositionNumber:   cmd.PositionNumber,
 					Keys:             cmd.Keys,
 					ShortDescription: cmd.ShortDescription,
 					LongDescription:  cmd.LongDescription,
@@ -2308,6 +2553,7 @@ func (m Model) handleMenuManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Initialize empty commands list for new menu
 		m.menuCommandsList = []database.MenuCommand{}
 		m.originalMenuCommands = []database.MenuCommand{}
+		m.reorderSourceIndex = -1
 
 		// Set up modal fields for new menu editing
 		m.setupMenuEditDataModal()

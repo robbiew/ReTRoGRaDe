@@ -155,5 +155,9 @@ func (m *Model) loadMenuCommandsForEditing() error {
 	}
 
 	m.menuCommandsList = commands
+	m.reorderSourceIndex = -1
+	m.reorderInserting = false
+	m.pendingNewCommand = nil
+	m.pendingInsertIndex = -1
 	return nil
 }

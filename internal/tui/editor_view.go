@@ -144,7 +144,7 @@ func (m Model) View() string {
 	}
 
 	// Layer 1.8: Menu Modify (full screen mode) - but NOT when editing command
-	if m.navMode == MenuModifyMode || (m.navMode == EditingValue && m.editingMenu != nil && m.editingMenuCommand == nil) {
+	if m.navMode == MenuModifyMode || m.navMode == MenuCommandReorderMode || (m.navMode == EditingValue && m.editingMenu != nil && m.editingMenuCommand == nil) {
 		menuModifyStr := m.renderMenuModify()
 		m.overlayStringCenteredWithClear(canvas, menuModifyStr)
 
@@ -333,6 +333,11 @@ func (m Model) renderCommandEditBreadcrumb() string {
 func (m *Model) shouldRenderAsModal() bool {
 	// Don't render as modal if we're editing menu data inline
 	if m.editingMenu != nil && m.navMode == EditingValue {
+		return false
+	}
+
+	// Reordering commands uses the full menu modify view, not a modal
+	if m.navMode == MenuCommandReorderMode {
 		return false
 	}
 
@@ -1379,25 +1384,38 @@ func (m Model) renderMenuDataListWithEditing(width int) []string {
 func (m Model) renderCommandList(width int) []string {
 	var commandLines []string
 
-	// Add column header matching User Management style
+	headerFormat := " %-2s %-4s %-6s %-26s %-6s %-6s"
+
 	columnHeader := lipgloss.NewStyle().
 		Background(lipgloss.Color(ColorBgMedium)).
 		Foreground(lipgloss.Color(ColorTextBright)).
 		Bold(true).
 		Width(width).
-		Render(fmt.Sprintf(" %-4s %-4s %-26s %-6s %-6s", "#", "Key", "Description", "Active", "Hidden"))
+		Render(fmt.Sprintf(headerFormat, "", "Pos", "Key", "Description", "Active", "Hidden"))
 	commandLines = append(commandLines, columnHeader)
 
-	// Add separator line after header
 	separatorStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color(ColorBgMedium)).
 		Foreground(lipgloss.Color(ColorPrimary)).
 		Width(width)
-	separator := separatorStyle.Render(strings.Repeat("-", width))
-	commandLines = append(commandLines, separator)
+	commandLines = append(commandLines, separatorStyle.Render(strings.Repeat("-", width)))
+
+	defaultStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(ColorTextNormal)).
+		Background(lipgloss.Color(ColorBgMedium)).
+		Width(width)
+	selectedStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(ColorTextBright)).
+		Background(lipgloss.Color(ColorAccent)).
+		Bold(true).
+		Width(width)
+	sourceStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(ColorTextBright)).
+		Background(lipgloss.Color(ColorWarning)).
+		Bold(true).
+		Width(width)
 
 	for i, cmd := range m.menuCommandsList {
-		// Format: [CommandNumber] [Keys] [ShortDescription] [Active Status]
 		activeIndicator := "[✓]"
 		if !cmd.Active {
 			activeIndicator = "[X]"
@@ -1406,7 +1424,23 @@ func (m Model) renderCommandList(width int) []string {
 		if cmd.Hidden {
 			hiddenIndicator = "[H]"
 		}
-		line := fmt.Sprintf(" %-4s %-4s %-26s %-6s %-6s", fmt.Sprintf("%d.", cmd.CommandNumber), cmd.Keys, cmd.ShortDescription, activeIndicator, hiddenIndicator)
+
+		marker := ""
+		if m.navMode == MenuCommandReorderMode {
+			if i == m.reorderSourceIndex {
+				marker = "*"
+			}
+			if m.selectedCommandIndex == i {
+				if marker == "" {
+					marker = ">"
+				} else {
+					marker = "*>"
+				}
+			}
+		}
+
+		posLabel := fmt.Sprintf("%d.", cmd.PositionNumber)
+		line := fmt.Sprintf(headerFormat, marker, posLabel, cmd.Keys, cmd.ShortDescription, activeIndicator, hiddenIndicator)
 		if len(line) > width {
 			line = ui.TruncateWithPipeCodes(line, width)
 		}
@@ -1415,22 +1449,28 @@ func (m Model) renderCommandList(width int) []string {
 		}
 
 		var style lipgloss.Style
-		if i == m.selectedCommandIndex {
-			style = lipgloss.NewStyle().
-				Foreground(lipgloss.Color(ColorTextBright)).
-				Background(lipgloss.Color(ColorAccent)).
-				Bold(true).
-				Width(width)
+		if m.navMode == MenuCommandReorderMode {
+			switch {
+			case i == m.reorderSourceIndex && m.selectedCommandIndex == i:
+				style = selectedStyle
+			case i == m.selectedCommandIndex:
+				style = selectedStyle
+			case i == m.reorderSourceIndex:
+				style = sourceStyle
+			default:
+				style = defaultStyle
+			}
 		} else {
-			style = lipgloss.NewStyle().
-				Foreground(lipgloss.Color(ColorTextNormal)).
-				Background(lipgloss.Color(ColorBgMedium)).
-				Width(width)
+			if i == m.selectedCommandIndex {
+				style = selectedStyle
+			} else {
+				style = defaultStyle
+			}
 		}
+
 		commandLines = append(commandLines, style.Render(line))
 	}
 
-	// If no commands, show message after header
 	if len(m.menuCommandsList) == 0 {
 		commandLines = append(commandLines, lipgloss.NewStyle().
 			Foreground(lipgloss.Color(ColorTextDim)).
@@ -1439,7 +1479,26 @@ func (m Model) renderCommandList(width int) []string {
 			Render(" No commands defined - press 'I' to add"))
 	}
 
-	// Pad to 14 lines to match menu data list height
+	if m.navMode == MenuCommandReorderMode && len(m.menuCommandsList) > 0 {
+		marker := ""
+		if m.selectedCommandIndex == len(m.menuCommandsList) {
+			marker = ">"
+		}
+		sentinelLine := fmt.Sprintf(headerFormat, marker, "End", "", "Place at end", "", "")
+		if len(sentinelLine) > width {
+			sentinelLine = ui.TruncateWithPipeCodes(sentinelLine, width)
+		}
+		if len(sentinelLine) < width {
+			sentinelLine += strings.Repeat(" ", width-len(sentinelLine))
+		}
+
+		style := defaultStyle
+		if m.selectedCommandIndex == len(m.menuCommandsList) {
+			style = selectedStyle
+		}
+		commandLines = append(commandLines, style.Render(sentinelLine))
+	}
+
 	for len(commandLines) < 14 {
 		commandLines = append(commandLines, lipgloss.NewStyle().
 			Background(lipgloss.Color(ColorBgMedium)).
@@ -1458,24 +1517,6 @@ func (m *Model) setupMenuEditCommandModal() {
 
 	// Create modal fields for command editing
 	m.modalFields = []SubmenuItem{
-		{
-			ID:       "command-number",
-			Label:    "Command Number",
-			ItemType: EditableField,
-			EditableItem: &MenuItem{
-				ID:        "command-number",
-				Label:     "Command Number",
-				ValueType: IntValue,
-				Field: ConfigField{
-					GetValue: func() interface{} { return m.editingMenuCommand.CommandNumber },
-					SetValue: func(v interface{}) error {
-						m.editingMenuCommand.CommandNumber = v.(int)
-						return nil
-					},
-				},
-				HelpText: "Command number in menu",
-			},
-		},
 		{
 			ID:       "command-keys",
 			Label:    "Keys",
@@ -2126,8 +2167,10 @@ func (m Model) renderFooter() string {
 		if m.currentMenuTab == 0 {
 			footerText = "  Up/Down Navigate   ENTER Edit   TAB Switch   ESC Back"
 		} else {
-			footerText = "  Up/Down Navigate   ENTER Edit   I Insert   D Delete   TAB Switch   ESC Back"
+			footerText = "  Up/Down Navigate   ENTER Edit   I Insert   D Delete   P Position   TAB Switch   ESC Back"
 		}
+	case MenuCommandReorderMode:
+		footerText = "  Up/Down Choose Position   HOME First   END Last   ENTER Confirm   ESC Cancel"
 	case MenuEditDataMode:
 		footerText = "  Up/Down Navigate   ENTER Edit   ESC Back"
 	case MenuEditCommandMode:

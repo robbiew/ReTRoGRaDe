@@ -75,21 +75,22 @@ const (
 type NavigationMode int
 
 const (
-	MainMenuNavigation    NavigationMode = iota // Level 1: Main menu centered H/V
-	Level2MenuNavigation                        // Level 2: Submenu anchored top left
-	Level3MenuNavigation                        // Level 3: Submenu offset lower left from Level 2
-	Level4ModalNavigation                       // Level 4: Centered modal for final menus
-	EditingValue                                // Editing a value in modal form
-	SelectingValue                              // Selecting from list of options
-	UserManagementMode                          // User management interface
-	SecurityLevelsMode                          // Security levels management interface
-	MenuManagementMode                          // Menu management interface
-	MenuModifyMode                              // Menu modification interface (command list)
-	MenuEditDataMode                            // Edit menu data modal
-	MenuEditCommandMode                         // Edit command modal
-	SavePrompt                                  // Confirming save on exit
-	SaveChangesPrompt                           // Prompt to save changes when exiting edit modal
-	DeleteConfirmPrompt                         // Confirm deletion
+	MainMenuNavigation     NavigationMode = iota // Level 1: Main menu centered H/V
+	Level2MenuNavigation                         // Level 2: Submenu anchored top left
+	Level3MenuNavigation                         // Level 3: Submenu offset lower left from Level 2
+	Level4ModalNavigation                        // Level 4: Centered modal for final menus
+	EditingValue                                 // Editing a value in modal form
+	SelectingValue                               // Selecting from list of options
+	UserManagementMode                           // User management interface
+	SecurityLevelsMode                           // Security levels management interface
+	MenuManagementMode                           // Menu management interface
+	MenuModifyMode                               // Menu modification interface (command list)
+	MenuCommandReorderMode                       // Selecting new position for a menu command
+	MenuEditDataMode                             // Edit menu data modal
+	MenuEditCommandMode                          // Edit command modal
+	SavePrompt                                   // Confirming save on exit
+	SaveChangesPrompt                            // Prompt to save changes when exiting edit modal
+	DeleteConfirmPrompt                          // Confirm deletion
 )
 
 // Model represents the complete application state
@@ -171,6 +172,10 @@ type Model struct {
 	selectedCommandIndex int                   // Selected command in modify mode
 	currentMenuTab       int                   // Current tab in menu modify mode (0=Menu Data, 1=Menu Commands)
 	menuDataFields       []SubmenuItem         // Preserve menu data fields when editing commands
+	reorderSourceIndex   int                   // Command index being repositioned (-1 when inactive)
+	reorderInserting     bool                  // True when selecting position for a new command
+	pendingNewCommand    *database.MenuCommand // New command awaiting placement before editing
+	pendingInsertIndex   int                   // Target index for inserting a new command (-1 when unset)
 
 	// racking original state:
 	originalMenu         *database.Menu         // Original menu before editing
@@ -613,16 +618,18 @@ func InitialModelV2(cfg *config.Config) Model {
 	}
 
 	m := Model{
-		config:         cfg,
-		db:             db,
-		navMode:        MainMenuNavigation,
-		activeMenu:     0,
-		menuBar:        menuBar,
-		submenuList:    submenuList,
-		textInput:      ti,
-		screenWidth:    80,
-		screenHeight:   24,
-		currentMenuTab: 0, // Default to Menu Data tab
+		config:             cfg,
+		db:                 db,
+		navMode:            MainMenuNavigation,
+		activeMenu:         0,
+		menuBar:            menuBar,
+		submenuList:        submenuList,
+		textInput:          ti,
+		screenWidth:        80,
+		screenHeight:       24,
+		currentMenuTab:     0, // Default to Menu Data tab
+		reorderSourceIndex: -1,
+		pendingInsertIndex: -1,
 	}
 
 	// Try to load a default ANSI art if present (CP437 encoded). Failures are ignored.

@@ -20,7 +20,7 @@ func SeedDefaultMainMenu(db Database) error {
 		defaultCommands := []MenuCommand{
 			{
 				MenuID:           menu.ID,
-				CommandNumber:    3,
+				PositionNumber:   1,
 				Keys:             "G",
 				ShortDescription: "Goodbye",
 				LongDescription:  "Disconnect from the BBS",
@@ -67,7 +67,7 @@ func SeedDefaultMainMenu(db Database) error {
 	commands := []MenuCommand{
 		{
 			MenuID:           int(menuID),
-			CommandNumber:    3,
+			PositionNumber:   1,
 			Keys:             "G",
 			ShortDescription: "Goodbye",
 			LongDescription:  "Disconnect from the BBS",

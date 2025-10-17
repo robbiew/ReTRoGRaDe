@@ -60,7 +60,7 @@ type Menu struct {
 type MenuCommand struct {
 	ID               int
 	MenuID           int
-	CommandNumber    int
+	PositionNumber   int
 	Keys             string
 	ShortDescription string
 	LongDescription  string

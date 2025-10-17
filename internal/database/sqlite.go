@@ -157,7 +157,7 @@ func (s *SQLiteDB) InitializeSchema() error {
 		CREATE TABLE IF NOT EXISTS menu_commands (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			menu_id INTEGER NOT NULL,
-			command_number INTEGER NOT NULL,
+			position_number INTEGER NOT NULL DEFAULT 0,
 			keys TEXT,
 			short_description TEXT,
 			long_description TEXT,
@@ -543,10 +543,19 @@ func (s *SQLiteDB) DeleteMenu(id int64) error {
 
 // CreateMenuCommand creates a new menu command
 func (s *SQLiteDB) CreateMenuCommand(cmd *MenuCommand) (int64, error) {
+	if cmd.PositionNumber <= 0 {
+		var nextPosition int
+		if err := s.db.QueryRow(`SELECT COALESCE(MAX(position_number), 0) + 1 FROM menu_commands WHERE menu_id = ?`, cmd.MenuID).
+			Scan(&nextPosition); err != nil {
+			return 0, fmt.Errorf("failed to determine next command position: %w", err)
+		}
+		cmd.PositionNumber = nextPosition
+	}
+
 	result, err := s.db.Exec(`
-		INSERT INTO menu_commands (menu_id, command_number, keys, short_description, long_description, acs_required, cmdkeys, options, node_activity, active, hidden)
+		INSERT INTO menu_commands (menu_id, position_number, keys, short_description, long_description, acs_required, cmdkeys, options, node_activity, active, hidden)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		cmd.MenuID, cmd.CommandNumber, cmd.Keys, cmd.ShortDescription, cmd.LongDescription, cmd.ACSRequired, cmd.CmdKeys, cmd.Options, cmd.NodeActivity, cmd.Active, cmd.Hidden)
+		cmd.MenuID, cmd.PositionNumber, cmd.Keys, cmd.ShortDescription, cmd.LongDescription, cmd.ACSRequired, cmd.CmdKeys, cmd.Options, cmd.NodeActivity, cmd.Active, cmd.Hidden)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create menu command: %w", err)
 	}
@@ -562,8 +571,8 @@ func (s *SQLiteDB) CreateMenuCommand(cmd *MenuCommand) (int64, error) {
 // GetMenuCommands retrieves all commands for a menu
 func (s *SQLiteDB) GetMenuCommands(menuID int) ([]MenuCommand, error) {
 	rows, err := s.db.Query(`
-		SELECT id, menu_id, command_number, keys, short_description, long_description, acs_required, cmdkeys, options, node_activity, active, hidden
-		FROM menu_commands WHERE menu_id = ? ORDER BY command_number`, menuID)
+		SELECT id, menu_id, position_number, keys, short_description, long_description, acs_required, cmdkeys, options, node_activity, active, hidden
+		FROM menu_commands WHERE menu_id = ? ORDER BY position_number, id`, menuID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query menu commands: %w", err)
 	}
@@ -572,7 +581,7 @@ func (s *SQLiteDB) GetMenuCommands(menuID int) ([]MenuCommand, error) {
 	var commands []MenuCommand
 	for rows.Next() {
 		var cmd MenuCommand
-		err := rows.Scan(&cmd.ID, &cmd.MenuID, &cmd.CommandNumber, &cmd.Keys, &cmd.ShortDescription, &cmd.LongDescription, &cmd.ACSRequired, &cmd.CmdKeys, &cmd.Options, &cmd.NodeActivity, &cmd.Active, &cmd.Hidden)
+		err := rows.Scan(&cmd.ID, &cmd.MenuID, &cmd.PositionNumber, &cmd.Keys, &cmd.ShortDescription, &cmd.LongDescription, &cmd.ACSRequired, &cmd.CmdKeys, &cmd.Options, &cmd.NodeActivity, &cmd.Active, &cmd.Hidden)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan menu command: %w", err)
 		}
@@ -585,9 +594,9 @@ func (s *SQLiteDB) GetMenuCommands(menuID int) ([]MenuCommand, error) {
 // UpdateMenuCommand updates a menu command
 func (s *SQLiteDB) UpdateMenuCommand(cmd *MenuCommand) error {
 	_, err := s.db.Exec(`
-		UPDATE menu_commands SET menu_id = ?, command_number = ?, keys = ?, short_description = ?, long_description = ?, acs_required = ?, cmdkeys = ?, options = ?, node_activity = ?, active = ?, hidden = ?
+		UPDATE menu_commands SET menu_id = ?, position_number = ?, keys = ?, short_description = ?, long_description = ?, acs_required = ?, cmdkeys = ?, options = ?, node_activity = ?, active = ?, hidden = ?
 		WHERE id = ?`,
-		cmd.MenuID, cmd.CommandNumber, cmd.Keys, cmd.ShortDescription, cmd.LongDescription, cmd.ACSRequired, cmd.CmdKeys, cmd.Options, cmd.NodeActivity, cmd.Active, cmd.Hidden, cmd.ID)
+		cmd.MenuID, cmd.PositionNumber, cmd.Keys, cmd.ShortDescription, cmd.LongDescription, cmd.ACSRequired, cmd.CmdKeys, cmd.Options, cmd.NodeActivity, cmd.Active, cmd.Hidden, cmd.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update menu command: %w", err)
 	}
@@ -596,9 +605,48 @@ func (s *SQLiteDB) UpdateMenuCommand(cmd *MenuCommand) error {
 
 // DeleteMenuCommand deletes a menu command
 func (s *SQLiteDB) DeleteMenuCommand(id int64) error {
-	_, err := s.db.Exec(`DELETE FROM menu_commands WHERE id = ?`, id)
+	tx, err := s.db.Begin()
 	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var menuID int
+	err = tx.QueryRow(`SELECT menu_id FROM menu_commands WHERE id = ?`, id).Scan(&menuID)
+	if err == sql.ErrNoRows {
+		return tx.Commit()
+	}
+	if err != nil {
+		return fmt.Errorf("failed to find menu command: %w", err)
+	}
+
+	if _, err := tx.Exec(`DELETE FROM menu_commands WHERE id = ?`, id); err != nil {
 		return fmt.Errorf("failed to delete menu command: %w", err)
+	}
+
+	rows, err := tx.Query(`SELECT id FROM menu_commands WHERE menu_id = ? ORDER BY position_number, id`, menuID)
+	if err != nil {
+		return fmt.Errorf("failed to query remaining menu commands: %w", err)
+	}
+	defer rows.Close()
+
+	position := 1
+	for rows.Next() {
+		var cmdID int64
+		if err := rows.Scan(&cmdID); err != nil {
+			return fmt.Errorf("failed to scan menu command id: %w", err)
+		}
+		if _, err := tx.Exec(`UPDATE menu_commands SET position_number = ? WHERE id = ?`, position, cmdID); err != nil {
+			return fmt.Errorf("failed to renumber menu commands: %w", err)
+		}
+		position++
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("failed to iterate menu commands: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
 	}
 	return nil
 }
