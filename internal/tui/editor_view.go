@@ -177,19 +177,30 @@ func (m Model) View() string {
 		return m.canvasToString(canvas)
 	}
 
-	// Layer 1.12: SelectingValue mode - show selection list over command modal (NEW)
+	// Layer 1.12: SelectingValue mode - show selection list over appropriate modal
 	if m.navMode == SelectingValue {
-		// Show the command edit modal in the background
-		menuEditCommandStr := m.renderMenuEditCommand()
-		m.overlayStringCenteredWithClear(canvas, menuEditCommandStr)
+		// Show the appropriate modal in the background based on context
+		if m.editingMenuCommand != nil {
+			// Menu command editing context
+			menuEditCommandStr := m.renderMenuEditCommand()
+			m.overlayStringCenteredWithClear(canvas, menuEditCommandStr)
+
+			// Add breadcrumb for menu command
+			breadcrumb := m.renderCommandEditBreadcrumb()
+			m.overlayString(canvas, breadcrumb, m.screenHeight-3, 0)
+		} else {
+			// User/other editing context - render the modal form
+			modalStr := m.renderModalForm()
+			m.overlayStringCenteredWithClear(canvas, modalStr)
+
+			// Add breadcrumb for general editing
+			breadcrumb := m.renderBreadcrumb()
+			m.overlayString(canvas, breadcrumb, m.screenHeight-3, 0)
+		}
 
 		// Overlay the selection list on top
 		selectionModal := m.renderSelectingValueView()
 		m.overlayStringCentered(canvas, selectionModal)
-
-		// Add breadcrumb
-		breadcrumb := m.renderCommandEditBreadcrumb()
-		m.overlayString(canvas, breadcrumb, m.screenHeight-3, 0)
 
 		// Add footer
 		footer := m.renderFooter()
@@ -1580,7 +1591,8 @@ func (m Model) renderSelectingValueView() string {
 		}
 
 		// Add the option line (only implemented commands shown)
-		line := fmt.Sprintf(" [%s] %-25s %s", opt.Value, opt.Label, opt.Description)
+		// Use fixed-width format for Value to ensure alignment
+		line := fmt.Sprintf(" [%-3s] %-25s %s", opt.Value, opt.Label, opt.Description)
 		if len(line) > modalWidth-4 {
 			line = line[:modalWidth-7] + "..."
 		}
@@ -1933,6 +1945,8 @@ func (m Model) renderFooter() string {
 		footerText = "  Up/Down Navigate   ENTER Edit   ESC Back"
 	case EditingValue:
 		footerText = "  ENTER Save   ESC Cancel"
+	case SelectingValue:
+		footerText = "  Up/Down Navigate   PgUp/PgDn Jump   ENTER Select   ESC Cancel"
 	case UserManagementMode:
 		footerText = "  Up/Down Navigate   ENTER Edit   ESC Back"
 	case SecurityLevelsMode:

@@ -3,6 +3,7 @@ package tui
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -232,6 +233,20 @@ func (m Model) handleLevel4ModalNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 			if m.editingItem.ValueType == BoolValue {
 				// For bool, we don't use text input, just toggle
 				m.textInput.SetValue("")
+			} else if m.editingItem.ValueType == SelectValue {
+				// Handle SelectValue - create a selection list
+				m.navMode = SelectingValue
+				m.selectListIndex = 0
+				// Find current value in options
+				currentValue := m.editingItem.Field.GetValue().(string)
+				for i, opt := range m.editingItem.SelectOptions {
+					if opt.Value == currentValue {
+						m.selectListIndex = i
+						break
+					}
+				}
+				m.message = ""
+				return m, nil
 			} else {
 				// Set current value as text
 				currentValue := m.editingItem.Field.GetValue()
@@ -894,6 +909,20 @@ func (m Model) handleLevel3MenuNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.editingItem.ValueType == BoolValue {
 				// For bool, we don't use text input, just toggle
 				m.textInput.SetValue("")
+			} else if m.editingItem.ValueType == SelectValue {
+				// Handle SelectValue - create a selection list
+				m.navMode = SelectingValue
+				m.selectListIndex = 0
+				// Find current value in options
+				currentValue := m.editingItem.Field.GetValue().(string)
+				for i, opt := range m.editingItem.SelectOptions {
+					if opt.Value == currentValue {
+						m.selectListIndex = i
+						break
+					}
+				}
+				m.message = ""
+				return m, nil
 			} else {
 				// Set current value as text
 				currentValue := m.editingItem.Field.GetValue()
@@ -1241,22 +1270,23 @@ func (m Model) handleUserManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					EditableItem: &MenuItem{
 						ID:        "user-security-level",
 						Label:     "Security Level",
-						ValueType: IntValue,
+						ValueType: SelectValue,
 						Field: ConfigField{
-							GetValue: func() interface{} { return user.user.SecurityLevel },
+							GetValue: func() interface{} {
+								return fmt.Sprintf("%d", user.user.SecurityLevel)
+							},
 							SetValue: func(v interface{}) error {
-								user.user.SecurityLevel = v.(int)
+								levelStr := v.(string)
+								level, err := strconv.Atoi(levelStr)
+								if err != nil {
+									return fmt.Errorf("invalid security level: %v", err)
+								}
+								user.user.SecurityLevel = level
 								return nil
 							},
 						},
-						HelpText: "User's security level (0-255)",
-						Validation: func(v interface{}) error {
-							level := v.(int)
-							if level < 0 || level > 255 {
-								return fmt.Errorf("security level must be between 0 and 255")
-							}
-							return nil
-						},
+						HelpText:      "User's security level",
+						SelectOptions: m.getSecurityLevelSelectOptions(),
 					},
 				},
 				{

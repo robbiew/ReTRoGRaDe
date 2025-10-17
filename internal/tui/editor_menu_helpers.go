@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/robbiew/retrograde/internal/menu"
@@ -35,6 +36,34 @@ func getCmdKeySelectOptions() []SelectOption {
 			Description: def.Description,
 			Category:    def.Category,
 			Implemented: def.Implemented,
+		})
+	}
+
+	return options
+}
+
+// getSecurityLevelSelectOptions returns SelectOptions for all security levels
+func (m *Model) getSecurityLevelSelectOptions() []SelectOption {
+	// Get all security levels from database
+	levels, err := m.db.GetAllSecurityLevels()
+	if err != nil {
+		// Return empty options if we can't load levels
+		return []SelectOption{}
+	}
+
+	// Sort by SecLevel (numeric value)
+	sort.Slice(levels, func(i, j int) bool {
+		return levels[i].SecLevel < levels[j].SecLevel
+	})
+
+	options := make([]SelectOption, 0, len(levels))
+	for _, level := range levels {
+		options = append(options, SelectOption{
+			Value:       fmt.Sprintf("%d", level.SecLevel),
+			Label:       level.Name,
+			Description: fmt.Sprintf("Level %d", level.SecLevel),
+			Category:    "", // No category needed for security levels
+			Implemented: true,
 		})
 	}
 
