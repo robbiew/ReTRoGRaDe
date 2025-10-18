@@ -75,22 +75,24 @@ const (
 type NavigationMode int
 
 const (
-	MainMenuNavigation     NavigationMode = iota // Level 1: Main menu centered H/V
-	Level2MenuNavigation                         // Level 2: Submenu anchored top left
-	Level3MenuNavigation                         // Level 3: Submenu offset lower left from Level 2
-	Level4ModalNavigation                        // Level 4: Centered modal for final menus
-	EditingValue                                 // Editing a value in modal form
-	SelectingValue                               // Selecting from list of options
-	UserManagementMode                           // User management interface
-	SecurityLevelsMode                           // Security levels management interface
-	MenuManagementMode                           // Menu management interface
-	MenuModifyMode                               // Menu modification interface (command list)
-	MenuCommandReorderMode                       // Selecting new position for a menu command
-	MenuEditDataMode                             // Edit menu data modal
-	MenuEditCommandMode                          // Edit command modal
-	SavePrompt                                   // Confirming save on exit
-	SaveChangesPrompt                            // Prompt to save changes when exiting edit modal
-	DeleteConfirmPrompt                          // Confirm deletion
+	MainMenuNavigation       NavigationMode = iota // Level 1: Main menu centered H/V
+	Level2MenuNavigation                           // Level 2: Submenu anchored top left
+	Level3MenuNavigation                           // Level 3: Submenu offset lower left from Level 2
+	Level4ModalNavigation                          // Level 4: Centered modal for final menus
+	EditingValue                                   // Editing a value in modal form
+	SelectingValue                                 // Selecting from list of options
+	UserManagementMode                             // User management interface
+	SecurityLevelsMode                             // Security levels management interface
+	ConferenceManagementMode                       // Conference management interface
+	AreaManagementMode                             // Message area management interface
+	MenuManagementMode                             // Menu management interface
+	MenuModifyMode                                 // Menu modification interface (command list)
+	MenuCommandReorderMode                         // Selecting new position for a menu command
+	MenuEditDataMode                               // Edit menu data modal
+	MenuEditCommandMode                            // Edit command modal
+	SavePrompt                                     // Confirming save on exit
+	SaveChangesPrompt                              // Prompt to save changes when exiting edit modal
+	DeleteConfirmPrompt                            // Confirm deletion
 )
 
 // Model represents the complete application state
@@ -114,6 +116,12 @@ type Model struct {
 
 	// Security levels management list
 	securityLevelsUI list.Model
+
+	// Conference management list
+	conferenceListUI list.Model
+
+	// Message area management list
+	areaListUI list.Model
 
 	// Menu management list
 	menuListUI list.Model
@@ -139,6 +147,16 @@ type Model struct {
 	// Security levels management state
 	securityLevelsList   []database.SecurityLevelRecord // List of security levels for management
 	editingSecurityLevel *database.SecurityLevelRecord  // Currently editing security level
+
+	// Conference management state
+	conferenceList    []database.Conference // List of conferences for management
+	editingConference *database.Conference  // Currently editing conference
+	conferenceIsNew   bool                  // Track if editing conference is new
+
+	// Message area management state
+	areaList    []database.MessageArea // List of message areas for management
+	editingArea *database.MessageArea  // Currently editing message area
+	areaIsNew   bool                   // Track if editing area is new
 
 	// Menu management state
 	menuList         []database.Menu        // List of menus for management
@@ -455,6 +473,142 @@ func (d menuDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 		str = style.Render(itemText + padding)
 	} else {
 		// Unselected: subtle
+		style := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorTextNormal)).
+			Background(lipgloss.Color(ColorBgMedium)).
+			Width(d.maxWidth)
+		str = style.Render(itemText + padding)
+	}
+
+	fmt.Fprint(w, str)
+}
+
+// conferenceListItem implements list.Item for conference records
+type conferenceListItem struct {
+	conference database.Conference
+}
+
+func (i conferenceListItem) FilterValue() string {
+	return i.conference.Name
+}
+
+// conferenceDelegate controls conference list presentation
+type conferenceDelegate struct {
+	maxWidth int
+}
+
+func (d conferenceDelegate) Height() int                             { return 1 }
+func (d conferenceDelegate) Spacing() int                            { return 0 }
+func (d conferenceDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
+func (d conferenceDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
+	item, ok := listItem.(conferenceListItem)
+	if !ok {
+		return
+	}
+
+	var str string
+	isSelected := index == m.Index()
+
+	secLabel := item.conference.SecLevel
+	if strings.EqualFold(secLabel, "") || strings.EqualFold(secLabel, "public") {
+		secLabel = "Public"
+	}
+
+	hidden := "No"
+	if item.conference.Hidden {
+		hidden = "Yes"
+	}
+
+	itemText := fmt.Sprintf(" %-26s %-10s %-4s", item.conference.Name, secLabel, hidden)
+
+	if len(ui.StripANSI(itemText)) > d.maxWidth {
+		itemText = ui.TruncateWithPipeCodes(itemText, d.maxWidth-3)
+	}
+
+	padding := ""
+	if len(itemText) < d.maxWidth {
+		padding = strings.Repeat(" ", d.maxWidth-len(itemText))
+	}
+
+	if isSelected {
+		style := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorTextBright)).
+			Background(lipgloss.Color(ColorAccent)).
+			Bold(true).
+			Width(d.maxWidth)
+		str = style.Render(itemText + padding)
+	} else {
+		style := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorTextNormal)).
+			Background(lipgloss.Color(ColorBgMedium)).
+			Width(d.maxWidth)
+		str = style.Render(itemText + padding)
+	}
+
+	fmt.Fprint(w, str)
+}
+
+// messageAreaListItem implements list.Item for message areas
+type messageAreaListItem struct {
+	area database.MessageArea
+}
+
+func (i messageAreaListItem) FilterValue() string {
+	return i.area.Name
+}
+
+// messageAreaDelegate controls message area list presentation
+type messageAreaDelegate struct {
+	maxWidth int
+}
+
+func (d messageAreaDelegate) Height() int                             { return 1 }
+func (d messageAreaDelegate) Spacing() int                            { return 0 }
+func (d messageAreaDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
+func (d messageAreaDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
+	item, ok := listItem.(messageAreaListItem)
+	if !ok {
+		return
+	}
+
+	var str string
+	isSelected := index == m.Index()
+
+	areaType := strings.TrimSpace(item.area.AreaType)
+	if areaType == "" {
+		areaType = "Local"
+	} else {
+		areaType = strings.ToLower(areaType)
+		if len(areaType) > 1 {
+			areaType = strings.ToUpper(areaType[:1]) + areaType[1:]
+		} else if len(areaType) == 1 {
+			areaType = strings.ToUpper(areaType)
+		}
+	}
+
+	conference := strings.TrimSpace(item.area.ConferenceName)
+	if conference == "" {
+		conference = "(Unassigned)"
+	}
+
+	itemText := fmt.Sprintf(" %4d %-24s %-10s %-24s", item.area.ID, item.area.Name, areaType, conference)
+	if len(ui.StripANSI(itemText)) > d.maxWidth {
+		itemText = ui.TruncateWithPipeCodes(itemText, d.maxWidth-3)
+	}
+
+	padding := ""
+	if len(itemText) < d.maxWidth {
+		padding = strings.Repeat(" ", d.maxWidth-len(itemText))
+	}
+
+	if isSelected {
+		style := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorTextBright)).
+			Background(lipgloss.Color(ColorAccent)).
+			Bold(true).
+			Width(d.maxWidth)
+		str = style.Render(itemText + padding)
+	} else {
 		style := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(ColorTextNormal)).
 			Background(lipgloss.Color(ColorBgMedium)).

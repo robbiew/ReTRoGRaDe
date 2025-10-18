@@ -161,3 +161,80 @@ func (m *Model) loadMenuCommandsForEditing() error {
 	m.pendingInsertIndex = -1
 	return nil
 }
+
+// loadConferences loads all conferences from the database
+func (m *Model) loadConferences() error {
+	if m.db == nil {
+		return fmt.Errorf("database not available")
+	}
+
+	conferences, err := m.db.GetAllConferences()
+	if err != nil {
+		return fmt.Errorf("failed to get conferences: %w", err)
+	}
+
+	m.conferenceList = conferences
+
+	var items []list.Item
+	for _, conf := range conferences {
+		items = append(items, conferenceListItem{conference: conf})
+	}
+
+	maxWidth := 55
+	conferenceList := list.New(items, conferenceDelegate{maxWidth: maxWidth}, maxWidth, 15)
+	conferenceList.Title = ""
+	conferenceList.SetShowStatusBar(false)
+	conferenceList.SetFilteringEnabled(true)
+	conferenceList.SetShowHelp(false)
+	conferenceList.SetShowPagination(true)
+
+	conferenceList.Styles.Title = lipgloss.NewStyle()
+	conferenceList.Styles.PaginationStyle = lipgloss.NewStyle()
+	conferenceList.Styles.HelpStyle = lipgloss.NewStyle()
+
+	m.conferenceListUI = conferenceList
+	return nil
+}
+
+// loadMessageAreas loads all message areas from the database
+func (m *Model) loadMessageAreas() error {
+	if m.db == nil {
+		return fmt.Errorf("database not available")
+	}
+
+	areas, err := m.db.GetAllMessageAreas()
+	if err != nil {
+		return fmt.Errorf("failed to get message areas: %w", err)
+	}
+
+	if len(m.conferenceList) == 0 {
+		if conferences, err := m.db.GetAllConferences(); err == nil {
+			m.conferenceList = conferences
+		}
+	}
+
+	m.areaList = areas
+
+	var items []list.Item
+	for _, area := range areas {
+		if area.ConferenceName == "" {
+			area.ConferenceName = m.conferenceNameByID(area.ConferenceID)
+		}
+		items = append(items, messageAreaListItem{area: area})
+	}
+
+	maxWidth := 70
+	areasList := list.New(items, messageAreaDelegate{maxWidth: maxWidth}, maxWidth, 15)
+	areasList.Title = ""
+	areasList.SetShowStatusBar(false)
+	areasList.SetFilteringEnabled(true)
+	areasList.SetShowHelp(false)
+	areasList.SetShowPagination(true)
+
+	areasList.Styles.Title = lipgloss.NewStyle()
+	areasList.Styles.PaginationStyle = lipgloss.NewStyle()
+	areasList.Styles.HelpStyle = lipgloss.NewStyle()
+
+	m.areaListUI = areasList
+	return nil
+}

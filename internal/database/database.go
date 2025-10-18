@@ -72,6 +72,32 @@ type MenuCommand struct {
 	Hidden           bool
 }
 
+// Conference represents a high-level message conference
+type Conference struct {
+	ID          int
+	Name        string
+	Description string
+	SecLevel    string
+	Tagline     string
+	Hidden      bool
+}
+
+// MessageArea represents an individual message area/base
+type MessageArea struct {
+	ID             int
+	Name           string
+	File           string
+	Path           string
+	ReadSecLevel   string
+	WriteSecLevel  string
+	AreaType       string
+	EchoTag        string
+	RealNames      bool
+	Address        string
+	ConferenceID   int
+	ConferenceName string
+}
+
 // Database interface defines all database operations
 type Database interface {
 	// Configuration operations
@@ -116,6 +142,20 @@ type Database interface {
 	GetMenuCommands(menuID int) ([]MenuCommand, error)
 	UpdateMenuCommand(cmd *MenuCommand) error
 	DeleteMenuCommand(id int64) error
+
+	// Conference operations
+	CreateConference(conf *Conference) (int64, error)
+	GetConferenceByID(id int64) (*Conference, error)
+	GetAllConferences() ([]Conference, error)
+	UpdateConference(conf *Conference) error
+	DeleteConference(id int64) error
+
+	// Message area operations
+	CreateMessageArea(area *MessageArea) (int64, error)
+	GetMessageAreaByID(id int64) (*MessageArea, error)
+	GetAllMessageAreas() ([]MessageArea, error)
+	UpdateMessageArea(area *MessageArea) error
+	DeleteMessageArea(id int64) error
 
 	// Database management
 	InitializeSchema() error

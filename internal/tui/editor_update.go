@@ -131,6 +131,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleUserManagement(msg)
 		case SecurityLevelsMode:
 			return m.handleSecurityLevelsManagement(msg)
+		case ConferenceManagementMode:
+			return m.handleConferenceManagement(msg)
+		case AreaManagementMode:
+			return m.handleAreaManagement(msg)
 		case MenuManagementMode:
 			return m.handleMenuManagement(msg)
 		case MenuModifyMode:
@@ -228,6 +232,43 @@ func (m Model) handleDeleteConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 						if m.selectedCommandIndex >= len(m.menuCommandsList) && len(m.menuCommandsList) > 0 {
 							m.selectedCommandIndex = len(m.menuCommandsList) - 1
 						}
+					}
+				}
+			case "delete_conference":
+				if err := m.db.DeleteConference(m.confirmMenuID); err != nil {
+					m.message = fmt.Sprintf("Error deleting conference: %v", err)
+					m.messageTime = time.Now()
+					m.messageType = ErrorMessage
+				} else {
+					if err := m.loadConferences(); err != nil {
+						m.message = fmt.Sprintf("Error reloading conferences: %v", err)
+						m.messageTime = time.Now()
+						m.messageType = ErrorMessage
+					} else {
+						m.message = "Conference deleted"
+						m.messageTime = time.Now()
+						m.messageType = SuccessMessage
+					}
+					if err := m.loadMessageAreas(); err != nil {
+						m.message = fmt.Sprintf("Error reloading message areas: %v", err)
+						m.messageTime = time.Now()
+						m.messageType = ErrorMessage
+					}
+				}
+			case "delete_area":
+				if err := m.db.DeleteMessageArea(m.confirmMenuID); err != nil {
+					m.message = fmt.Sprintf("Error deleting message area: %v", err)
+					m.messageTime = time.Now()
+					m.messageType = ErrorMessage
+				} else {
+					if err := m.loadMessageAreas(); err != nil {
+						m.message = fmt.Sprintf("Error reloading message areas: %v", err)
+						m.messageTime = time.Now()
+						m.messageType = ErrorMessage
+					} else {
+						m.message = "Message area deleted"
+						m.messageTime = time.Now()
+						m.messageType = SuccessMessage
 					}
 				}
 			}
@@ -367,6 +408,10 @@ func (m Model) handleLevel4ModalNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 				m.returnToMode = UserManagementMode
 			} else if m.editingSecurityLevel != nil {
 				m.returnToMode = SecurityLevelsMode
+			} else if m.editingConference != nil {
+				m.returnToMode = ConferenceManagementMode
+			} else if m.editingArea != nil {
+				m.returnToMode = AreaManagementMode
 			} else {
 				hasSubSections := false
 				for _, field := range m.modalFields {
@@ -401,6 +446,20 @@ func (m Model) handleLevel4ModalNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 			m.modalFieldIndex = 0
 			m.modalSectionName = ""
 			m.editingSecurityLevel = nil
+		} else if m.editingConference != nil {
+			m.navMode = ConferenceManagementMode
+			m.modalFields = nil
+			m.modalFieldIndex = 0
+			m.modalSectionName = ""
+			m.editingConference = nil
+			m.conferenceIsNew = false
+		} else if m.editingArea != nil {
+			m.navMode = AreaManagementMode
+			m.modalFields = nil
+			m.modalFieldIndex = 0
+			m.modalSectionName = ""
+			m.editingArea = nil
+			m.areaIsNew = false
 		} else {
 			hasSubSections := false
 			for _, field := range m.modalFields {
@@ -756,6 +815,91 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.messageType = ErrorMessage
 				}
 				m.editingSecurityLevel = nil
+			} else if m.editingConference != nil {
+				savedConferenceID := m.editingConference.ID
+				if m.conferenceIsNew {
+					if _, err := m.db.CreateConference(m.editingConference); err != nil {
+						m.message = fmt.Sprintf("Error creating conference: %v", err)
+						m.messageTime = time.Now()
+						m.messageType = ErrorMessage
+						m.savePrompt = false
+						m.navMode = m.returnToMode
+						return m, nil
+					}
+					savedConferenceID = m.editingConference.ID
+				} else {
+					if err := m.db.UpdateConference(m.editingConference); err != nil {
+						m.message = fmt.Sprintf("Error saving conference: %v", err)
+						m.messageTime = time.Now()
+						m.messageType = ErrorMessage
+						m.savePrompt = false
+						m.navMode = m.returnToMode
+						return m, nil
+					}
+				}
+
+				if reloadErr := m.loadConferences(); reloadErr != nil {
+					m.message = fmt.Sprintf("Error reloading conferences: %v", reloadErr)
+					m.messageTime = time.Now()
+					m.messageType = ErrorMessage
+				} else {
+					items := m.conferenceListUI.Items()
+					for idx, item := range items {
+						if confItem, ok := item.(conferenceListItem); ok && confItem.conference.ID == savedConferenceID {
+							m.conferenceListUI.Select(idx)
+							break
+						}
+					}
+					m.message = "Conference saved"
+					m.messageTime = time.Now()
+					m.messageType = SuccessMessage
+				}
+				m.conferenceIsNew = false
+				m.editingConference = nil
+
+				// Refresh area list display names because conferences changed
+				if reloadErr := m.loadMessageAreas(); reloadErr != nil {
+					m.message = fmt.Sprintf("Error reloading message areas: %v", reloadErr)
+					m.messageTime = time.Now()
+					m.messageType = ErrorMessage
+				}
+			} else if m.editingArea != nil {
+				var saveErr error
+				if m.areaIsNew {
+					_, saveErr = m.db.CreateMessageArea(m.editingArea)
+				} else {
+					saveErr = m.db.UpdateMessageArea(m.editingArea)
+				}
+				if saveErr != nil {
+					m.message = fmt.Sprintf("Error saving message area: %v", saveErr)
+					m.messageTime = time.Now()
+					m.messageType = ErrorMessage
+					m.savePrompt = false
+					m.navMode = m.returnToMode
+					return m, nil
+				}
+
+				savedAreaID := m.editingArea.ID
+				if reloadErr := m.loadMessageAreas(); reloadErr != nil {
+					m.message = fmt.Sprintf("Error reloading message areas: %v", reloadErr)
+					m.messageTime = time.Now()
+					m.messageType = ErrorMessage
+				} else {
+					// Attempt to reselect saved area
+					items := m.areaListUI.Items()
+					for idx, item := range items {
+						if areaItem, ok := item.(messageAreaListItem); ok && areaItem.area.ID == savedAreaID {
+							m.areaListUI.Select(idx)
+							break
+						}
+					}
+					m.message = "Message area saved"
+					m.messageTime = time.Now()
+					m.messageType = SuccessMessage
+				}
+
+				m.areaIsNew = false
+				m.editingArea = nil
 			} else if m.editingUser != nil {
 				// Save user changes
 				err = m.db.UpdateUser(m.editingUser)
@@ -809,6 +953,12 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.menuCommandsList = nil
 				m.originalMenuCommands = nil
 				m.menuDataFields = nil
+			} else if m.editingConference != nil {
+				m.editingConference = nil
+				m.conferenceIsNew = false
+			} else if m.editingArea != nil {
+				m.editingArea = nil
+				m.areaIsNew = false
 			}
 			// CRITICAL: Reset modifiedCount when discarding changes
 			m.modifiedCount = 0
@@ -819,6 +969,10 @@ func (m Model) handleSaveChangesPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.navMode = m.returnToMode
 		m.editingSecurityLevel = nil
 		m.editingUser = nil
+		m.editingConference = nil
+		m.editingArea = nil
+		m.conferenceIsNew = false
+		m.areaIsNew = false
 
 		// Clean up modal if returning to Level 2
 		if m.returnToMode == Level2MenuNavigation {
@@ -1038,6 +1192,78 @@ func (m Model) handleLevel2MenuNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 						m.navMode = SecurityLevelsMode
 						m.message = ""
 					}
+				case "conference-editor":
+					if m.config.Configuration.Paths.Database == "" {
+						m.message = "Database path not configured. Please set it under Configuration > Paths > Database first."
+						m.messageTime = time.Now()
+						return m, nil
+					}
+
+					if m.db == nil {
+						if existingDB := config.GetDatabase(); existingDB != nil {
+							if sqliteDB, ok := existingDB.(*database.SQLiteDB); ok {
+								m.db = sqliteDB
+								if err := m.db.InitializeSchema(); err != nil {
+									m.message = fmt.Sprintf("Failed to initialize database schema: %v", err)
+									m.messageTime = time.Now()
+									return m, nil
+								}
+							} else {
+								m.message = "Database connection type mismatch"
+								m.messageTime = time.Now()
+								return m, nil
+							}
+						} else {
+							m.message = "No database connection available"
+							m.messageTime = time.Now()
+							return m, nil
+						}
+					}
+
+					if err := m.loadConferences(); err != nil {
+						m.message = fmt.Sprintf("Error loading conferences: %v", err)
+						m.messageTime = time.Now()
+					} else {
+						m.navMode = ConferenceManagementMode
+						m.message = ""
+					}
+
+				case "message-areas-editor":
+					if m.config.Configuration.Paths.Database == "" {
+						m.message = "Database path not configured. Please set it under Configuration > Paths > Database first."
+						m.messageTime = time.Now()
+						return m, nil
+					}
+
+					if m.db == nil {
+						if existingDB := config.GetDatabase(); existingDB != nil {
+							if sqliteDB, ok := existingDB.(*database.SQLiteDB); ok {
+								m.db = sqliteDB
+								if err := m.db.InitializeSchema(); err != nil {
+									m.message = fmt.Sprintf("Failed to initialize database schema: %v", err)
+									m.messageTime = time.Now()
+									return m, nil
+								}
+							} else {
+								m.message = "Database connection type mismatch"
+								m.messageTime = time.Now()
+								return m, nil
+							}
+						} else {
+							m.message = "No database connection available"
+							m.messageTime = time.Now()
+							return m, nil
+						}
+					}
+
+					if err := m.loadMessageAreas(); err != nil {
+						m.message = fmt.Sprintf("Error loading message areas: %v", err)
+						m.messageTime = time.Now()
+					} else {
+						m.navMode = AreaManagementMode
+						m.message = ""
+					}
+
 				case "menu-editor":
 					// Launch menu management interface
 					// Check if database path is configured
@@ -2835,6 +3061,200 @@ func (m Model) handleEditingValue(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleConferenceManagement processes input in conference management mode
+func (m Model) handleConferenceManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch msg.String() {
+	case "up", "k":
+		idx := m.conferenceListUI.Index()
+		if idx > 0 {
+			m.conferenceListUI.Select(idx - 1)
+		}
+		return m, nil
+	case "down", "j":
+		idx := m.conferenceListUI.Index()
+		items := m.conferenceListUI.Items()
+		if idx < len(items)-1 {
+			m.conferenceListUI.Select(idx + 1)
+		}
+		return m, nil
+	case "home":
+		m.conferenceListUI.Select(0)
+		return m, nil
+	case "end":
+		items := m.conferenceListUI.Items()
+		if len(items) > 0 {
+			m.conferenceListUI.Select(len(items) - 1)
+		}
+		return m, nil
+	case "enter":
+		selected := m.conferenceListUI.SelectedItem()
+		if selected == nil {
+			return m, nil
+		}
+
+		confItem, ok := selected.(conferenceListItem)
+		if !ok {
+			return m, nil
+		}
+
+		confCopy := confItem.conference
+		m.beginConferenceEdit(&confCopy, false)
+		return m, nil
+	case "n", "N":
+		newConf := database.Conference{
+			SecLevel: "public",
+			Hidden:   false,
+		}
+		m.beginConferenceEdit(&newConf, true)
+		return m, nil
+	case "d", "D":
+		items := m.conferenceListUI.Items()
+		idx := m.conferenceListUI.Index()
+		if idx < 0 || idx >= len(items) {
+			return m, nil
+		}
+
+		confItem, ok := items[idx].(conferenceListItem)
+		if !ok || confItem.conference.ID == 0 {
+			m.message = "Conference must be saved before it can be deleted"
+			m.messageTime = time.Now()
+			m.messageType = WarningMessage
+			return m, nil
+		}
+
+		m.confirmAction = "delete_conference"
+		m.confirmMenuID = int64(confItem.conference.ID)
+		m.confirmPromptText = fmt.Sprintf("Delete conference '%s'? This action cannot be undone.", confItem.conference.Name)
+		m.savePrompt = true
+		m.savePromptSelection = 0
+		m.navMode = DeleteConfirmPrompt
+		m.returnToMode = ConferenceManagementMode
+		return m, nil
+	case "f1":
+		m.message = "Keys: N New   ENTER Edit   D Delete   ESC Back"
+		m.messageTime = time.Now()
+		m.messageType = InfoMessage
+		return m, nil
+	case "esc":
+		m.navMode = Level2MenuNavigation
+		m.message = ""
+		return m, nil
+	}
+
+	m.conferenceListUI, cmd = m.conferenceListUI.Update(msg)
+	return m, cmd
+}
+
+// handleAreaManagement processes input in message area management mode
+func (m Model) handleAreaManagement(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch msg.String() {
+	case "up", "k":
+		idx := m.areaListUI.Index()
+		if idx > 0 {
+			m.areaListUI.Select(idx - 1)
+		}
+		return m, nil
+	case "down", "j":
+		idx := m.areaListUI.Index()
+		items := m.areaListUI.Items()
+		if idx < len(items)-1 {
+			m.areaListUI.Select(idx + 1)
+		}
+		return m, nil
+	case "home":
+		m.areaListUI.Select(0)
+		return m, nil
+	case "end":
+		items := m.areaListUI.Items()
+		if len(items) > 0 {
+			m.areaListUI.Select(len(items) - 1)
+		}
+		return m, nil
+	case "enter":
+		selected := m.areaListUI.SelectedItem()
+		if selected == nil {
+			return m, nil
+		}
+
+		areaItem, ok := selected.(messageAreaListItem)
+		if !ok {
+			return m, nil
+		}
+
+		areaCopy := areaItem.area
+		m.beginAreaEdit(&areaCopy, false)
+		return m, nil
+	case "n", "N":
+		if len(m.conferenceList) == 0 {
+			if m.db != nil {
+				if conferences, err := m.db.GetAllConferences(); err == nil {
+					m.conferenceList = conferences
+				}
+			}
+		}
+
+		if len(m.conferenceList) == 0 {
+			m.message = "Add a conference before creating message areas."
+			m.messageTime = time.Now()
+			m.messageType = WarningMessage
+			return m, nil
+		}
+
+		defaultPath := m.defaultMessageBasePath()
+		newArea := database.MessageArea{
+			Path:           defaultPath,
+			ReadSecLevel:   "public",
+			WriteSecLevel:  "public",
+			AreaType:       "local",
+			RealNames:      false,
+			Address:        "0:0/0 - Local",
+			ConferenceID:   m.conferenceList[0].ID,
+			ConferenceName: m.conferenceList[0].Name,
+		}
+		m.beginAreaEdit(&newArea, true)
+		return m, nil
+	case "d", "D":
+		items := m.areaListUI.Items()
+		idx := m.areaListUI.Index()
+		if idx < 0 || idx >= len(items) {
+			return m, nil
+		}
+
+		areaItem, ok := items[idx].(messageAreaListItem)
+		if !ok || areaItem.area.ID == 0 {
+			m.message = "Message area must be saved before deletion"
+			m.messageTime = time.Now()
+			m.messageType = WarningMessage
+			return m, nil
+		}
+
+		m.confirmAction = "delete_area"
+		m.confirmMenuID = int64(areaItem.area.ID)
+		m.confirmPromptText = fmt.Sprintf("Delete area '%s'? This action cannot be undone.", areaItem.area.Name)
+		m.savePrompt = true
+		m.savePromptSelection = 0
+		m.navMode = DeleteConfirmPrompt
+		m.returnToMode = AreaManagementMode
+		return m, nil
+	case "f1":
+		m.message = "Keys: N New   ENTER Edit   D Delete   ESC Back"
+		m.messageTime = time.Now()
+		m.messageType = InfoMessage
+		return m, nil
+	case "esc":
+		m.navMode = Level2MenuNavigation
+		m.message = ""
+		return m, nil
+	}
+
+	m.areaListUI, cmd = m.areaListUI.Update(msg)
+	return m, cmd
+}
+
 // Update this helper function
 func (m Model) returnToMenuModifyOrModal() NavigationMode {
 	// If we're editing a menu command, return to command edit mode
@@ -2847,4 +3267,453 @@ func (m Model) returnToMenuModifyOrModal() NavigationMode {
 	}
 	// Otherwise return to Level4ModalNavigation
 	return Level4ModalNavigation
+}
+
+func (m *Model) defaultMessageBasePath() string {
+	if m.config != nil {
+		if path := strings.TrimSpace(m.config.Configuration.Paths.MessageBase); path != "" {
+			return path
+		}
+	}
+
+	if m.db != nil {
+		if value, err := m.db.GetConfig("Configuration.Paths", "", "Message_Base"); err == nil {
+			if path := strings.TrimSpace(value); path != "" {
+				return path
+			}
+		}
+	}
+
+	return "messages"
+}
+
+func (m *Model) conferenceNameByID(id int) string {
+	if id <= 0 {
+		return ""
+	}
+
+	for _, conf := range m.conferenceList {
+		if conf.ID == id {
+			return conf.Name
+		}
+	}
+
+	if m.db != nil {
+		if conferences, err := m.db.GetAllConferences(); err == nil {
+			m.conferenceList = conferences
+			for _, conf := range conferences {
+				if conf.ID == id {
+					return conf.Name
+				}
+			}
+		}
+	}
+
+	return ""
+}
+
+func (m *Model) beginConferenceEdit(conf *database.Conference, isNew bool) {
+	m.editingConference = conf
+	m.conferenceIsNew = isNew
+	m.modalSectionName = "Conference"
+	m.modalFieldIndex = 0
+
+	m.modalFields = []SubmenuItem{
+		{
+			ID:       "conference-name",
+			Label:    "Name",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "conference-name",
+				Label:     "Name",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return conf.Name },
+					SetValue: func(v interface{}) error {
+						value := strings.TrimSpace(v.(string))
+						if value == "" {
+							return fmt.Errorf("name cannot be empty")
+						}
+						conf.Name = value
+						return nil
+					},
+				},
+				Validation: func(v interface{}) error {
+					if strings.TrimSpace(v.(string)) == "" {
+						return fmt.Errorf("name is required")
+					}
+					return nil
+				},
+				HelpText: "Short identifier for the conference",
+			},
+		},
+		{
+			ID:       "conference-description",
+			Label:    "Description",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "conference-description",
+				Label:     "Description",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return conf.Description },
+					SetValue: func(v interface{}) error {
+						conf.Description = strings.TrimSpace(v.(string))
+						return nil
+					},
+				},
+				HelpText: "Summary shown to users",
+			},
+		},
+		{
+			ID:       "conference-sec-level",
+			Label:    "Security Level",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "conference-sec-level",
+				Label:     "Security Level",
+				ValueType: SelectValue,
+				Field: ConfigField{
+					GetValue: func() interface{} {
+						value := strings.TrimSpace(conf.SecLevel)
+						if value == "" {
+							return "public"
+						}
+						return strings.ToLower(value)
+					},
+					SetValue: func(v interface{}) error {
+						conf.SecLevel = strings.ToLower(strings.TrimSpace(v.(string)))
+						return nil
+					},
+				},
+				SelectOptions: m.getSecurityLevelSelectOptionsWithPublic(),
+				HelpText:      "Minimum security level required (or Public)",
+			},
+		},
+		{
+			ID:       "conference-tagline",
+			Label:    "Tagline",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "conference-tagline",
+				Label:     "Tagline",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return conf.Tagline },
+					SetValue: func(v interface{}) error {
+						conf.Tagline = strings.TrimSpace(v.(string))
+						return nil
+					},
+				},
+				HelpText: "Displayed when entering the conference",
+			},
+		},
+		{
+			ID:       "conference-hidden",
+			Label:    "Hidden",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "conference-hidden",
+				Label:     "Hidden",
+				ValueType: BoolValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return conf.Hidden },
+					SetValue: func(v interface{}) error {
+						conf.Hidden = v.(bool)
+						return nil
+					},
+				},
+				HelpText: "Hide conference from general listings",
+			},
+		},
+	}
+
+	m.navMode = Level4ModalNavigation
+	m.message = ""
+}
+
+func (m *Model) beginAreaEdit(area *database.MessageArea, isNew bool) {
+	conferenceOptions := m.getConferenceSelectOptions()
+	if len(conferenceOptions) == 0 {
+		if err := m.loadConferences(); err != nil {
+			m.message = fmt.Sprintf("Unable to load conferences: %v", err)
+			m.messageTime = time.Now()
+			m.messageType = ErrorMessage
+		} else {
+			m.message = "No conferences available. Add a conference before creating message areas."
+			m.messageTime = time.Now()
+			m.messageType = WarningMessage
+		}
+		m.editingArea = nil
+		m.areaIsNew = false
+		m.navMode = ConferenceManagementMode
+		return
+	}
+
+	if area.ConferenceID == 0 {
+		if id, err := strconv.Atoi(conferenceOptions[0].Value); err == nil {
+			area.ConferenceID = id
+			area.ConferenceName = conferenceOptions[0].Label
+		}
+	}
+
+	if area.ConferenceName == "" {
+		area.ConferenceName = m.conferenceNameByID(area.ConferenceID)
+	}
+
+	m.editingArea = area
+	m.areaIsNew = isNew
+	m.modalSectionName = "Message Area"
+	m.modalFieldIndex = 0
+
+	m.modalFields = []SubmenuItem{
+		{
+			ID:       "area-name",
+			Label:    "Name",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "area-name",
+				Label:     "Name",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return area.Name },
+					SetValue: func(v interface{}) error {
+						value := strings.TrimSpace(v.(string))
+						if value == "" {
+							return fmt.Errorf("name cannot be empty")
+						}
+						area.Name = value
+						return nil
+					},
+				},
+				Validation: func(v interface{}) error {
+					if strings.TrimSpace(v.(string)) == "" {
+						return fmt.Errorf("name is required")
+					}
+					return nil
+				},
+				HelpText: "Display name for the message area",
+			},
+		},
+		{
+			ID:       "area-file",
+			Label:    "File Name",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "area-file",
+				Label:     "File",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return area.File },
+					SetValue: func(v interface{}) error {
+						value := strings.TrimSpace(v.(string))
+						if value == "" {
+							return fmt.Errorf("file name is required")
+						}
+						if strings.ContainsAny(value, "/\\.") {
+							return fmt.Errorf("file name should not contain path separators or extensions")
+						}
+						area.File = value
+						return nil
+					},
+				},
+				Validation: func(v interface{}) error {
+					value := strings.TrimSpace(v.(string))
+					if value == "" {
+						return fmt.Errorf("file name is required")
+					}
+					if strings.ContainsAny(value, "/\\.") {
+						return fmt.Errorf("file name should not contain path separators or extensions")
+					}
+					return nil
+				},
+				HelpText: "Base filename (no extension) for storing messages",
+			},
+		},
+		{
+			ID:       "area-path",
+			Label:    "Path",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "area-path",
+				Label:     "Path",
+				ValueType: PathValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return area.Path },
+					SetValue: func(v interface{}) error {
+						value := strings.TrimSpace(v.(string))
+						if value == "" {
+							return fmt.Errorf("path is required")
+						}
+						area.Path = value
+						return nil
+					},
+				},
+				HelpText: "Filesystem path for this area's messages",
+			},
+		},
+		{
+			ID:       "area-conference",
+			Label:    "Conference",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "area-conference",
+				Label:     "Conference",
+				ValueType: SelectValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return fmt.Sprintf("%d", area.ConferenceID) },
+					SetValue: func(v interface{}) error {
+						valueStr := strings.TrimSpace(v.(string))
+						id, err := strconv.Atoi(valueStr)
+						if err != nil {
+							return fmt.Errorf("invalid conference selection")
+						}
+						area.ConferenceID = id
+						area.ConferenceName = m.conferenceNameByID(id)
+						return nil
+					},
+				},
+				SelectOptions: conferenceOptions,
+				HelpText:      "Conference this area belongs to",
+			},
+		},
+		{
+			ID:       "area-read-level",
+			Label:    "Read Level",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "area-read-level",
+				Label:     "Read Level",
+				ValueType: SelectValue,
+				Field: ConfigField{
+					GetValue: func() interface{} {
+						value := strings.TrimSpace(area.ReadSecLevel)
+						if value == "" {
+							return "public"
+						}
+						return strings.ToLower(value)
+					},
+					SetValue: func(v interface{}) error {
+						area.ReadSecLevel = strings.ToLower(strings.TrimSpace(v.(string)))
+						return nil
+					},
+				},
+				SelectOptions: m.getSecurityLevelSelectOptionsWithPublic(),
+				HelpText:      "Minimum security level required to read",
+			},
+		},
+		{
+			ID:       "area-write-level",
+			Label:    "Write Level",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "area-write-level",
+				Label:     "Write Level",
+				ValueType: SelectValue,
+				Field: ConfigField{
+					GetValue: func() interface{} {
+						value := strings.TrimSpace(area.WriteSecLevel)
+						if value == "" {
+							return "public"
+						}
+						return strings.ToLower(value)
+					},
+					SetValue: func(v interface{}) error {
+						area.WriteSecLevel = strings.ToLower(strings.TrimSpace(v.(string)))
+						return nil
+					},
+				},
+				SelectOptions: m.getSecurityLevelSelectOptionsWithPublic(),
+				HelpText:      "Minimum security level required to post",
+			},
+		},
+		{
+			ID:       "area-type",
+			Label:    "Area Type",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "area-type",
+				Label:     "Area Type",
+				ValueType: SelectValue,
+				Field: ConfigField{
+					GetValue: func() interface{} {
+						value := strings.TrimSpace(area.AreaType)
+						if value == "" {
+							return "local"
+						}
+						return strings.ToLower(value)
+					},
+					SetValue: func(v interface{}) error {
+						area.AreaType = strings.ToLower(strings.TrimSpace(v.(string)))
+						return nil
+					},
+				},
+				SelectOptions: getAreaTypeOptions(),
+				HelpText:      "Defines how this area is routed",
+			},
+		},
+		{
+			ID:       "area-echo-tag",
+			Label:    "Echo Tag",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "area-echo-tag",
+				Label:     "Echo Tag",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return area.EchoTag },
+					SetValue: func(v interface{}) error {
+						area.EchoTag = strings.TrimSpace(v.(string))
+						return nil
+					},
+				},
+				Validation: func(v interface{}) error {
+					if strings.EqualFold(area.AreaType, "echomail") && strings.TrimSpace(v.(string)) == "" {
+						return fmt.Errorf("echo tag is required for echomail areas")
+					}
+					return nil
+				},
+				HelpText: "Network tag for echomail areas",
+			},
+		},
+		{
+			ID:       "area-real-names",
+			Label:    "Real Names",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "area-real-names",
+				Label:     "Real Names",
+				ValueType: BoolValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return area.RealNames },
+					SetValue: func(v interface{}) error {
+						area.RealNames = v.(bool)
+						return nil
+					},
+				},
+				HelpText: "Require callers to use real names",
+			},
+		},
+		{
+			ID:       "area-address",
+			Label:    "Address",
+			ItemType: EditableField,
+			EditableItem: &MenuItem{
+				ID:        "area-address",
+				Label:     "Address",
+				ValueType: StringValue,
+				Field: ConfigField{
+					GetValue: func() interface{} { return area.Address },
+					SetValue: func(v interface{}) error {
+						area.Address = strings.TrimSpace(v.(string))
+						return nil
+					},
+				},
+				HelpText: "Fido-style address used for routing",
+			},
+		},
+	}
+
+	m.navMode = Level4ModalNavigation
+	m.message = ""
 }

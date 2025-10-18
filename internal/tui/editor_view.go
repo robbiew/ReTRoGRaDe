@@ -131,6 +131,28 @@ func (m Model) View() string {
 		return m.canvasToString(canvas)
 	}
 
+	// Layer 1.65: Conference Management
+	if m.navMode == ConferenceManagementMode {
+		conferenceStr := m.renderConferenceManagement()
+		m.overlayStringCenteredWithClear(canvas, conferenceStr)
+
+		footer := m.renderFooter()
+		m.overlayString(canvas, footer, m.screenHeight-1, 0)
+
+		return m.canvasToString(canvas)
+	}
+
+	// Layer 1.7: Message Area Management
+	if m.navMode == AreaManagementMode {
+		areaStr := m.renderAreaManagement()
+		m.overlayStringCenteredWithClear(canvas, areaStr)
+
+		footer := m.renderFooter()
+		m.overlayString(canvas, footer, m.screenHeight-1, 0)
+
+		return m.canvasToString(canvas)
+	}
+
 	// Layer 1.7: Menu Management (full screen mode)
 	if m.navMode == MenuManagementMode {
 		menuManagementStr := m.renderMenuManagement()
@@ -1079,6 +1101,108 @@ func (m Model) renderSecurityLevelsManagement() string {
 		Render(combined)
 
 	return securityLevelsBox
+}
+
+// renderConferenceManagement renders the conference management interface
+func (m Model) renderConferenceManagement() string {
+	if len(m.conferenceListUI.Items()) == 0 {
+		emptyMsg := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorTextDim)).
+			Italic(true).
+			Render("No conferences found")
+
+		emptyBox := lipgloss.NewStyle().
+			Background(lipgloss.Color(ColorBgMedium)).
+			Padding(2, 4).
+			Render(emptyMsg)
+
+		return emptyBox
+	}
+
+	headerStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorPrimary)).
+		Foreground(lipgloss.Color(ColorTextBright)).
+		Bold(true).
+		Width(55).
+		Align(lipgloss.Center)
+
+	header := headerStyle.Render(fmt.Sprintf("[ Conference Management (%d conferences) ]", len(m.conferenceList)))
+
+	separatorStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorBgMedium)).
+		Foreground(lipgloss.Color(ColorPrimary)).
+		Width(55)
+	separator := separatorStyle.Render(strings.Repeat("-", 55))
+
+	columnHeaders := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorBgMedium)).
+		Foreground(lipgloss.Color(ColorTextBright)).
+		Bold(true).
+		Width(55).
+		Render(fmt.Sprintf(" %-26s %-10s %-4s", "Name", "Sec Level", "Hide"))
+
+	listView := strings.TrimSpace(m.conferenceListUI.View())
+
+	allLines := []string{header, separator, columnHeaders, separator, listView, separator}
+
+	combined := strings.Join(allLines, "\n")
+
+	box := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorBgMedium)).
+		Render(combined)
+
+	return box
+}
+
+// renderAreaManagement renders the message area management interface
+func (m Model) renderAreaManagement() string {
+	if len(m.areaListUI.Items()) == 0 {
+		emptyMsg := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(ColorTextDim)).
+			Italic(true).
+			Render("No message areas found")
+
+		emptyBox := lipgloss.NewStyle().
+			Background(lipgloss.Color(ColorBgMedium)).
+			Padding(2, 4).
+			Render(emptyMsg)
+
+		return emptyBox
+	}
+
+	headerStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorPrimary)).
+		Foreground(lipgloss.Color(ColorTextBright)).
+		Bold(true).
+		Width(70).
+		Align(lipgloss.Center)
+
+	header := headerStyle.Render(fmt.Sprintf("[ Message Area Management (%d areas) ]", len(m.areaList)))
+
+	separatorStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorBgMedium)).
+		Foreground(lipgloss.Color(ColorPrimary)).
+		Width(70)
+	separator := separatorStyle.Render(strings.Repeat("-", 70))
+
+	columnHeaders := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorBgMedium)).
+		Foreground(lipgloss.Color(ColorTextBright)).
+		Bold(true).
+		Width(70).
+		Render(fmt.Sprintf(" %-4s %-24s %-10s %-24s", "ID", "Name", "Type", "Conference"))
+
+	listView := strings.TrimSpace(m.areaListUI.View())
+
+	allLines := []string{header, separator, columnHeaders, separator, listView, separator}
+
+	combined := strings.Join(allLines, "\n")
+
+	box := lipgloss.NewStyle().
+		Background(lipgloss.Color(ColorBgMedium)).
+		Render(combined)
+
+	return box
 }
 
 // renderMenuManagement renders the menu management interface
@@ -2171,6 +2295,10 @@ func (m Model) renderFooter() string {
 		footerText = "  Up/Down Navigate   ENTER Edit   ESC Back"
 	case SecurityLevelsMode:
 		footerText = "  Up/Down Navigate   ENTER Edit   ESC Back"
+	case ConferenceManagementMode:
+		footerText = "  Up/Down Navigate   ENTER Edit   N New   D Delete   ESC Back"
+	case AreaManagementMode:
+		footerText = "  Up/Down Navigate   ENTER Edit   N New   D Delete   ESC Back"
 	case MenuManagementMode:
 		footerText = "  Up/Down Navigate   ENTER/M Modify   I Insert   D Delete   ESC Back"
 	case MenuModifyMode:

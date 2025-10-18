@@ -1,6 +1,9 @@
 package database
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // SeedDefaultMainMenu seeds the MainMenu with default structure and commands,
 // and ensures related default menus exist.
@@ -47,7 +50,10 @@ func SeedDefaultMainMenu(db Database) error {
 				}
 			}
 		}
-		return seedDefaultMsgMenu(db)
+		if err := seedDefaultMsgMenu(db); err != nil {
+			return err
+		}
+		return seedDefaultMessageStructure(db)
 	}
 
 	menu = &Menu{
@@ -107,7 +113,10 @@ func SeedDefaultMainMenu(db Database) error {
 		}
 	}
 
-	return seedDefaultMsgMenu(db)
+	if err := seedDefaultMsgMenu(db); err != nil {
+		return err
+	}
+	return seedDefaultMessageStructure(db)
 }
 
 func seedDefaultMsgMenu(db Database) error {
@@ -211,6 +220,103 @@ func seedDefaultMsgMenu(db Database) error {
 		if _, err := db.CreateMenuCommand(&cmd); err != nil {
 			return fmt.Errorf("failed to create MsgMenu command %s: %w", cmd.Keys, err)
 		}
+	}
+
+	return nil
+}
+
+func seedDefaultMessageStructure(db Database) error {
+	const conferenceName = "Local Areas"
+	const areaName = "General Chatter"
+
+	conferenceID, err := ensureConference(db, conferenceName)
+	if err != nil {
+		return err
+	}
+
+	if err := ensureMessageArea(db, areaName, conferenceID, conferenceName); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func ensureConference(db Database, name string) (int, error) {
+	conferences, err := db.GetAllConferences()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get conferences: %w", err)
+	}
+
+	for _, conf := range conferences {
+		if strings.EqualFold(conf.Name, name) {
+			return conf.ID, nil
+		}
+	}
+
+	conf := &Conference{
+		Name:     name,
+		SecLevel: "public",
+		Tagline:  "",
+		Hidden:   false,
+	}
+
+	id, err := db.CreateConference(conf)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create conference %s: %w", name, err)
+	}
+
+	return int(id), nil
+}
+
+func ensureMessageArea(db Database, name string, conferenceID int, conferenceName string) error {
+	areas, err := db.GetAllMessageAreas()
+	if err != nil {
+		return fmt.Errorf("failed to get message areas: %w", err)
+	}
+
+	for _, area := range areas {
+		if strings.EqualFold(area.Name, name) {
+			if area.ConferenceID != conferenceID {
+				area.ConferenceID = conferenceID
+				area.ConferenceName = conferenceName
+				if err := db.UpdateMessageArea(&area); err != nil {
+					return fmt.Errorf("failed to update existing message area %s: %w", name, err)
+				}
+			}
+			return nil
+		}
+	}
+
+	basePath := "messages"
+	if value, err := db.GetConfig("Configuration.Paths", "", "Message_Base"); err == nil {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			basePath = trimmed
+		}
+	}
+	basePath = strings.TrimRight(basePath, "/\\")
+
+	areaPath := basePath
+	if areaPath == "" {
+		areaPath = "messages"
+	}
+	areaPath = areaPath + "/general"
+
+	area := &MessageArea{
+		Name:           name,
+		File:           "general",
+		Path:           areaPath,
+		ReadSecLevel:   "public",
+		WriteSecLevel:  "public",
+		AreaType:       "local",
+		EchoTag:        "",
+		RealNames:      false,
+		Address:        "0:0/0 - Local",
+		ConferenceID:   conferenceID,
+		ConferenceName: conferenceName,
+	}
+
+	if _, err := db.CreateMessageArea(area); err != nil {
+		return fmt.Errorf("failed to create message area %s: %w", name, err)
 	}
 
 	return nil

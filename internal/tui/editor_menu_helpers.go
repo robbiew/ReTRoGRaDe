@@ -72,6 +72,49 @@ func (m *Model) getSecurityLevelSelectOptions() []SelectOption {
 	return options
 }
 
+// getSecurityLevelSelectOptionsWithPublic returns security level options including Public fallback
+func (m *Model) getSecurityLevelSelectOptionsWithPublic() []SelectOption {
+	options := []SelectOption{
+		{
+			Value:       "public",
+			Label:       "Public",
+			Description: "Accessible to all users",
+			Implemented: true,
+		},
+	}
+	return append(options, m.getSecurityLevelSelectOptions()...)
+}
+
+func (m *Model) getConferenceSelectOptions() []SelectOption {
+	conferences := m.conferenceList
+	if len(conferences) == 0 && m.db != nil {
+		if list, err := m.db.GetAllConferences(); err == nil {
+			conferences = list
+			m.conferenceList = list
+		}
+	}
+
+	options := make([]SelectOption, 0, len(conferences))
+	for _, conf := range conferences {
+		options = append(options, SelectOption{
+			Value:       fmt.Sprintf("%d", conf.ID),
+			Label:       conf.Name,
+			Description: strings.TrimSpace(conf.Description),
+			Implemented: true,
+		})
+	}
+
+	return options
+}
+
+func getAreaTypeOptions() []SelectOption {
+	return []SelectOption{
+		{Value: "local", Label: "Local", Description: "Local-only message area", Implemented: true},
+		{Value: "echomail", Label: "Echomail", Description: "Network echoed message area", Implemented: true},
+		{Value: "netmail", Label: "Netmail", Description: "Direct network mail", Implemented: true},
+	}
+}
+
 func (m *Model) getMenuSelectOptions() []SelectOption {
 	menus, err := m.db.GetAllMenus()
 	if err != nil {

@@ -17,6 +17,16 @@ func editorsMenu() MenuCategory {
 				ItemType: ActionItem,
 			},
 			{
+				ID:       "conference-editor",
+				Label:    "Conferences",
+				ItemType: ActionItem,
+			},
+			{
+				ID:       "message-areas-editor",
+				Label:    "Message Areas",
+				ItemType: ActionItem,
+			},
+			{
 				ID:       "menu-editor",
 				Label:    "Menus",
 				ItemType: ActionItem,

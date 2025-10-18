@@ -181,6 +181,48 @@ func (s *SQLiteDB) InitializeSchema() error {
 		return fmt.Errorf("failed to create menu_commands index: %w", err)
 	}
 
+	// Create conferences table
+	_, err = tx.Exec(`
+		CREATE TABLE IF NOT EXISTS conferences (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL UNIQUE,
+			description TEXT,
+			sec_level TEXT NOT NULL,
+			tagline TEXT,
+			hidden BOOLEAN NOT NULL DEFAULT 0
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create conferences: %w", err)
+	}
+
+	// Create message_areas table
+	_, err = tx.Exec(`
+		CREATE TABLE IF NOT EXISTS message_areas (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL UNIQUE,
+			file TEXT NOT NULL UNIQUE,
+			path TEXT NOT NULL,
+			read_sec_level TEXT NOT NULL,
+			write_sec_level TEXT NOT NULL,
+			area_type TEXT NOT NULL,
+			echo_tag TEXT,
+			real_names BOOLEAN NOT NULL DEFAULT 0,
+			address TEXT,
+			conference_id INTEGER NOT NULL DEFAULT 0,
+			FOREIGN KEY (conference_id) REFERENCES conferences(id)
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create message_areas: %w", err)
+	}
+
+	if _, err := tx.Exec(`ALTER TABLE message_areas ADD COLUMN conference_id INTEGER NOT NULL DEFAULT 0`); err != nil {
+		if !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+			return fmt.Errorf("failed to add conference_id column to message_areas: %w", err)
+		}
+	}
+
 	// Ensure new columns exist for legacy databases
 	if _, err := tx.Exec(`ALTER TABLE menus ADD COLUMN left_bracket TEXT DEFAULT '['`); err != nil {
 		if !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
@@ -647,6 +689,212 @@ func (s *SQLiteDB) DeleteMenuCommand(id int64) error {
 
 	if err := tx.Commit(); err != nil {
 		return err
+	}
+	return nil
+}
+
+// CreateConference inserts a new conference record
+func (s *SQLiteDB) CreateConference(conf *Conference) (int64, error) {
+	if conf == nil {
+		return 0, fmt.Errorf("conference cannot be nil")
+	}
+
+	result, err := s.db.Exec(`
+		INSERT INTO conferences (name, description, sec_level, tagline, hidden)
+		VALUES (?, ?, ?, ?, ?)
+	`, conf.Name, conf.Description, conf.SecLevel, conf.Tagline, conf.Hidden)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create conference: %w", err)
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get conference ID: %w", err)
+	}
+
+	conf.ID = int(id)
+	return id, nil
+}
+
+// GetConferenceByID retrieves a conference by its ID
+func (s *SQLiteDB) GetConferenceByID(id int64) (*Conference, error) {
+	var conf Conference
+	var hiddenInt int
+
+	err := s.db.QueryRow(`
+		SELECT id, name, description, sec_level, tagline, hidden
+		FROM conferences WHERE id = ?
+	`, id).Scan(&conf.ID, &conf.Name, &conf.Description, &conf.SecLevel, &conf.Tagline, &hiddenInt)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("conference not found: %d", id)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get conference: %w", err)
+	}
+
+	conf.Hidden = hiddenInt != 0
+	return &conf, nil
+}
+
+// GetAllConferences returns all conferences ordered by name
+func (s *SQLiteDB) GetAllConferences() ([]Conference, error) {
+	rows, err := s.db.Query(`
+		SELECT id, name, description, sec_level, tagline, hidden
+		FROM conferences
+		ORDER BY name
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query conferences: %w", err)
+	}
+	defer rows.Close()
+
+	var conferences []Conference
+	for rows.Next() {
+		var conf Conference
+		var hiddenInt int
+		if err := rows.Scan(&conf.ID, &conf.Name, &conf.Description, &conf.SecLevel, &conf.Tagline, &hiddenInt); err != nil {
+			return nil, fmt.Errorf("failed to scan conference: %w", err)
+		}
+		conf.Hidden = hiddenInt != 0
+		conferences = append(conferences, conf)
+	}
+
+	return conferences, rows.Err()
+}
+
+// UpdateConference updates an existing conference
+func (s *SQLiteDB) UpdateConference(conf *Conference) error {
+	if conf == nil {
+		return fmt.Errorf("conference cannot be nil")
+	}
+
+	_, err := s.db.Exec(`
+		UPDATE conferences
+		SET name = ?, description = ?, sec_level = ?, tagline = ?, hidden = ?
+		WHERE id = ?
+	`, conf.Name, conf.Description, conf.SecLevel, conf.Tagline, conf.Hidden, conf.ID)
+	if err != nil {
+		return fmt.Errorf("failed to update conference: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteConference removes a conference by ID
+func (s *SQLiteDB) DeleteConference(id int64) error {
+	_, err := s.db.Exec(`DELETE FROM conferences WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete conference: %w", err)
+	}
+	return nil
+}
+
+// CreateMessageArea inserts a new message area record
+func (s *SQLiteDB) CreateMessageArea(area *MessageArea) (int64, error) {
+	if area == nil {
+		return 0, fmt.Errorf("message area cannot be nil")
+	}
+	if area.ConferenceID <= 0 {
+		return 0, fmt.Errorf("message area must be assigned to a conference")
+	}
+
+	result, err := s.db.Exec(`
+		INSERT INTO message_areas (name, file, path, read_sec_level, write_sec_level, area_type, echo_tag, real_names, address, conference_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, area.Name, area.File, area.Path, area.ReadSecLevel, area.WriteSecLevel, area.AreaType, area.EchoTag, area.RealNames, area.Address, area.ConferenceID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create message area: %w", err)
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get message area ID: %w", err)
+	}
+
+	area.ID = int(id)
+	return id, nil
+}
+
+// GetMessageAreaByID retrieves a message area by ID
+func (s *SQLiteDB) GetMessageAreaByID(id int64) (*MessageArea, error) {
+	var area MessageArea
+	var realNamesInt int
+	var conferenceName sql.NullString
+
+	err := s.db.QueryRow(`
+		SELECT ma.id, ma.name, ma.file, ma.path, ma.read_sec_level, ma.write_sec_level, ma.area_type, ma.echo_tag, ma.real_names, ma.address, ma.conference_id, c.name
+		FROM message_areas ma
+		LEFT JOIN conferences c ON c.id = ma.conference_id
+		WHERE ma.id = ?
+	`, id).Scan(&area.ID, &area.Name, &area.File, &area.Path, &area.ReadSecLevel, &area.WriteSecLevel, &area.AreaType, &area.EchoTag, &realNamesInt, &area.Address, &area.ConferenceID, &conferenceName)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("message area not found: %d", id)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get message area: %w", err)
+	}
+
+	area.RealNames = realNamesInt != 0
+	area.ConferenceName = conferenceName.String
+	return &area, nil
+}
+
+// GetAllMessageAreas returns all message areas ordered by name
+func (s *SQLiteDB) GetAllMessageAreas() ([]MessageArea, error) {
+	rows, err := s.db.Query(`
+		SELECT ma.id, ma.name, ma.file, ma.path, ma.read_sec_level, ma.write_sec_level, ma.area_type, ma.echo_tag, ma.real_names, ma.address, ma.conference_id, COALESCE(c.name, '')
+		FROM message_areas ma
+		LEFT JOIN conferences c ON c.id = ma.conference_id
+		ORDER BY ma.name
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query message areas: %w", err)
+	}
+	defer rows.Close()
+
+	var areas []MessageArea
+	for rows.Next() {
+		var area MessageArea
+		var realNamesInt int
+		var conferenceName string
+		if err := rows.Scan(&area.ID, &area.Name, &area.File, &area.Path, &area.ReadSecLevel, &area.WriteSecLevel, &area.AreaType, &area.EchoTag, &realNamesInt, &area.Address, &area.ConferenceID, &conferenceName); err != nil {
+			return nil, fmt.Errorf("failed to scan message area: %w", err)
+		}
+		area.RealNames = realNamesInt != 0
+		area.ConferenceName = conferenceName
+		areas = append(areas, area)
+	}
+
+	return areas, rows.Err()
+}
+
+// UpdateMessageArea updates an existing message area record
+func (s *SQLiteDB) UpdateMessageArea(area *MessageArea) error {
+	if area == nil {
+		return fmt.Errorf("message area cannot be nil")
+	}
+
+	if area.ConferenceID <= 0 {
+		return fmt.Errorf("message area must be assigned to a conference")
+	}
+
+	_, err := s.db.Exec(`
+		UPDATE message_areas
+		SET name = ?, file = ?, path = ?, read_sec_level = ?, write_sec_level = ?, area_type = ?, echo_tag = ?, real_names = ?, address = ?, conference_id = ?
+		WHERE id = ?
+	`, area.Name, area.File, area.Path, area.ReadSecLevel, area.WriteSecLevel, area.AreaType, area.EchoTag, area.RealNames, area.Address, area.ConferenceID, area.ID)
+	if err != nil {
+		return fmt.Errorf("failed to update message area: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteMessageArea removes a message area by ID
+func (s *SQLiteDB) DeleteMessageArea(id int64) error {
+	_, err := s.db.Exec(`DELETE FROM message_areas WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete message area: %w", err)
 	}
 	return nil
 }
