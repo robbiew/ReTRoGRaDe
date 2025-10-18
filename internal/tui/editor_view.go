@@ -1422,7 +1422,7 @@ func (m Model) renderCommandList(width int) []string {
 		}
 		hiddenIndicator := "[ ]"
 		if cmd.Hidden {
-			hiddenIndicator = "[H]"
+			hiddenIndicator = "[✓]"
 		}
 
 		marker := ""

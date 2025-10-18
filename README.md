@@ -29,9 +29,9 @@ As a hobbyist Go developer, I'm leveraging AI tools like Roo Code, Codex and Cla
 | Session Management              | 100%     | Idle timeout, disconnection                                                        |
 | Node Management                 | 100%     | Max nodes, per-user limits, logging                                                |
 | Auth /Login UI                  | 100%     | Create New User, Login                                                             |
-| Event System                    | 0%       | e.g. Logon Event List -> main menu                                                 |
+| Times Event System              | 0%       | Do things on a schedule                                                            |
 | Menu Construction System        | 100%     | Renegade-style system (TUI) for constructing menus and prompts.                    |
-| Menu Commands                   | 1%       | Only "Goodbye" command implemented so far [List](https://github.com/robbiew/ReTRoGRaDe/blob/main/docs/command-key-reference.md)                                         |
+| Menu Commands                   | 1%       | [List](docs/command-key-reference.md)                                              |
 | Menu Execution                  | 50%      | Execute Menu Command Logic (stacking, first run, etc)                              |
 | Message Base Configuration & UI | 0%       | Local message base configuration                                                   |
 | Message Base (FTN) Support      | 0%       | Read/write support for FTN message bases for echomail                              |

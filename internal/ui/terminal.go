@@ -328,15 +328,56 @@ func ShowErrorAndClearPrompt(term InteractiveTerminal, message string) error {
 	return nil
 }
 
-// Pause waits for any key press and shows centered message.
+// Pause waits for any key press with the default centered prompt.
 func Pause(term InteractiveTerminal) error {
-	const message = " [ PRESS A KEY TO CONTINUE ] "
-	width := 80
-	padWidth := (width - len(message)) / 2
+	return PauseWithText(term, "", 0)
+}
 
-	if err := term.Print("\r\n" + strings.Repeat(" ", padWidth) + Ansi.RedHi + message + Ansi.Reset + "\r\n"); err != nil {
+// PauseWithText waits for any key press and shows a centered message.
+// If message is empty, a default "[ Press any key ]" prompt is used.
+// Width values <= 0 fall back to 80 columns.
+func PauseWithText(term InteractiveTerminal, message string, width int) error {
+	text := strings.TrimSpace(message)
+	if text == "" {
+		text = "[ Press any key ]"
+	}
+
+	text = strings.ReplaceAll(text, "\r\n", " ")
+	text = strings.ReplaceAll(text, "\n", " ")
+	text = strings.ReplaceAll(text, "\r", " ")
+
+	parsed := ParsePipeColorCodes(text)
+	visibleLen := len(StripANSI(parsed))
+	if width <= 0 {
+		width = 80
+	}
+	if visibleLen > width {
+		width = visibleLen
+	}
+	padWidth := (width - visibleLen) / 2
+
+	var builder strings.Builder
+	builder.WriteString("\r\n")
+	if padWidth > 0 {
+		builder.WriteString(strings.Repeat(" ", padWidth))
+	}
+
+	if !strings.Contains(parsed, "\x1b") {
+		builder.WriteString(Ansi.RedHi)
+		builder.WriteString(parsed)
+		builder.WriteString(Ansi.Reset)
+	} else {
+		builder.WriteString(parsed)
+		if !strings.HasSuffix(parsed, Ansi.Reset) {
+			builder.WriteString(Ansi.Reset)
+		}
+	}
+	builder.WriteString("\r\n")
+
+	if err := term.Print(builder.String()); err != nil {
 		return err
 	}
+
 	_, err := term.GetKeyPress()
 	return err
 }

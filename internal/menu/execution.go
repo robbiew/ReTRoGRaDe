@@ -1,11 +1,15 @@
 package menu
 
 import (
+	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
+	"unicode"
 
 	"github.com/robbiew/retrograde/internal/database"
 	"github.com/robbiew/retrograde/internal/telnet"
@@ -32,7 +36,39 @@ func NewMenuExecutor(db database.Database, io *telnet.TelnetIO) *MenuExecutor {
 
 // ExecuteMenu executes a menu by name
 
+var errNoKeyTimeout = errors.New("menu_no_key_timeout")
+
+var specialKeyLiterals = func() map[string]struct{} {
+	keys := map[string]struct{}{
+		"FIRSTCMD": {},
+		"ANYKEY":   {},
+		"NOKEY":    {},
+		"ENTER":    {},
+		"ESC":      {},
+		"TAB":      {},
+	}
+	return keys
+}()
+
 func (e *MenuExecutor) ExecuteMenu(menuName string, ctx *ExecutionContext) error {
+	if ctx == nil {
+		ctx = &ExecutionContext{}
+	}
+	if ctx.IO == nil {
+		ctx.IO = e.io
+	}
+	if ctx.Session == nil && ctx.IO != nil {
+		ctx.Session = ctx.IO.Session
+	}
+	if ctx.AdvanceRows == nil {
+		ctx.AdvanceRows = func(lines int) {
+			if lines <= 0 {
+				return
+			}
+			e.currentRow += lines
+		}
+	}
+
 	menu, err := e.lookupMenuByName(menuName)
 	if err != nil {
 		return err
@@ -42,6 +78,23 @@ func (e *MenuExecutor) ExecuteMenu(menuName string, ctx *ExecutionContext) error
 	if err != nil {
 		return fmt.Errorf("failed to load menu commands for %s: %w", menuName, err)
 	}
+
+	// Execute FIRSTCMD commands before displaying the menu
+	firstCommands := e.findCommands(commands, "FIRSTCMD")
+	if len(firstCommands) > 0 {
+		exitMenu, execErr := e.runCommands(firstCommands, ctx)
+		if execErr != nil {
+			return execErr
+		}
+		if exitMenu {
+			return nil
+		}
+	}
+
+	// Pre-calculate special command groups
+	anyKeyCommands := e.findCommands(commands, "ANYKEY")
+	noKeyCommands := e.findCommands(commands, "NOKEY")
+	noKeyTimeout := e.resolveNoKeyTimeout(noKeyCommands)
 
 	// Display generic menu if applicable
 	e.displayGenericMenu(menu, commands, ctx)
@@ -58,14 +111,22 @@ func (e *MenuExecutor) ExecuteMenu(menuName string, ctx *ExecutionContext) error
 		parsedPrompt := ui.ParsePipeColorCodes(menu.Prompt)
 		e.io.Print(parsedPrompt)
 
-		// Read input (single key for now, can be expanded)
-		key, err := e.io.GetKeyPressUpper()
+		// Read input (single key press with optional timeout)
+		input, err := e.readKeyPress(noKeyCommands, noKeyTimeout)
 		if err != nil {
+			// Timeout reached - execute NOKEY commands
+			if errors.Is(err, errNoKeyTimeout) {
+				exitMenu, execErr := e.runCommands(noKeyCommands, ctx)
+				if execErr != nil {
+					return execErr
+				}
+				if exitMenu {
+					return nil
+				}
+				continue
+			}
 			return err
 		}
-
-		input := string(key)
-		input = strings.TrimSpace(input)
 
 		if input == "" {
 			continue
@@ -73,35 +134,19 @@ func (e *MenuExecutor) ExecuteMenu(menuName string, ctx *ExecutionContext) error
 
 		// Find matching commands (supports linked commands with same key)
 		matchingCommands := e.findCommands(commands, input)
+		if len(anyKeyCommands) > 0 {
+			matchingCommands = append(matchingCommands, anyKeyCommands...)
+		}
+
 		if len(matchingCommands) == 0 {
 			// Suppress invalid command messages
 			continue
 		}
 
-		var exitMenu bool
-		for _, cmd := range matchingCommands {
-			// Check ACS per command
-			if !e.checkACS(cmd.ACSRequired, ctx) {
-				e.io.Print("Access denied.\r\n")
-				continue
-			}
-
-			// Execute command
-			if err := e.executeCommand(cmd, ctx); err != nil {
-				// Check if this is a user logout
-				if err.Error() == "user_logout" {
-					return err
-				}
-				return err
-			}
-
-			// Check for quit/logout
-			if strings.EqualFold(cmd.CmdKeys, "G") {
-				exitMenu = true
-				break
-			}
+		exitMenu, execErr := e.runCommands(matchingCommands, ctx)
+		if execErr != nil {
+			return execErr
 		}
-
 		if exitMenu {
 			break
 		}
@@ -230,13 +275,162 @@ func (e *MenuExecutor) findThemeFile(base string) string {
 
 // findCommands returns all active commands matching the input (supports linked commands)
 func (e *MenuExecutor) findCommands(commands []database.MenuCommand, input string) []database.MenuCommand {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return nil
+	}
+
 	var matches []database.MenuCommand
 	for _, cmd := range commands {
-		if strings.EqualFold(cmd.Keys, input) && cmd.Active {
+		if !cmd.Active {
+			continue
+		}
+		if matchesMenuKey(cmd.Keys, input) {
 			matches = append(matches, cmd)
 		}
 	}
 	return matches
+}
+
+func matchesMenuKey(keyDef, input string) bool {
+	keyDef = strings.TrimSpace(keyDef)
+	input = strings.TrimSpace(input)
+	if keyDef == "" || input == "" {
+		return false
+	}
+
+	tokens := splitMenuKeyVariants(keyDef)
+	if len(tokens) == 0 {
+		tokens = []string{keyDef}
+	}
+
+	inputRunes := []rune(input)
+	inputLen := len(inputRunes)
+
+	for _, token := range tokens {
+		token = strings.TrimSpace(token)
+		if token == "" {
+			continue
+		}
+		if strings.EqualFold(token, input) {
+			return true
+		}
+
+		upperToken := strings.ToUpper(token)
+		if _, special := specialKeyLiterals[upperToken]; special {
+			continue
+		}
+
+		tokenRunes := []rune(token)
+		if len(tokenRunes) > 1 && inputLen == 1 {
+			for _, r := range tokenRunes {
+				if strings.EqualFold(string(r), input) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func splitMenuKeyVariants(keyDef string) []string {
+	return strings.FieldsFunc(keyDef, func(r rune) bool {
+		switch r {
+		case ',', ';', '|', '/', '+':
+			return true
+		default:
+			return unicode.IsSpace(r)
+		}
+	})
+}
+
+// runCommands executes the provided commands sequentially.
+// Returns true if menu execution should exit.
+func (e *MenuExecutor) runCommands(commands []database.MenuCommand, ctx *ExecutionContext) (bool, error) {
+	for _, cmd := range commands {
+		// Check ACS before executing each command
+		if !e.checkACS(cmd.ACSRequired, ctx) {
+			e.io.Print("Access denied.\r\n")
+			continue
+		}
+
+		if err := e.executeCommand(cmd, ctx); err != nil {
+			if err.Error() == "user_logout" {
+				return true, err
+			}
+			return false, err
+		}
+
+		if strings.EqualFold(cmd.CmdKeys, "G") {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func (e *MenuExecutor) readKeyPress(noKeyCommands []database.MenuCommand, timeout time.Duration) (string, error) {
+	var seq string
+	var err error
+	if len(noKeyCommands) == 0 || timeout <= 0 {
+		seq, err = e.io.ReadKeySequence(0)
+	} else {
+		seq, err = e.io.ReadKeySequence(timeout)
+	}
+	if err != nil {
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			return "", errNoKeyTimeout
+		}
+		return "", err
+	}
+	return normalizeInputKey(seq), nil
+}
+
+func (e *MenuExecutor) resolveNoKeyTimeout(commands []database.MenuCommand) time.Duration {
+	if len(commands) == 0 {
+		return 0
+	}
+
+	const defaultTimeout = 5 * time.Second
+	for _, cmd := range commands {
+		value := strings.TrimSpace(cmd.Options)
+		if value == "" {
+			continue
+		}
+		if seconds, err := strconv.Atoi(value); err == nil && seconds > 0 {
+			return time.Duration(seconds) * time.Second
+		}
+	}
+	return defaultTimeout
+}
+
+func normalizeInputKey(raw string) string {
+	switch raw {
+	case "":
+		return ""
+	case "\r", "\n", "\r\n":
+		return "ENTER"
+	case "\t":
+		return "TAB"
+	}
+
+	if raw == "\x1b" {
+		return "ESC"
+	}
+
+	if strings.HasPrefix(raw, "\x1b") {
+		return "ESC"
+	}
+
+	if len(raw) == 1 {
+		ch := raw[0]
+		if ch >= 'a' && ch <= 'z' {
+			ch -= 32
+		}
+		return string(ch)
+	}
+
+	return strings.ToUpper(raw)
 }
 
 // checkACS checks if the user has access based on ACS

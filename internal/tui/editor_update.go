@@ -2703,8 +2703,19 @@ func (m Model) handleEditingValue(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case StringValue, PathValue:
 			str := parsedValue.(string)
 			if strings.TrimSpace(str) == "" {
-				m.editingError = "Value cannot be empty"
-				return m, nil
+				requireValue := true
+				if m.editingMenuCommand != nil {
+					switch m.editingItem.ID {
+					case "command-keys", "command-cmdkeys":
+						requireValue = true
+					default:
+						requireValue = false
+					}
+				}
+				if requireValue {
+					m.editingError = "Value cannot be empty"
+					return m, nil
+				}
 			}
 		}
 

@@ -3,6 +3,7 @@ package telnet
 import (
 	"bufio"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/robbiew/retrograde/internal/config"
@@ -63,16 +64,33 @@ func (t *TelnetIO) GetKeyPress() (byte, error) {
 
 // GetKeyPressUpper reads a key and converts to uppercase
 func (t *TelnetIO) GetKeyPressUpper() (byte, error) {
-	key, err := t.GetKeyPress()
+	seq, err := t.ReadKeySequence(0)
 	if err != nil {
 		return 0, err
 	}
-
-	// Convert to uppercase
-	if key >= 'a' && key <= 'z' {
-		key = key - 32
+	if len(seq) == 0 {
+		return 0, nil
 	}
+	key := seq[0]
+	if key >= 'a' && key <= 'z' {
+		key -= 32
+	}
+	return key, nil
+}
 
+// GetKeyPressUpperWithTimeout reads a key press with a timeout, returning an error if the deadline expires.
+func (t *TelnetIO) GetKeyPressUpperWithTimeout(timeout time.Duration) (byte, error) {
+	seq, err := t.ReadKeySequence(timeout)
+	if err != nil {
+		return 0, err
+	}
+	if len(seq) == 0 {
+		return 0, nil
+	}
+	key := seq[0]
+	if key >= 'a' && key <= 'z' {
+		key -= 32
+	}
 	return key, nil
 }
 
@@ -111,7 +129,105 @@ func (t *TelnetIO) MoveCursor(x, y int) error {
 
 // Pause waits for any key press and shows centered message
 func (t *TelnetIO) Pause() error {
-	return ui.Pause(t)
+	width := 0
+	if t.Session != nil && t.Session.Width > 0 {
+		width = t.Session.Width
+	}
+	return ui.PauseWithText(t, "", width)
+}
+
+// ReadKeySequence reads a key or escape sequence, honoring an optional timeout.
+func (t *TelnetIO) ReadKeySequence(timeout time.Duration) (string, error) {
+	if t.Reader == nil {
+		return "", fmt.Errorf("telnet reader is not initialized")
+	}
+
+	var conn net.Conn
+	if t.Session != nil {
+		conn = t.Session.Conn
+	}
+
+	if timeout > 0 && conn != nil {
+		if err := conn.SetReadDeadline(time.Now().Add(timeout)); err != nil {
+			conn = nil
+		} else {
+			defer conn.SetReadDeadline(time.Time{})
+		}
+	}
+
+	b, err := t.Reader.ReadByte()
+	if err != nil {
+		return "", err
+	}
+
+	// Handle telnet command sequences (IAC = 255)
+	if b == 255 {
+		t.handleTelnetCommand()
+		return t.ReadKeySequence(timeout)
+	}
+
+	if t.Session != nil {
+		t.Session.LastActivity = time.Now()
+	}
+
+	seq := []byte{b}
+
+	switch b {
+	case 27: // ESC
+		seq = append(seq, t.readEscapeSequence(conn)...)
+	case '\r':
+		if t.Reader.Buffered() > 0 {
+			if next, err := t.Reader.Peek(1); err == nil && len(next) == 1 && next[0] == '\n' {
+				t.Reader.ReadByte() // consume LF
+				seq = append(seq, '\n')
+			}
+		}
+	}
+
+	return string(seq), nil
+}
+
+func (t *TelnetIO) readEscapeSequence(conn net.Conn) []byte {
+	var seq []byte
+	for i := 0; i < 5; i++ {
+		if conn == nil && t.Reader.Buffered() == 0 {
+			break
+		}
+		if conn != nil && t.Reader.Buffered() == 0 {
+			if err := conn.SetReadDeadline(time.Now().Add(5 * time.Millisecond)); err != nil {
+				conn = nil
+			}
+		}
+
+		b, err := t.Reader.ReadByte()
+		if conn != nil {
+			conn.SetReadDeadline(time.Time{})
+		}
+		if err != nil {
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				break
+			}
+			break
+		}
+
+		seq = append(seq, b)
+
+		if len(seq) == 1 && seq[0] != '[' && seq[0] != 'O' {
+			break
+		}
+
+		if len(seq) >= 2 && seq[0] == 'O' {
+			break
+		}
+
+		if len(seq) >= 2 && seq[0] == '[' {
+			last := seq[len(seq)-1]
+			if last == '~' || (last >= 'A' && last <= 'Z') {
+				break
+			}
+		}
+	}
+	return seq
 }
 
 // Handle telnet command sequences

@@ -9,6 +9,7 @@ import (
 	"github.com/robbiew/retrograde/internal/config"
 	"github.com/robbiew/retrograde/internal/logging"
 	"github.com/robbiew/retrograde/internal/telnet"
+	"github.com/robbiew/retrograde/internal/ui"
 )
 
 // CmdKeyHandler is the function signature for command key handlers
@@ -16,10 +17,11 @@ type CmdKeyHandler func(ctx *ExecutionContext, options string) error
 
 // ExecutionContext holds the context for executing a command
 type ExecutionContext struct {
-	UserID   int64
-	Username string
-	IO       *telnet.TelnetIO
-	Session  *config.TelnetSession
+	UserID      int64
+	Username    string
+	IO          *telnet.TelnetIO
+	Session     *config.TelnetSession
+	AdvanceRows func(lines int)
 	// Add more context as needed: session, database, etc.
 }
 
@@ -142,7 +144,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		{CmdKey: "-C", Name: "SysOp Window Message", Description: "Display a message on the SysOp window", Category: "Navigation/Display"},
 		{CmdKey: "-F", Name: "Display File (MCI)", Description: "Display a text file (MCI codes enabled)", Category: "Navigation/Display"},
 		{CmdKey: "/F", Name: "Display File (Literal)", Description: "Display a text file without MCI expansion", Category: "Navigation/Display"},
-		{CmdKey: "-L", Name: "Display Line", Description: "Display a single line of text", Category: "Navigation/Display"},
+		{CmdKey: "-L", Name: "Display Line", Description: "Display a single line of text", Category: "Navigation/Display", Implemented: true, Handler: handleDisplayLine},
 		{CmdKey: "-N", Name: "Prompt: Yes Shows Quote", Description: "Prompt the user; show quote if they answer Yes", Category: "Navigation/Display"},
 		{CmdKey: "-Q", Name: "Read Infoform", Description: "Read an Infoform questionnaire", Category: "Navigation/Display"},
 		{CmdKey: "-R", Name: "Read Infoform Answers", Description: "Display answers to an Infoform questionnaire", Category: "Navigation/Display"},
@@ -232,7 +234,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		{CmdKey: "OA", Name: "Auto-Validate User", Description: "Allow auto-validation with password and level", Category: "User"},
 		{CmdKey: "OB", Name: "User Statistics", Description: "View Top 10 user statistics", Category: "User"},
 		{CmdKey: "OC", Name: "Page the SysOp", Description: "Page the SysOp or leave a message", Category: "User"},
-		{CmdKey: "OE", Name: "Pause Screen", Description: "Toggle or force a pause in output", Category: "User"},
+		{CmdKey: "OE", Name: "Pause Screen", Description: "Toggle or force a pause in output", Category: "User", Implemented: true, Handler: handlePauseScreen},
 		{CmdKey: "OF", Name: "Modify AR Flags", Description: "Set, reset, or toggle AR flags", Category: "User"},
 		{CmdKey: "OG", Name: "Modify AC Flags", Description: "Set, reset, or toggle AC flags", Category: "User"},
 		{CmdKey: "OL", Name: "List Today's Callers", Description: "Display today's caller list", Category: "User"},
@@ -310,6 +312,60 @@ func handleGoodbye(ctx *ExecutionContext, options string) error {
 	ctx.Session.Connected = false
 	if ctx.Session.Conn != nil {
 		ctx.Session.Conn.Close()
+	}
+
+	return nil
+}
+
+// handleDisplayLine renders a single line of text honouring pipe color codes.
+func handleDisplayLine(ctx *ExecutionContext, options string) error {
+	if ctx == nil || ctx.IO == nil {
+		return fmt.Errorf("display line command requires an execution context with IO")
+	}
+
+	normalized := strings.ReplaceAll(options, "~", "\r\n")
+	colored := ui.ParsePipeColorCodes(normalized)
+
+	var out strings.Builder
+	out.WriteString("\r\n") // move below the menu prompt
+	if colored != "" {
+		out.WriteString(colored)
+	}
+	out.WriteString("\r\n")
+
+	result := out.String()
+	if err := ctx.IO.Print(result); err != nil {
+		return err
+	}
+
+	if ctx.AdvanceRows != nil {
+		lines := strings.Count(result, "\n")
+		if lines == 0 {
+			lines = 1
+		}
+		ctx.AdvanceRows(lines)
+	}
+
+	return nil
+}
+
+// handlePauseScreen renders a pause prompt, allowing optional custom text.
+func handlePauseScreen(ctx *ExecutionContext, options string) error {
+	if ctx == nil || ctx.IO == nil {
+		return fmt.Errorf("pause screen command requires an execution context with IO")
+	}
+
+	width := 0
+	if ctx.Session != nil && ctx.Session.Width > 0 {
+		width = ctx.Session.Width
+	}
+
+	if err := ui.PauseWithText(ctx.IO, options, width); err != nil {
+		return err
+	}
+
+	if ctx.AdvanceRows != nil {
+		ctx.AdvanceRows(2)
 	}
 
 	return nil
