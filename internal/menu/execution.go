@@ -71,30 +71,38 @@ func (e *MenuExecutor) ExecuteMenu(menuName string, ctx *ExecutionContext) error
 			continue
 		}
 
-		// Find matching command
-		cmd := e.findCommand(commands, input)
-		if cmd == nil {
+		// Find matching commands (supports linked commands with same key)
+		matchingCommands := e.findCommands(commands, input)
+		if len(matchingCommands) == 0 {
 			// Suppress invalid command messages
 			continue
 		}
 
-		// Check ACS
-		if !e.checkACS(cmd.ACSRequired, ctx) {
-			e.io.Print("Access denied.\r\n")
-			continue
-		}
+		var exitMenu bool
+		for _, cmd := range matchingCommands {
+			// Check ACS per command
+			if !e.checkACS(cmd.ACSRequired, ctx) {
+				e.io.Print("Access denied.\r\n")
+				continue
+			}
 
-		// Execute command
-		if err := e.executeCommand(*cmd, ctx); err != nil {
-			// Check if this is a user logout
-			if err.Error() == "user_logout" {
+			// Execute command
+			if err := e.executeCommand(cmd, ctx); err != nil {
+				// Check if this is a user logout
+				if err.Error() == "user_logout" {
+					return err
+				}
 				return err
 			}
-			return err
+
+			// Check for quit/logout
+			if strings.EqualFold(cmd.CmdKeys, "G") {
+				exitMenu = true
+				break
+			}
 		}
 
-		// Check for quit/logout
-		if cmd.CmdKeys == "G" {
+		if exitMenu {
 			break
 		}
 	}
@@ -220,14 +228,15 @@ func (e *MenuExecutor) findThemeFile(base string) string {
 	return ""
 }
 
-// findCommand finds a command matching the input (only active commands)
-func (e *MenuExecutor) findCommand(commands []database.MenuCommand, input string) *database.MenuCommand {
+// findCommands returns all active commands matching the input (supports linked commands)
+func (e *MenuExecutor) findCommands(commands []database.MenuCommand, input string) []database.MenuCommand {
+	var matches []database.MenuCommand
 	for _, cmd := range commands {
 		if strings.EqualFold(cmd.Keys, input) && cmd.Active {
-			return &cmd
+			matches = append(matches, cmd)
 		}
 	}
-	return nil
+	return matches
 }
 
 // checkACS checks if the user has access based on ACS
