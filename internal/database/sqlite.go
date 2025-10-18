@@ -265,7 +265,12 @@ func (s *SQLiteDB) InitializeSchema() error {
 	}
 
 	// Ensure user-related schema is initialized as well.
-	return s.InitializeUserSchema()
+	if err := s.InitializeUserSchema(); err != nil {
+		return err
+	}
+
+	// Seed default menu structure and message areas
+	return SeedDefaultMainMenu(s)
 }
 
 // Close closes the database connection

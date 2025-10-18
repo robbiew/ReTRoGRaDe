@@ -131,8 +131,34 @@ func seedDefaultMsgMenu(db Database) error {
 				{
 					MenuID:           menu.ID,
 					PositionNumber:   1,
+					Keys:             "R",
+					ShortDescription: "Read Messages",
+					LongDescription:  "Read messages in the current base",
+					ACSRequired:      "",
+					CmdKeys:          "MR",
+					Options:          "",
+					NodeActivity:     "Reading messages.",
+					Active:           true,
+					Hidden:           false,
+				},
+				{
+					MenuID:           menu.ID,
+					PositionNumber:   2,
+					Keys:             "P",
+					ShortDescription: "Post Message",
+					LongDescription:  "Post a new message in the current base",
+					ACSRequired:      "",
+					CmdKeys:          "MP",
+					Options:          "",
+					NodeActivity:     "Posting a new message.",
+					Active:           true,
+					Hidden:           false,
+				},
+				{
+					MenuID:           menu.ID,
+					PositionNumber:   3,
 					Keys:             "Q",
-					ShortDescription: "Return to Main Menu",
+					ShortDescription: "Quit to Main",
 					LongDescription:  "Return to the main menu",
 					ACSRequired:      "",
 					CmdKeys:          "-^",
@@ -143,7 +169,7 @@ func seedDefaultMsgMenu(db Database) error {
 				},
 				{
 					MenuID:           menu.ID,
-					PositionNumber:   2,
+					PositionNumber:   4,
 					Keys:             "G",
 					ShortDescription: "Goodbye",
 					LongDescription:  "Disconnect from the BBS",
@@ -181,17 +207,44 @@ func seedDefaultMsgMenu(db Database) error {
 		NodeActivity:        "Browsing the message menu.",
 	}
 
-	menuID, err := db.CreateMenu(menu)
+	_, err = db.CreateMenu(menu)
 	if err != nil {
 		return fmt.Errorf("failed to create MsgMenu: %w", err)
 	}
 
 	commands := []MenuCommand{
+
 		{
-			MenuID:           int(menuID),
+			MenuID:           menu.ID,
 			PositionNumber:   1,
+			Keys:             "R",
+			ShortDescription: "Read Messages",
+			LongDescription:  "Read messages in the current base",
+			ACSRequired:      "",
+			CmdKeys:          "MR",
+			Options:          "",
+			NodeActivity:     "Reading messages.",
+			Active:           true,
+			Hidden:           false,
+		},
+		{
+			MenuID:           menu.ID,
+			PositionNumber:   2,
+			Keys:             "P",
+			ShortDescription: "Post Message",
+			LongDescription:  "Post a new message in the current base",
+			ACSRequired:      "",
+			CmdKeys:          "MP",
+			Options:          "",
+			NodeActivity:     "Posting a new message.",
+			Active:           true,
+			Hidden:           false,
+		},
+		{
+			MenuID:           menu.ID,
+			PositionNumber:   3,
 			Keys:             "Q",
-			ShortDescription: "Return to Main Menu",
+			ShortDescription: "Quit to Main",
 			LongDescription:  "Return to the main menu",
 			ACSRequired:      "",
 			CmdKeys:          "-^",
@@ -201,8 +254,8 @@ func seedDefaultMsgMenu(db Database) error {
 			Hidden:           false,
 		},
 		{
-			MenuID:           int(menuID),
-			PositionNumber:   2,
+			MenuID:           menu.ID,
+			PositionNumber:   4,
 			Keys:             "G",
 			ShortDescription: "Goodbye",
 			LongDescription:  "Disconnect from the BBS",
@@ -227,15 +280,22 @@ func seedDefaultMsgMenu(db Database) error {
 
 func seedDefaultMessageStructure(db Database) error {
 	const conferenceName = "Local Areas"
-	const areaName = "General Chatter"
 
 	conferenceID, err := ensureConference(db, conferenceName)
 	if err != nil {
 		return err
 	}
 
-	if err := ensureMessageArea(db, areaName, conferenceID, conferenceName); err != nil {
-		return err
+	// Seed default message areas
+	messageAreas := []string{
+		"General Chatter",
+		"Retrograde Discussion",
+	}
+
+	for _, areaName := range messageAreas {
+		if err := ensureMessageArea(db, areaName, conferenceID); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -268,7 +328,7 @@ func ensureConference(db Database, name string) (int, error) {
 	return int(id), nil
 }
 
-func ensureMessageArea(db Database, name string, conferenceID int, conferenceName string) error {
+func ensureMessageArea(db Database, name string, conferenceID int) error {
 	areas, err := db.GetAllMessageAreas()
 	if err != nil {
 		return fmt.Errorf("failed to get message areas: %w", err)
@@ -278,7 +338,6 @@ func ensureMessageArea(db Database, name string, conferenceID int, conferenceNam
 		if strings.EqualFold(area.Name, name) {
 			if area.ConferenceID != conferenceID {
 				area.ConferenceID = conferenceID
-				area.ConferenceName = conferenceName
 				if err := db.UpdateMessageArea(&area); err != nil {
 					return fmt.Errorf("failed to update existing message area %s: %w", name, err)
 				}
@@ -295,24 +354,26 @@ func ensureMessageArea(db Database, name string, conferenceID int, conferenceNam
 	}
 	basePath = strings.TrimRight(basePath, "/\\")
 
+	// Generate file name from area name (lowercase, spaces to underscores)
+	fileName := strings.ToLower(strings.ReplaceAll(name, " ", "_"))
+
 	areaPath := basePath
 	if areaPath == "" {
 		areaPath = "messages"
 	}
-	areaPath = areaPath + "/general"
+	areaPath = areaPath + "/" + fileName
 
 	area := &MessageArea{
-		Name:           name,
-		File:           "general",
-		Path:           areaPath,
-		ReadSecLevel:   "public",
-		WriteSecLevel:  "public",
-		AreaType:       "local",
-		EchoTag:        "",
-		RealNames:      false,
-		Address:        "0:0/0 - Local",
-		ConferenceID:   conferenceID,
-		ConferenceName: conferenceName,
+		Name:          name,
+		File:          fileName,
+		Path:          areaPath,
+		ReadSecLevel:  "public",
+		WriteSecLevel: "public",
+		AreaType:      "local",
+		EchoTag:       "",
+		RealNames:     false,
+		Address:       "0:0/0 - Local",
+		ConferenceID:  conferenceID,
 	}
 
 	if _, err := db.CreateMessageArea(area); err != nil {

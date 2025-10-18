@@ -3,6 +3,8 @@ package config
 import (
 	"net"
 	"time"
+
+	"github.com/robbiew/retrograde/internal/database"
 )
 
 // Security Level Constants
@@ -196,17 +198,18 @@ type ProgramState struct {
 
 // TelnetSession holds connection state for each telnet user
 type TelnetSession struct {
-	Alias         string
-	SecurityLevel int
-	TimeLeft      int
-	StartTime     time.Time
-	LastActivity  time.Time
-	NodeNumber    int
-	IPAddress     string
-	Connected     bool
-	Conn          net.Conn // Add connection reference for timeout handling
-	Width         int      // Terminal width from NAWS negotiation
-	Height        int      // Terminal height from NAWS negotiation
+	Alias              string
+	SecurityLevel      int
+	TimeLeft           int
+	StartTime          time.Time
+	LastActivity       time.Time
+	NodeNumber         int
+	IPAddress          string
+	Connected          bool
+	Conn               net.Conn              // Add connection reference for timeout handling
+	Width              int                   // Terminal width from NAWS negotiation
+	Height             int                   // Terminal height from NAWS negotiation
+	CurrentMessageArea *database.MessageArea // Current message area for reading/posting
 }
 
 // NodeConnection tracks individual connection details

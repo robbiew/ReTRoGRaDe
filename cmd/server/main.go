@@ -365,8 +365,16 @@ func handleConnection(conn net.Conn, cfg *config.Config, nodeID int) {
 		}
 	}
 
-	// Load and execute start menu
+	// Set default message area for the user
 	db := config.GetDatabase()
+	if db != nil {
+		if err := session.SetDefaultMessageArea(db); err != nil {
+			// Log error but don't fail login
+			fmt.Printf("Warning: could not set default message area: %v\n", err)
+		}
+	}
+
+	// Load and execute start menu
 	if db != nil {
 		executor := menu.NewMenuExecutor(db, io)
 		ctx := &menu.ExecutionContext{
