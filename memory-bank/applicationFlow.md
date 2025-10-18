@@ -32,7 +32,7 @@ graph TD
 
     J -->|Valid| L[Authentication Success<br/>Update Session]
     J -->|Invalid| M{Max Attempts?}
-    M -->|Yes| N[Blacklist IP<br/>Force Disconnect]
+    M -->|Yes| N[Blocklist IP<br/>Force Disconnect]
     M -->|No| J
     J -->|ESC| Z[Disconnect]
 
@@ -59,24 +59,24 @@ The security layer validates connections **before** any BBS content is shown to 
 
 **Implementation:** [`CheckConnectionSecurity()`](security.go:68) in [`main.go`](main.go:112)
 
-#### 1.1 Whitelist Check (Optional)
+#### 1.1 Allowlist Check (Optional)
 
-- **When Enabled:** in TUI: `[security]` → `whitelist_enabled=true`
-- **Action:** If IP is in whitelist, immediately allow connection
-- **File:** Configured by `whitelist_file` setting
-- **Logging:** `WHITELIST_ALLOW` event logged
+- **When Enabled:** in TUI: `[security]` → `allowlist_enabled=true`
+- **Action:** If IP is in allowlist, immediately allow connection
+- **File:** Configured by `allowlist_file` setting
+- **Logging:** `ALLOWLIST_ALLOW` event logged
 
-#### 1.2 Blacklist Check
+#### 1.2 Blocklist Check
 
-- **When Enabled:** Config TUI → `[security]` → `blacklist_enabled=true`
+- **When Enabled:** Config TUI → `[security]` → `blocklist_enabled=true`
 - **Sources:**
-  - Manual entries in blacklist file
+  - Manual entries in blocklist file
   - Auto-added from failed login attempts (3 strikes)
   - Temporary blocks from rate limiting
   - External threat intelligence feeds
-- **File:** Configured by `blacklist_file` setting (default: `security/blacklist.txt`)
+- **File:** Configured by `blocklist_file` setting (default: `security/blocklist.txt`)
 - **Action:** Reject connection with generic error message
-- **Logging:** `BLACKLIST_BLOCK` event logged
+- **Logging:** `BLOCKLIST_BLOCK` event logged
 
 #### 1.3 Rate Limiting Check
 
@@ -87,7 +87,7 @@ The security layer validates connections **before** any BBS content is shown to 
 - **Behavior:**
   - Tracks connection attempts per IP address
   - Exceeding limit triggers temporary block
-  - Auto-adds IP to blacklist during block period
+  - Auto-adds IP to blocklist during block period
   - Block expires after rate limit window
 - **Action:** Reject with reason "Rate limit exceeded"
 - **Logging:** `RATE_LIMITED` event logged
@@ -101,7 +101,7 @@ The security layer validates connections **before** any BBS content is shown to 
   - `nerds`: Alternative provider
 - **Configuration:**
   - `blocked_countries`: List of country codes to block
-  - `allowed_countries`: Whitelist mode (only these allowed)
+  - `allowed_countries`: Allowlist mode (only these allowed)
 - **Caching:** Geo lookups cached for 24 hours
 - **Private IPs:** Automatically allowed (no lookup)
 - **Action:** Reject with "Connection from blocked/non-allowed country"
@@ -292,7 +292,7 @@ Background goroutine monitors session activity:
 
 1. **Display Warning:** "Too many login tries, hacker -- see ya!"
 2. **Log Event:** Record disconnection reason
-3. **Permanent Blacklist:** Add IP to blacklist file
+3. **Permanent Blocklist:** Add IP to blocklist file
    - Reason: "Failed login attempts exceeded"
    - Source: "login_security"
    - **Critical:** This is a permanent ban, not temporary
@@ -303,7 +303,7 @@ Background goroutine monitors session activity:
 
 **Security Files Updated:**
 
-- Blacklist file: `security/blacklist.txt` (or configured location)
+- Blocklist file: `security/blocklist.txt` (or configured location)
 - Security log: `logs/security.log` (if logging enabled)
 
 ### 3.6 Successful Authentication
@@ -588,7 +588,7 @@ After successful login/registration, user enters the menu system with authentica
 
 **Current Protections:**
 
-1. **3-Attempt Limit:** Automatic blacklist after 3 failed attempts
+1. **3-Attempt Limit:** Automatic blocklist after 3 failed attempts
 2. **Permanent Ban:** IP permanently blocked (not temporary)
 3. **Generic Errors:** Don't reveal if username or password was wrong
 4. **Rate Limiting:** Pre-authentication connection rate limits
@@ -607,14 +607,14 @@ After successful login/registration, user enters the menu system with authentica
 
 ### 7.4 IP-Based Security
 
-**Blacklist Sources:**
+**Blocklist Sources:**
 
 1. Manual entries (permanent)
 2. Failed login attempts (permanent)
 3. Rate limiting violations (temporary → permanent)
 4. External threat feeds (cached)
 
-**Whitelist Priority:** Whitelist checked before any other security measure
+**Allowlist Priority:** Allowlist checked before any other security measure
 
 ### 7.5 Information Disclosure Prevention
 
@@ -688,8 +688,8 @@ Config TUI
 **Components:**
 
 1. **Connection Tracker:** Per-IP attempt tracking
-2. **Blacklist Manager:** Permanent and temporary bans
-3. **Whitelist Manager:** Trusted IP addresses
+2. **Blocklist Manager:** Permanent and temporary bans
+3. **Allowlist Manager:** Trusted IP addresses
 4. **Geo Cache:** Geographic location data
 5. **Threat Intel Cache:** External blocklist IPs
 
@@ -770,9 +770,9 @@ Config TUI
 - Error logged with URL and reason
 - Next update attempted per schedule
 
-**Blacklist File Errors:**
+**Blocklist File Errors:**
 
-- File missing: Empty blacklist (connections allowed)
+- File missing: Empty blocklist (connections allowed)
 - File corrupted: Skip invalid entries
 - Continue with valid entries
 
@@ -940,14 +940,14 @@ State 8: DISCONNECTED
 1. Username case mismatch in file
 2. Corrupted JSON file
 3. File permissions error
-4. IP blacklisted from previous attempts
+4. IP blocklisted from previous attempts
 
 **Resolution:**
 
 1. Check `users/` directory for exact filename
 2. Validate JSON syntax in user file
 3. Check file permissions (readable by server)
-4. Review `security/blacklist.txt` and `logs/security.log`
+4. Review `security/blocklist.txt` and `logs/security.log`
 
 ---
 
@@ -955,7 +955,7 @@ State 8: DISCONNECTED
 
 **Possible Causes:**
 
-1. IP in blacklist
+1. IP in blocklist
 2. Rate limit exceeded
 3. Geographic location blocked
 4. Threat intelligence match
@@ -963,9 +963,9 @@ State 8: DISCONNECTED
 **Resolution:**
 
 1. Check `logs/security.log` for specific reason
-2. Review `security/blacklist.txt` for IP entry
+2. Review `security/blocklist.txt` for IP entry
 3. Verify Config TUI security settings
-4. Consider whitelist addition if legitimate
+4. Consider allowlist addition if legitimate
 
 ---
 
@@ -1044,8 +1044,8 @@ Config TUI
 
 ### Security Files
 
-- **Blacklist:** `security/blacklist.txt`
-- **Whitelist:** `security/whitelist.txt`
+- **Blocklist:** `security/blocklist.txt`
+- **Allowlist:** `security/allowlist.txt`
 - **Security Log:** `logs/security.log`
 
 ### User Data

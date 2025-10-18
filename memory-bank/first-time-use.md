@@ -55,7 +55,7 @@ graph TD
 - **Files:** Directory for upload/download area storage (default: `{root}/files`)
 - **Msgs:** Directory for message base files (default: `{root}/msgs`)
 - **Logs:** Directory for log files (default: `{root}/logs`)
-- **Security:** Directory for security assets, like blacklists (default: `{root}/security`)
+- **Security:** Directory for security assets, like blocklists (default: `{root}/security`)
 - **Theme:** Directory for art and text-based files (default: `{root}/theme`)
 
 **Field Navigation:**

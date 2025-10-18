@@ -119,7 +119,7 @@ func InitialGuidedSetupModel(rootDir string) GuidedSetupModel {
 		{Label: "   Files", Value: rootDir + "/files", ReadOnly: false, HelpText: "Directory for upload/download area storage"},
 		{Label: "    Msgs", Value: rootDir + "/msgs", ReadOnly: false, HelpText: "Directory for message base files"},
 		{Label: "    Logs", Value: rootDir + "/logs", ReadOnly: false, HelpText: "Directory for log files"},
-		{Label: "Security", Value: rootDir + "/security", ReadOnly: false, HelpText: "Directory for security assets, like blacklists"},
+		{Label: "Security", Value: rootDir + "/security", ReadOnly: false, HelpText: "Directory for security assets, like blocklists"},
 		{Label: "   Theme", Value: rootDir + "/theme", ReadOnly: false, HelpText: "Directory for art and text-based files"},
 	}
 

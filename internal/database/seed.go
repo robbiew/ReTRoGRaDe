@@ -41,8 +41,9 @@ func SeedDefaultMainMenu(db Database) error {
 		return nil
 	}
 
-	// Menu doesn't exist, create it with commands
+	// Menus don't exist, create it with commands
 	menu = &Menu{
+
 		Name:                "MainMenu",
 		Titles:              []string{"|05-= |13Retrograde BBS |05=-", "|07-|06- |14Main Menu |06-|07-"},
 		DisplayMode:         DisplayModeTitlesGenerated,
@@ -75,6 +76,19 @@ func SeedDefaultMainMenu(db Database) error {
 			CmdKeys:          "G",
 			Options:          "",
 			NodeActivity:     "Logging off.",
+			Active:           true,
+			Hidden:           false,
+		},
+		{
+			MenuID:           int(menuID),
+			PositionNumber:   2,
+			Keys:             "M",
+			ShortDescription: "Message Menu",
+			LongDescription:  "View and manage messages",
+			ACSRequired:      "",
+			CmdKeys:          "M",
+			Options:          "",
+			NodeActivity:     "Browsing the message menu.",
 			Active:           true,
 			Hidden:           false,
 		},

@@ -30,21 +30,21 @@ func InitializeSecurity(cfg *config.Config) {
 		Config:            &cfg.Servers.Security,
 		Paths:             &cfg.Configuration.Paths,
 		ConnectionTracker: make(map[string]*config.ConnectionAttempt),
-		Blacklist:         make(map[string]*config.IPListEntry),
-		Whitelist:         make(map[string]*config.IPListEntry),
+		Blocklist:         make(map[string]*config.IPListEntry),
+		Allowlist:         make(map[string]*config.IPListEntry),
 		GeoCache:          make(map[string]*config.GeoLocation),
 		ThreatIntelCache:  make(map[string]bool),
 		LastUpdate:        time.Now(),
 	}
 
 	// Load IP lists from files
-	if cfg.Servers.Security.LocalLists.BlacklistEnabled {
-		blacklistPath := cfg.SecurityFilePath(cfg.Servers.Security.LocalLists.BlacklistFile)
-		loadIPList(blacklistPath, securityManager.Blacklist)
+	if cfg.Servers.Security.LocalLists.BlocklistEnabled {
+		blocklistPath := cfg.SecurityFilePath(cfg.Servers.Security.LocalLists.BlocklistFile)
+		loadIPList(blocklistPath, securityManager.Blocklist)
 	}
-	if cfg.Servers.Security.LocalLists.WhitelistEnabled {
-		whitelistPath := cfg.SecurityFilePath(cfg.Servers.Security.LocalLists.WhitelistFile)
-		loadIPList(whitelistPath, securityManager.Whitelist)
+	if cfg.Servers.Security.LocalLists.AllowlistEnabled {
+		allowlistPath := cfg.SecurityFilePath(cfg.Servers.Security.LocalLists.AllowlistFile)
+		loadIPList(allowlistPath, securityManager.Allowlist)
 	}
 
 	// Load external threat intelligence
@@ -80,19 +80,19 @@ func CheckConnectionSecurity(conn net.Conn, cfg *config.Config) (bool, string) {
 	securityMutex.RLock()
 	defer securityMutex.RUnlock()
 
-	// Check whitelist first (if enabled)
-	if cfg.Servers.Security.LocalLists.WhitelistEnabled {
-		if isIPInList(ipAddr, securityManager.Whitelist) {
-			logSecurityEvent("WHITELIST_ALLOW", ipAddr, "IP in whitelist", "ALLOW")
+	// Check allowlist first (if enabled)
+	if cfg.Servers.Security.LocalLists.AllowlistEnabled {
+		if isIPInList(ipAddr, securityManager.Allowlist) {
+			logSecurityEvent("ALLOWLIST_ALLOW", ipAddr, "IP in allowlist", "ALLOW")
 			return true, ""
 		}
 	}
 
-	// Check blacklist
-	if cfg.Servers.Security.LocalLists.BlacklistEnabled {
-		if entry := getIPListEntry(ipAddr, securityManager.Blacklist); entry != nil {
-			reason := fmt.Sprintf("IP blacklisted: %s", entry.Reason)
-			logSecurityEvent("BLACKLIST_BLOCK", ipAddr, reason, "REJECT")
+	// Check blocklist
+	if cfg.Servers.Security.LocalLists.BlocklistEnabled {
+		if entry := getIPListEntry(ipAddr, securityManager.Blocklist); entry != nil {
+			reason := fmt.Sprintf("IP blocklisted: %s", entry.Reason)
+			logSecurityEvent("BLOCKLIST_BLOCK", ipAddr, reason, "REJECT")
 			return false, reason
 		}
 	}
@@ -175,8 +175,8 @@ func checkRateLimit(ipAddr string, cfg *config.Config) (bool, string) {
 		attempt.BlockExpires = now.Add(blockDuration)
 		attempt.BlockReason = "Rate limit exceeded"
 
-		// Auto-add to temporary blacklist
-		AddToBlacklist(ipAddr, "Auto-blocked: Rate limit exceeded", "auto", &attempt.BlockExpires)
+		// Auto-add to temporary blocklist
+		AddToBlocklist(ipAddr, "Auto-blocked: Rate limit exceeded", "auto", &attempt.BlockExpires)
 
 		return true, fmt.Sprintf("Rate limit exceeded: %d connections in %d minutes",
 			attempt.AttemptCount, cfg.Servers.Security.RateLimits.WindowMinutes)
@@ -483,12 +483,12 @@ func getIPListEntry(ipAddr string, list map[string]*config.IPListEntry) *config.
 	return nil
 }
 
-// AddToBlacklist adds an IP to the blacklist (exported for use by other packages)
-func AddToBlacklist(ipAddr, reason, source string, expiresAt *time.Time) {
+// AddToBlocklist adds an IP to the blocklist (exported for use by other packages)
+func AddToBlocklist(ipAddr, reason, source string, expiresAt *time.Time) {
 	securityMutex.Lock()
 	defer securityMutex.Unlock()
 
-	securityManager.Blacklist[ipAddr] = &config.IPListEntry{
+	securityManager.Blocklist[ipAddr] = &config.IPListEntry{
 		IPAddress: ipAddr,
 		AddedTime: time.Now(),
 		Reason:    reason,
@@ -496,15 +496,15 @@ func AddToBlacklist(ipAddr, reason, source string, expiresAt *time.Time) {
 		ExpiresAt: expiresAt,
 	}
 
-	// Also save to blacklist file if it's a permanent ban (no expiration)
+	// Also save to blocklist file if it's a permanent ban (no expiration)
 	if expiresAt == nil {
-		saveIPToBlacklistFile(ipAddr, reason, source)
+		saveIPToBlocklistFile(ipAddr, reason, source)
 	}
 }
 
-// saveIPToBlacklistFile appends an IP to the blacklist file for permanent storage
-func saveIPToBlacklistFile(ipAddr, reason, source string) {
-	path := securityManager.SecurityFilePath(securityManager.Config.LocalLists.BlacklistFile)
+// saveIPToBlocklistFile appends an IP to the blocklist file for permanent storage
+func saveIPToBlocklistFile(ipAddr, reason, source string) {
+	path := securityManager.SecurityFilePath(securityManager.Config.LocalLists.BlocklistFile)
 	if path == "" {
 		return
 	}
@@ -512,7 +512,7 @@ func saveIPToBlacklistFile(ipAddr, reason, source string) {
 	// Open file for appending
 	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Printf("Error writing to blacklist file: %v\n", err)
+		fmt.Printf("Error writing to blocklist file: %v\n", err)
 		return
 	}
 	defer file.Close()
@@ -522,12 +522,12 @@ func saveIPToBlacklistFile(ipAddr, reason, source string) {
 	entry := fmt.Sprintf("%s %s (%s - %s)\n", ipAddr, reason, source, timestamp)
 
 	if _, err := file.WriteString(entry); err != nil {
-		fmt.Printf("Error writing to blacklist file: %v\n", err)
+		fmt.Printf("Error writing to blocklist file: %v\n", err)
 		return
 	}
 
-	fmt.Printf("Added IP %s to permanent blacklist: %s\n", ipAddr, reason)
-	logSecurityEvent("BLACKLIST_ADDED", ipAddr, fmt.Sprintf("Permanently blacklisted: %s", reason), "BLOCKED")
+	fmt.Printf("Added IP %s to permanent blocklist: %s\n", ipAddr, reason)
+	logSecurityEvent("BLOCKLIST_ADDED", ipAddr, fmt.Sprintf("Permanently blocklisted: %s", reason), "BLOCKED")
 }
 
 func trackConnection(ipAddr string) {
@@ -669,10 +669,10 @@ func cleanupExpiredEntries() {
 
 	now := time.Now()
 
-	// Cleanup expired blacklist entries
-	for ip, entry := range securityManager.Blacklist {
+	// Cleanup expired blocklist entries
+	for ip, entry := range securityManager.Blocklist {
 		if entry.ExpiresAt != nil && now.After(*entry.ExpiresAt) {
-			delete(securityManager.Blacklist, ip)
+			delete(securityManager.Blocklist, ip)
 		}
 	}
 

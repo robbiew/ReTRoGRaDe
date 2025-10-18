@@ -86,10 +86,10 @@ func GetDefaultConfig() *Config {
 	cfg.Servers.Security.RateLimits.WindowMinutes = 15
 
 	// Servers.Security.LocalLists
-	cfg.Servers.Security.LocalLists.BlacklistEnabled = true
-	cfg.Servers.Security.LocalLists.BlacklistFile = "blacklist.txt"
-	cfg.Servers.Security.LocalLists.WhitelistEnabled = false
-	cfg.Servers.Security.LocalLists.WhitelistFile = "whitelist.txt"
+	cfg.Servers.Security.LocalLists.BlocklistEnabled = true
+	cfg.Servers.Security.LocalLists.BlocklistFile = "blocklist.txt"
+	cfg.Servers.Security.LocalLists.AllowlistEnabled = false
+	cfg.Servers.Security.LocalLists.AllowlistFile = "allowlist.txt"
 
 	// Servers.Security.ExternalLists
 	cfg.Servers.Security.ExternalLists.Enabled = true

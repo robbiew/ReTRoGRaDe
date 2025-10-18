@@ -305,14 +305,14 @@ func mapValueToConfig(cfg *Config, v database.ConfigValue) {
 			}
 		case "Local_Lists":
 			switch key {
-			case "BlacklistEnabled":
-				cfg.Servers.Security.LocalLists.BlacklistEnabled = parseBoolValue(value)
-			case "BlacklistFile":
-				cfg.Servers.Security.LocalLists.BlacklistFile = value
-			case "WhitelistEnabled":
-				cfg.Servers.Security.LocalLists.WhitelistEnabled = parseBoolValue(value)
-			case "WhitelistFile":
-				cfg.Servers.Security.LocalLists.WhitelistFile = value
+			case "BlocklistEnabled":
+				cfg.Servers.Security.LocalLists.BlocklistEnabled = parseBoolValue(value)
+			case "BlocklistFile":
+				cfg.Servers.Security.LocalLists.BlocklistFile = value
+			case "AllowlistEnabled":
+				cfg.Servers.Security.LocalLists.AllowlistEnabled = parseBoolValue(value)
+			case "AllowlistFile":
+				cfg.Servers.Security.LocalLists.AllowlistFile = value
 			}
 		case "External_Lists":
 			switch key {
@@ -479,10 +479,10 @@ func configToValues(cfg *Config) []database.ConfigValue {
 
 	// Servers.Security.Local_Lists
 	values = append(values,
-		database.ConfigValue{Section: "Servers.Security", Subsection: "Local_Lists", Key: "BlacklistEnabled", Value: formatBoolValue(cfg.Servers.Security.LocalLists.BlacklistEnabled), ValueType: "bool"},
-		database.ConfigValue{Section: "Servers.Security", Subsection: "Local_Lists", Key: "BlacklistFile", Value: cfg.Servers.Security.LocalLists.BlacklistFile, ValueType: "path"},
-		database.ConfigValue{Section: "Servers.Security", Subsection: "Local_Lists", Key: "WhitelistEnabled", Value: formatBoolValue(cfg.Servers.Security.LocalLists.WhitelistEnabled), ValueType: "bool"},
-		database.ConfigValue{Section: "Servers.Security", Subsection: "Local_Lists", Key: "WhitelistFile", Value: cfg.Servers.Security.LocalLists.WhitelistFile, ValueType: "path"},
+		database.ConfigValue{Section: "Servers.Security", Subsection: "Local_Lists", Key: "BlocklistEnabled", Value: formatBoolValue(cfg.Servers.Security.LocalLists.BlocklistEnabled), ValueType: "bool"},
+		database.ConfigValue{Section: "Servers.Security", Subsection: "Local_Lists", Key: "BlocklistFile", Value: cfg.Servers.Security.LocalLists.BlocklistFile, ValueType: "path"},
+		database.ConfigValue{Section: "Servers.Security", Subsection: "Local_Lists", Key: "AllowlistEnabled", Value: formatBoolValue(cfg.Servers.Security.LocalLists.AllowlistEnabled), ValueType: "bool"},
+		database.ConfigValue{Section: "Servers.Security", Subsection: "Local_Lists", Key: "AllowlistFile", Value: cfg.Servers.Security.LocalLists.AllowlistFile, ValueType: "path"},
 	)
 
 	// Servers.Security.External_Lists
@@ -552,8 +552,8 @@ func normalizeSecurityFileReferences(cfg *Config) {
 		return
 	}
 
-	cfg.Servers.Security.LocalLists.BlacklistFile = normalizeFileReference(cfg.Servers.Security.LocalLists.BlacklistFile, cfg.Configuration.Paths.Security)
-	cfg.Servers.Security.LocalLists.WhitelistFile = normalizeFileReference(cfg.Servers.Security.LocalLists.WhitelistFile, cfg.Configuration.Paths.Security)
+	cfg.Servers.Security.LocalLists.BlocklistFile = normalizeFileReference(cfg.Servers.Security.LocalLists.BlocklistFile, cfg.Configuration.Paths.Security)
+	cfg.Servers.Security.LocalLists.AllowlistFile = normalizeFileReference(cfg.Servers.Security.LocalLists.AllowlistFile, cfg.Configuration.Paths.Security)
 	cfg.Servers.Security.Logs.SecurityLogFile = normalizeFileReference(cfg.Servers.Security.Logs.SecurityLogFile, cfg.Configuration.Paths.Logs)
 }
 

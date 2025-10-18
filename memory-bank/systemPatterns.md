@@ -10,7 +10,7 @@
 
 - **Error Handling**: Consistent use of error wrapping and checking
 - **Validation Loops**: Repeated input validation with retry mechanisms in user prompts
-- **Security Measures**: Password hashing, IP blacklisting, attempt limits
+- **Security Measures**: Password hashing, IP blocklisting, attempt limits
 - **Centralized UI Helpers**: Shared terminal interaction helpers (prompts, passwords, errors, ANSI sequences) in ui.InteractiveTerminal
 - **Consistent Screen Positioning**: Unified escape sequence helpers for cursor positioning across UI components
 - **Centralized Sanitization**: Single filename sanitization utility replacing duplicate regex implementations

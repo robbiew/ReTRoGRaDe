@@ -314,13 +314,13 @@ func LoginPrompt(io *telnet.TelnetIO, session *config.TelnetSession, cfg *config
 			failedAttempts++
 			logging.LogLoginFailed(session.NodeNumber, username, session.IPAddress, fmt.Sprintf("Attempt %d: %s", failedAttempts, err.Error()))
 
-			// Check if max attempts exceeded - force disconnection and permanent blacklist
+			// Check if max attempts exceeded - force disconnection and permanent blocklist
 			if failedAttempts >= maxAttempts {
 				io.Print(ui.Ansi.RedHi + "\r\n\r\n Too many login tries, hacker -- see ya!\r\n\r\n" + ui.Ansi.Reset)
 				logging.LogLoginFailed(session.NodeNumber, username, session.IPAddress, fmt.Sprintf("Disconnected after %d failed attempts", maxAttempts))
 
-				// Add IP to permanent blacklist
-				security.AddToBlacklist(session.IPAddress, "Failed login attempts exceeded", "login_security", nil)
+				// Add IP to permanent blocklist
+				security.AddToBlocklist(session.IPAddress, "Failed login attempts exceeded", "login_security", nil)
 
 				time.Sleep(2 * time.Second) // Let them read the message
 

@@ -163,85 +163,85 @@ func serversMenu(cfg *config.Config) MenuCategory {
 				ItemType: SectionHeader,
 				SubItems: []SubmenuItem{
 					{
-						ID:       "blacklist-enabled",
-						Label:    "Blacklist",
+						ID:       "blocklist-enabled",
+						Label:    "Blocklist",
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
-							ID:        "servers.security.local_lists.blacklist_enabled",
-							Label:     "Blacklist",
+							ID:        "servers.security.local_lists.blocklist_enabled",
+							Label:     "Blocklist",
 							ValueType: BoolValue,
 							Field: ConfigField{
-								GetValue: func() interface{} { return cfg.Servers.Security.LocalLists.BlacklistEnabled },
+								GetValue: func() interface{} { return cfg.Servers.Security.LocalLists.BlocklistEnabled },
 								SetValue: func(v interface{}) error {
-									cfg.Servers.Security.LocalLists.BlacklistEnabled = v.(bool)
+									cfg.Servers.Security.LocalLists.BlocklistEnabled = v.(bool)
 									return nil
 								},
 							},
-							HelpText: "Enable IP blacklisting",
+							HelpText: "Enable IP blocklisting",
 						},
 					},
 					{
-						ID:       "blacklist-file",
-						Label:    "Blacklist File",
+						ID:       "blocklist-file",
+						Label:    "Blocklist File",
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
-							ID:        "servers.security.local_lists.blacklist_file",
-							Label:     "Blacklist File",
+							ID:        "servers.security.local_lists.blocklist_file",
+							Label:     "Blocklist File",
 							ValueType: PathValue,
 							Field: ConfigField{
-								GetValue: func() interface{} { return filepath.Base(cfg.Servers.Security.LocalLists.BlacklistFile) },
+								GetValue: func() interface{} { return filepath.Base(cfg.Servers.Security.LocalLists.BlocklistFile) },
 								SetValue: func(v interface{}) error {
 									filename := strings.TrimSpace(v.(string))
 									base := filepath.Base(filename)
 									if base == "." || base == string(filepath.Separator) {
 										base = ""
 									}
-									cfg.Servers.Security.LocalLists.BlacklistFile = base
+									cfg.Servers.Security.LocalLists.BlocklistFile = base
 									return nil
 								},
 							},
-							HelpText: "Path to blacklist file",
+							HelpText: "Path to blocklist file",
 						},
 					},
 					{
-						ID:       "whitelist-enabled",
-						Label:    "Whitelist",
+						ID:       "allowlist-enabled",
+						Label:    "Allowlist",
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
-							ID:        "servers.security.local_lists.whitelist_enabled",
-							Label:     "Whitelist",
+							ID:        "servers.security.local_lists.allowlist_enabled",
+							Label:     "Allowlist",
 							ValueType: BoolValue,
 							Field: ConfigField{
-								GetValue: func() interface{} { return cfg.Servers.Security.LocalLists.WhitelistEnabled },
+								GetValue: func() interface{} { return cfg.Servers.Security.LocalLists.AllowlistEnabled },
 								SetValue: func(v interface{}) error {
-									cfg.Servers.Security.LocalLists.WhitelistEnabled = v.(bool)
+									cfg.Servers.Security.LocalLists.AllowlistEnabled = v.(bool)
 									return nil
 								},
 							},
-							HelpText: "Enable IP whitelisting",
+							HelpText: "Enable IP allowlisting",
 						},
 					},
 					{
-						ID:       "whitelist-file",
-						Label:    "Whitelist File",
+						ID:       "allowlist-file",
+						Label:    "Allowlist File",
 						ItemType: EditableField,
 						EditableItem: &MenuItem{
-							ID:        "servers.security.local_lists.whitelist_file",
-							Label:     "Whitelist File",
+							ID:        "servers.security.local_lists.allowlist_file",
+							Label:     "Allowlist File",
 							ValueType: PathValue,
 							Field: ConfigField{
-								GetValue: func() interface{} { return filepath.Base(cfg.Servers.Security.LocalLists.WhitelistFile) },
+								GetValue: func() interface{} { return filepath.Base(cfg.Servers.Security.LocalLists.AllowlistFile) },
 								SetValue: func(v interface{}) error {
 									filename := strings.TrimSpace(v.(string))
 									base := filepath.Base(filename)
 									if base == "." || base == string(filepath.Separator) {
 										base = ""
 									}
-									cfg.Servers.Security.LocalLists.WhitelistFile = base
+									cfg.Servers.Security.LocalLists.AllowlistFile = base
 									return nil
 								},
 							},
-							HelpText: "Path to whitelist file",
+							HelpText: "Path to allowlist file",
 						},
 					},
 				},

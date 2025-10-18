@@ -114,12 +114,12 @@ type RateLimitsConfig struct {
 	WindowMinutes int
 }
 
-// LocalListsConfig holds local blacklist/whitelist settings
+// LocalListsConfig holds local blocklist/allowlist settings
 type LocalListsConfig struct {
-	BlacklistEnabled bool
-	BlacklistFile    string
-	WhitelistEnabled bool
-	WhitelistFile    string
+	BlocklistEnabled bool
+	BlocklistFile    string
+	AllowlistEnabled bool
+	AllowlistFile    string
 }
 
 // ExternalListsConfig holds external blocklist settings
@@ -249,7 +249,7 @@ type ConnectionAttempt struct {
 	BlockExpires time.Time
 }
 
-// IPListEntry represents an entry in blacklist or whitelist
+// IPListEntry represents an entry in blocklist or allowlist
 type IPListEntry struct {
 	IPAddress string
 	CIDR      string
@@ -274,8 +274,8 @@ type SecurityManager struct {
 	Config            *SecurityConfig
 	Paths             *PathsConfig
 	ConnectionTracker map[string]*ConnectionAttempt
-	Blacklist         map[string]*IPListEntry
-	Whitelist         map[string]*IPListEntry
+	Blocklist         map[string]*IPListEntry
+	Allowlist         map[string]*IPListEntry
 	GeoCache          map[string]*GeoLocation
 	ThreatIntelCache  map[string]bool
 	LastUpdate        time.Time

@@ -21,7 +21,7 @@ As a hobbyist Go developer, I'm leveraging AI tools like Roo Code, Codex and Cla
 | Feature                         | Progress | Notes                                                                              |
 | ------------------------------- | -------- | ---------------------------------------------------------------------------------- |
 | Telnet Server                   | 100%     | Completed                                                                          |
-| Security System                 | 100%     | White/Blacklist support, GeoIP filtering, Rate Limiting                            |
+| Security System                 | 100%     | White/Blocklist support, GeoIP filtering, Rate Limiting                            |
 | SQLite Database                 | 100%     | Scaffolds sensible defaults on initialization                                      |
 | TUI Configuration Editor        | 100%     | View and edit configuration files                                                  |
 | Guided First-Time Setup         | 100%     | Ensures paths are set correctly                                                    |
@@ -117,9 +117,9 @@ A BBS-style terminal UI is available for editing configuration:
 
 ### Security File Management
 
-The server uses IP whitelist and blacklist files for access control. These files don't exist, create them if you want to se them:
+The server uses IP allowlist and blocklist files for access control. These files don't exist, create them if you want to se them:
 
-**Blacklist** (`security/blacklist.txt`):
+**Blocklist** (`security/blocklist.txt`):
 
 ```text
 # Format: IP_ADDRESS REASON
@@ -127,7 +127,7 @@ The server uses IP whitelist and blacklist files for access control. These files
 192.168.100.0/24 Blocked subnet range
 ```
 
-**Whitelist** (`security/whitelist.txt`):
+**Allowlist** (`security/allowlist.txt`):
 
 ```text
 # Format: IP_ADDRESS REASON
@@ -140,7 +140,7 @@ The server uses IP whitelist and blacklist files for access control. These files
 
 - Comments start with `#`
 - Supports individual IPs and CIDR ranges
-- Whitelist takes priority over blacklist
+- Allowlist takes priority over blocklist
 - Files are loaded at server startup
 - Auto-populated by rate limiting system
 

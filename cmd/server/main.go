@@ -156,10 +156,10 @@ func runConfigEditor() {
 		cfg.Servers.Telnet.Port = 2323
 		cfg.Servers.Security.RateLimits.Enabled = true
 		cfg.Servers.Security.RateLimits.WindowMinutes = 15
-		cfg.Servers.Security.LocalLists.BlacklistEnabled = true
-		cfg.Servers.Security.LocalLists.BlacklistFile = "security/blacklist.txt"
-		cfg.Servers.Security.LocalLists.WhitelistEnabled = false
-		cfg.Servers.Security.LocalLists.WhitelistFile = "security/whitelist.txt"
+		cfg.Servers.Security.LocalLists.BlocklistEnabled = true
+		cfg.Servers.Security.LocalLists.BlocklistFile = "security/blocklist.txt"
+		cfg.Servers.Security.LocalLists.AllowlistEnabled = false
+		cfg.Servers.Security.LocalLists.AllowlistFile = "security/allowlist.txt"
 		cfg.Servers.Security.GeoBlock.GeoBlockEnabled = false
 		cfg.Servers.Security.GeoBlock.GeoAPIProvider = "ipapi"
 		cfg.Servers.Security.GeoBlock.ThreatIntelEnabled = false
