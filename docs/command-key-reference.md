@@ -77,7 +77,7 @@ The tables are grouped exactly how the original manual organizes them.
 | `-C` | Display message on SysOp Window | <string> | No |
 | `-F` | Display a text file | [filename] <.ext> | No |
 | `/F` | Display a text file | [filename] <.ext> | No |
-| `-L` | Display a line of text | [string] | No |
+| `-L` | Display a line of text | [string] | ✅ |
 | `-N` | Shows question, displays quote if Y is pressed, and continues | [question;quote] | No |
 | `-Q` | Read an Infoform questionnaire file (answers in .ASW) | <Infoform questionnaire filename> | No |
 | `-R` | Read an Infoform questionnaire answer file | <Infoform questionnaire filename> | No |
@@ -196,7 +196,7 @@ The tables are grouped exactly how the original manual organizes them.
 | `OA` | Allow auto-validation of users | [password]<;Level> | No |
 | `OB` | User Statistics | <Letter> | No |
 | `OC` | Page the SysOp | <user #> <;string> | No |
-| `OE` | Pause Screen | None | ✅ |
+| `OE` | Pause Screen (centered) | <Override default pause text> | ✅ |
 | `OF` | AR flag set/reset/toggle | [{function}{flag}] | No |
 | `OG` | AC flag set/reset/toggle | [{function}{flag}] | No |
 | `OL` | List today's callers | filename | No |
