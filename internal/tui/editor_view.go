@@ -1515,6 +1515,28 @@ func (m *Model) setupMenuEditCommandModal() {
 		return
 	}
 
+	optionsItem := &MenuItem{
+		ID:        "command-options",
+		Label:     "Options",
+		ValueType: StringValue,
+		Field: ConfigField{
+			GetValue: func() interface{} { return m.editingMenuCommand.Options },
+			SetValue: func(v interface{}) error {
+				m.editingMenuCommand.Options = v.(string)
+				return nil
+			},
+		},
+		HelpText: "Command options/parameters",
+	}
+
+	if strings.EqualFold(m.editingMenuCommand.CmdKeys, "-^") {
+		menuOptions := m.getMenuSelectOptions()
+		if len(menuOptions) > 0 {
+			optionsItem.ValueType = SelectValue
+			optionsItem.SelectOptions = menuOptions
+		}
+	}
+
 	// Create modal fields for command editing
 	m.modalFields = []SubmenuItem{
 		{
@@ -1610,22 +1632,10 @@ func (m *Model) setupMenuEditCommandModal() {
 		},
 		// REMOVE THE DUPLICATE CmdKeys FIELD THAT WAS HERE
 		{
-			ID:       "command-options",
-			Label:    "Options",
-			ItemType: EditableField,
-			EditableItem: &MenuItem{
-				ID:        "command-options",
-				Label:     "Options",
-				ValueType: StringValue,
-				Field: ConfigField{
-					GetValue: func() interface{} { return m.editingMenuCommand.Options },
-					SetValue: func(v interface{}) error {
-						m.editingMenuCommand.Options = v.(string)
-						return nil
-					},
-				},
-				HelpText: "Command options/parameters",
-			},
+			ID:           "command-options",
+			Label:        "Options",
+			ItemType:     EditableField,
+			EditableItem: optionsItem,
 		},
 		{
 			ID:       "command-node-activity",

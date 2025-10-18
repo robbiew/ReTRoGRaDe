@@ -21,6 +21,7 @@ type ExecutionContext struct {
 	Username    string
 	IO          *telnet.TelnetIO
 	Session     *config.TelnetSession
+	Executor    *MenuExecutor
 	AdvanceRows func(lines int)
 	// Add more context as needed: session, database, etc.
 }
@@ -152,7 +153,7 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		{CmdKey: "-Y", Name: "Prompt: No Shows Quote", Description: "Prompt the user; show quote if they answer No", Category: "Navigation/Display"},
 		{CmdKey: "-;", Name: "Execute Macro", Description: "Execute a macro string (substitutes ';' with <CR>)", Category: "Navigation/Display"},
 		{CmdKey: "-$", Name: "Prompt for Password", Description: "Prompt the user for a password", Category: "Navigation/Display"},
-		{CmdKey: "-^", Name: "Go To Menu", Description: "Jump to another menu", Category: "Navigation/Display"},
+		{CmdKey: "-^", Name: "Go To Menu", Description: "Jump to another menu", Category: "Navigation/Display", Implemented: true, Handler: handleGoToMenu},
 		{CmdKey: "-/", Name: "Gosub Menu", Description: "Jump to a menu and return", Category: "Navigation/Display"},
 		{CmdKey: "-\\", Name: "Return from Menu", Description: "Return to the previous menu", Category: "Navigation/Display"},
 		{CmdKey: "-\"", Name: "Return from Menu (Legacy)", Description: "Legacy alias for returning to the previous menu", Category: "Navigation/Display"},
@@ -297,6 +298,23 @@ func (r *CmdKeyRegistry) registerDefaults() {
 		}
 		r.Register(&d)
 	}
+}
+
+func handleGoToMenu(ctx *ExecutionContext, options string) error {
+	if ctx == nil {
+		return fmt.Errorf("go to menu command requires an execution context")
+	}
+
+	target := strings.TrimSpace(options)
+	if target == "" {
+		return fmt.Errorf("go to menu command requires a target menu name in options")
+	}
+
+	if ctx.Executor == nil {
+		return fmt.Errorf("go to menu command cannot run without a menu executor")
+	}
+
+	return ctx.Executor.ExecuteMenu(target, ctx)
 }
 
 // handleGoodbye handles the G command (logout)

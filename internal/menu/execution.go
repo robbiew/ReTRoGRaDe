@@ -54,6 +54,8 @@ func (e *MenuExecutor) ExecuteMenu(menuName string, ctx *ExecutionContext) error
 	if ctx == nil {
 		ctx = &ExecutionContext{}
 	}
+	ctx.Executor = e
+	e.currentRow = 1
 	if ctx.IO == nil {
 		ctx.IO = e.io
 	}
@@ -506,8 +508,61 @@ func (e *MenuExecutor) serveThemeFile(themePath string) (int, error) {
 	if len(data) > 0 && !strings.HasSuffix(data, "\n") {
 		lineCount++
 	}
+	if lineCount < 1 {
+		lineCount = 1
+	}
+
+	if maxRow := detectANSIAbsoluteRow(data); maxRow > lineCount {
+		lineCount = maxRow
+	}
 	e.currentRow += lineCount
 	return lineCount, nil
+}
+
+func detectANSIAbsoluteRow(data string) int {
+	maxRow := 0
+	for i := 0; i < len(data); i++ {
+		if data[i] != '\x1b' || i+1 >= len(data) || data[i+1] != '[' {
+			continue
+		}
+		j := i + 2
+		for j < len(data) && ((data[j] >= '0' && data[j] <= '9') || data[j] == ';') {
+			j++
+		}
+		if j >= len(data) {
+			break
+		}
+		cmd := data[j]
+		params := data[i+2 : j]
+
+		switch cmd {
+		case 'H', 'f':
+			row := parseANSIRow(params)
+			if row > maxRow {
+				maxRow = row
+			}
+		case 'd':
+			if row, err := strconv.Atoi(params); err == nil && row > maxRow {
+				maxRow = row
+			}
+		}
+		i = j
+	}
+	return maxRow
+}
+
+func parseANSIRow(params string) int {
+	if params == "" {
+		return 1
+	}
+	parts := strings.Split(params, ";")
+	if len(parts) == 0 || parts[0] == "" {
+		return 1
+	}
+	if row, err := strconv.Atoi(parts[0]); err == nil && row > 0 {
+		return row
+	}
+	return 1
 }
 
 // clearScreen clears the screen if ClearScreen is true

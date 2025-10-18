@@ -2198,7 +2198,15 @@ func (m Model) handleSelectingValue(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		// Select the current option
 		selectedOption := options[m.selectListIndex]
-		if err := m.editingItem.Field.SetValue(selectedOption.Value); err != nil {
+		currentItem := m.editingItem
+		currentItemID := ""
+		currentItemLabel := ""
+		if currentItem != nil {
+			currentItemID = currentItem.ID
+			currentItemLabel = currentItem.Label
+		}
+
+		if err := currentItem.Field.SetValue(selectedOption.Value); err != nil {
 			m.editingError = err.Error()
 			return m, nil
 		}
@@ -2209,13 +2217,76 @@ func (m Model) handleSelectingValue(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.menuModified = true
 		}
 
+		shouldRefreshCommand := currentItemID == "command-cmdkeys"
+		shouldAutoPromptMenu := shouldRefreshCommand && strings.EqualFold(selectedOption.Value, "-^")
+
+		if shouldRefreshCommand {
+			m.setupMenuEditCommandModal()
+		}
+
+		displayLabel := currentItemLabel
+		if displayLabel == "" {
+			displayLabel = "Value"
+		}
+		messageValue := selectedOption.Value
+		messageLabel := selectedOption.Label
+		if messageLabel == "" {
+			messageLabel = messageValue
+		}
+
+		if messageLabel == messageValue {
+			m.message = fmt.Sprintf("%s set to: %s", displayLabel, messageLabel)
+		} else {
+			m.message = fmt.Sprintf("%s set to: %s (%s)", displayLabel, messageValue, messageLabel)
+		}
+		m.messageTime = time.Now()
+		m.messageType = SuccessMessage
+		m.editingError = ""
+
+		if shouldAutoPromptMenu {
+			var optionsItem *MenuItem
+			for idx, field := range m.modalFields {
+				if field.ID == "command-options" && field.EditableItem != nil {
+					optionsItem = field.EditableItem
+					m.modalFieldIndex = idx
+					break
+				}
+			}
+
+			if optionsItem != nil && optionsItem.ValueType == SelectValue && len(optionsItem.SelectOptions) > 0 {
+				m.editingItem = optionsItem
+				m.originalValue = optionsItem.Field.GetValue()
+				m.navMode = SelectingValue
+
+				currentValue := ""
+				if val, ok := optionsItem.Field.GetValue().(string); ok {
+					currentValue = val
+				}
+				m.selectListIndex = 0
+				for i, opt := range optionsItem.SelectOptions {
+					if opt.Value == currentValue {
+						m.selectListIndex = i
+						break
+					}
+				}
+
+				m.message = "Select destination menu"
+				m.messageTime = time.Now()
+				m.messageType = InfoMessage
+				return m, nil
+			}
+
+			m.navMode = m.returnToMenuModifyOrModal()
+			m.editingItem = nil
+			m.message = "No menus available; enter options manually"
+			m.messageTime = time.Now()
+			m.messageType = InfoMessage
+			return m, nil
+		}
+
 		// Return to previous mode
 		m.navMode = m.returnToMenuModifyOrModal()
 		m.editingItem = nil
-		m.editingError = ""
-		m.message = fmt.Sprintf("CmdKey set to: %s (%s)", selectedOption.Value, selectedOption.Label)
-		m.messageTime = time.Now()
-		m.messageType = SuccessMessage
 		return m, nil
 
 	case "esc":

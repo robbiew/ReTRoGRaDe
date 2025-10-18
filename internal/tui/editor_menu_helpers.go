@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/robbiew/retrograde/internal/database"
 	"github.com/robbiew/retrograde/internal/menu"
@@ -64,6 +65,29 @@ func (m *Model) getSecurityLevelSelectOptions() []SelectOption {
 			Label:       level.Name,
 			Description: fmt.Sprintf("Level %d", level.SecLevel),
 			Category:    "", // No category needed for security levels
+			Implemented: true,
+		})
+	}
+
+	return options
+}
+
+func (m *Model) getMenuSelectOptions() []SelectOption {
+	menus, err := m.db.GetAllMenus()
+	if err != nil {
+		return []SelectOption{}
+	}
+
+	sort.Slice(menus, func(i, j int) bool {
+		return strings.ToLower(menus[i].Name) < strings.ToLower(menus[j].Name)
+	})
+
+	options := make([]SelectOption, 0, len(menus))
+	for _, menu := range menus {
+		options = append(options, SelectOption{
+			Value:       menu.Name,
+			Label:       menu.Name,
+			Description: fmt.Sprintf("Menu ID %d", menu.ID),
 			Implemented: true,
 		})
 	}
