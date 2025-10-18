@@ -1384,7 +1384,7 @@ func (m Model) renderMenuDataListWithEditing(width int) []string {
 func (m Model) renderCommandList(width int) []string {
 	var commandLines []string
 
-	headerFormat := " %-2s %-4s %-6s %-26s %-6s %-6s"
+	headerFormat := " %-2s %-4s %-8s %-24s %-6s %-6s"
 
 	columnHeader := lipgloss.NewStyle().
 		Background(lipgloss.Color(ColorBgMedium)).
