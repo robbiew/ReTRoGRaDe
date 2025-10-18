@@ -9,7 +9,7 @@
 
 ## Next Focus
 
-- Implementing Message Area editor to construct Message Areas in TUI
+- Wiring TUI conference/area editors into JAM message workflow (listings, scanning, posting)
 - Implementing JAM message base functionality and user interface
 - Building message reading, posting, and area management features
 - Adding echomail and netmail support for FidoNet networking
@@ -20,6 +20,7 @@
 - Improved ANSI art printing functions
 - Improved login UI
 - Completed user management interface in TUI configuration editor
+- Added TUI editors for message conferences and areas, including default Local Areas → General Chatter seed data
 - Implemented full JAM message base library with local/echomail/netmail support
 - Added guided first-time setup with database initialization
 - Updated all documentation to reflect current application state

@@ -31,9 +31,10 @@ As a hobbyist Go developer, I'm leveraging AI tools like Roo Code, Codex and Cla
 | Auth /Login UI                  | 100%     | Create New User, Login                                                             |
 | Times Event System              | 0%       | Do things on a schedule                                                            |
 | Menu Construction System        | 100%     | Renegade-style system (TUI) for constructing menus and prompts.                    |
-| Menu Commands                   | 1%       | [List](docs/command-key-reference.md)                                              |
-| Menu Execution                  | 50%      | Execute Menu Command Logic (stacking, first run, etc)                              |
-| Message Base Configuration & UI | 0%       | Local message base configuration                                                   |
+| Menu Commands                   | 2%       | [List](docs/command-key-reference.md)                                              |
+| Menu Execution                  | 100%     | Execute Menu Command Logic (stacking, first run, etc)                              |
+| Message Base Configuration & UI | 100%     | Local message base configuration/management                                        |
+| JAM message files               | 0%       | Message storage in JAM message files                                               |
 | Message Base (FTN) Support      | 0%       | Read/write support for FTN message bases for echomail                              |
 | Netmail Support                 | 0%       | Read/write support for private Netmail                                             |
 | Private Email Support           | 0%       | Read/write support for private Email                                               |

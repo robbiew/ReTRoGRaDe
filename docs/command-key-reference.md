@@ -9,7 +9,8 @@ commands we still need to implement.
 - **Option(s)** reflects the syntax shown in the manual. Angle brackets (`<>`)
   denote optional values, square brackets (`[]`) mean required literal input,
   and braces (`{}`) indicate mutually exclusive choices.
-- All commands currently act as placeholders unless noted in the code base.
+- **Implemented** uses `✅` for commands Retrograde already handles; everything
+  else still behaves as a placeholder.
 
 ## Working with command keys
 
@@ -26,239 +27,245 @@ The tables are grouped exactly how the original manual organizes them.
 
 ### Offline Mail (`!` commands)
 
-| CmdKey | Function | Option(s) |
-|--------|----------|-----------|
-| `!D` | Download .QWK packet | None |
-| `!P` | Set Message Pointers | None |
-| `!U` | Upload .REP packet | None |
+| CmdKey | Function | Option(s) | Implemented |
+|--------|----------|-----------|-------------|
+| `!D` | Download .QWK packet | None | No |
+| `!P` | Set Message Pointers | None | No |
+| `!U` | Upload .REP packet | None | No |
 
 ### Timebank (`$` commands)
 
-| CmdKey | Function | Option(s) |
-|--------|----------|-----------|
-| `$D` | Deposit Time into Timebank | <Maxperday;Max Size of bank> |
-| `$W` | Withdraw Time from Timebank | <Maxperday> |
+| CmdKey | Function | Option(s) | Implemented |
+|--------|----------|-----------|-------------|
+| `$D` | Deposit Time into Timebank | <Maxperday;Max Size of bank> | No |
+| `$W` | Withdraw Time from Timebank | <Maxperday> | No |
 
 ### Sysop Functions (`*` commands)
 
-| CmdKey | Function | Option(s) |
-|--------|----------|-----------|
-| `*B` | Enter the message base editor | None |
-| `*C` | Change to a different user's account | None |
-| `*D` | Enter the Mini-DOS environment | None |
-| `*E` | Enter the event editor | None |
-| `*F` | Enter the file base editor | None |
-| `*L` | Show SysOp Log for certain day | None |
-| `*N` | Edit a text file | None |
-| `*P` | Enter the system configuration editor | None |
-| `*R` | Enter Conference Editor | None |
-| `*U` | Enter user editor | None |
-| `*V` | Enter the voting editor | None |
-| `*X` | Enter the protocol editor | None |
-| `*Z` | Displays system activity log | None |
-| `*1` | Edit file(s) in current file base | None |
-| `*2` | Sort files in all file bases by name | None |
-| `*3` | Read all users' private mail | None |
-| `*4` | Download a file from anywhere on your computer | <filespec> |
-| `*5` | Recheck files in current or all directories for size and online | None |
-| `*6` | Upload file(s) not in file lists | None |
-| `*7` | Validate files | None |
-| `*8` | Add specs to all *.GIF files in current file base | None |
-| `*9` | Pack the message bases | None |
-| `*#` | Enter the menu editor | None |
-| `*$` | Gives a long DOS directory of the current file base | None |
-| `*%` | Gives a condensed DOS directory of the current file base | None |
+| CmdKey | Function | Option(s) | Implemented |
+|--------|----------|-----------|-------------|
+| `*B` | Enter the message base editor | None | No |
+| `*C` | Change to a different user's account | None | No |
+| `*D` | Enter the Mini-DOS environment | None | No |
+| `*E` | Enter the event editor | None | No |
+| `*F` | Enter the file base editor | None | No |
+| `*L` | Show SysOp Log for certain day | None | No |
+| `*N` | Edit a text file | None | No |
+| `*P` | Enter the system configuration editor | None | No |
+| `*R` | Enter Conference Editor | None | No |
+| `*U` | Enter user editor | None | No |
+| `*V` | Enter the voting editor | None | No |
+| `*X` | Enter the protocol editor | None | No |
+| `*Z` | Displays system activity log | None | No |
+| `*1` | Edit file(s) in current file base | None | No |
+| `*2` | Sort files in all file bases by name | None | No |
+| `*3` | Read all users' private mail | None | No |
+| `*4` | Download a file from anywhere on your computer | <filespec> | No |
+| `*5` | Recheck files in current or all directories for size and online | None | No |
+| `*6` | Upload file(s) not in file lists | None | No |
+| `*7` | Validate files | None | No |
+| `*8` | Add specs to all *.GIF files in current file base | None | No |
+| `*9` | Pack the message bases | None | No |
+| `*#` | Enter the menu editor | None | No |
+| `*$` | Gives a long DOS directory of the current file base | None | No |
+| `*%` | Gives a condensed DOS directory of the current file base | None | No |
 
 ### Navigation, Display, and Flow (`-`, `/`)
 
-| CmdKey | Function | Option(s) |
-|--------|----------|-----------|
-| `-C` | Display message on SysOp Window | <string> |
-| `-F` | Display a text file | [filename] <.ext> |
-| `/F` | Display a text file | [filename] <.ext> |
-| `-L` | Display a line of text | [string] |
-| `-N` | Shows question, displays quote if Y is pressed, and continues | [question;quote] |
-| `-Q` | Read an Infoform questionnaire file (answers in .ASW) | <Infoform questionnaire filename> |
-| `-R` | Read an Infoform questionnaire answer file | <Infoform questionnaire filename> |
-| `-S` | Append line to SysOp log file | [string] |
-| `-Y` | Shows question, displays quote if N is pressed, and continues | [question;quote] |
-| `-;` | Execute macro | [macro] |
-| `-$` | Prompt for password | [password] < <[;prompt]> [;bad-message] > |
-| `-^` | Goto menu | [menu file] |
-| `-/` | Gosub menu | [menu file] |
-| `-\` | Return from menu | None |
+| CmdKey | Function | Option(s) | Implemented |
+|--------|----------|-----------|-------------|
+| `-C` | Display message on SysOp Window | <string> | No |
+| `-F` | Display a text file | [filename] <.ext> | No |
+| `/F` | Display a text file | [filename] <.ext> | No |
+| `-L` | Display a line of text | [string] | No |
+| `-N` | Shows question, displays quote if Y is pressed, and continues | [question;quote] | No |
+| `-Q` | Read an Infoform questionnaire file (answers in .ASW) | <Infoform questionnaire filename> | No |
+| `-R` | Read an Infoform questionnaire answer file | <Infoform questionnaire filename> | No |
+| `-S` | Append line to SysOp log file | [string] | No |
+| `-Y` | Shows question, displays quote if N is pressed, and continues | [question;quote] | No |
+| `-;` | Execute macro | [macro] | No |
+| `-$` | Prompt for password | [password] < <[;prompt]> [;bad-message] > | No |
+| `-^` | Goto menu | [menu file] | ✅ |
+| `-/` | Gosub menu | [menu file] | No |
+| `-\` | Return from menu | None | No |
 
 ### Archive Management (`A*`)
 
-| CmdKey | Function | Option(s) |
-|--------|----------|-----------|
-| `AA` | Add files to archive | None |
-| `AC` | Convert between archive formats | None |
-| `AE` | Extract files from archive | None |
-| `AG` | Manipulate files extracted from archives | None |
-| `AM` | Modify comment fields in archive | None |
-| `AR` | Re-archive archived files using same format | None |
-| `AT` | Run integrity test on archive file | None |
+| CmdKey | Function | Option(s) | Implemented |
+|--------|----------|-----------|-------------|
+| `AA` | Add files to archive | None | No |
+| `AC` | Convert between archive formats | None | No |
+| `AE` | Extract files from archive | None | No |
+| `AG` | Manipulate files extracted from archives | None | No |
+| `AM` | Modify comment fields in archive | None | No |
+| `AR` | Re-archive archived files using same format | None | No |
+| `AT` | Run integrity test on archive file | None | No |
 
 ### Batch File Transfer (`B*`)
 
-| CmdKey | Function | Option(s) |
-|--------|----------|-----------|
-| `BC` | Clear batch queue | <U> |
-| `BD` | Download batch queue | None |
-| `BL` | List batch queue | <U> |
-| `BR` | Remove single file from batch queue | <U> |
-| `BU` | Upload batch queue | None |
-| `B?` | Display number of files left in batch download queue | None |
+| CmdKey | Function | Option(s) | Implemented |
+|--------|----------|-----------|-------------|
+| `BC` | Clear batch queue | <U> | No |
+| `BD` | Download batch queue | None | No |
+| `BL` | List batch queue | <U> | No |
+| `BR` | Remove single file from batch queue | <U> | No |
+| `BU` | Upload batch queue | None | No |
+| `B?` | Display number of files left in batch download queue | None | No |
 
 ### Dropfile / Door Launch (`D*`)
 
-| CmdKey | Function | Option(s) |
-|--------|----------|-----------|
-| `DC` | Create CHAIN.TXT (WWIV door) and execute Option | [command to execute] |
-| `DD` | Create DORINFO1.DEF (RBBS door) and execute Option | [command to execute] |
-| `DG` | Create DOOR.SYS (GAP door) and execute Option | [command to execute] |
-| `DP` | Create PCBOARD.SYS (PCBoard door) and execute Option | [command to execute] |
-| `DS` | Create SFDOORS.DAT (Spitfire door) and execute Option | [command to execute] |
-| `DW` | Create CALLINFO.BBS (Wildcat! door) and execute Option | [command to execute] |
-| `D-` | Execute Option without creating a door information file | [command to execute] |
+| CmdKey | Function | Option(s) | Implemented |
+|--------|----------|-----------|-------------|
+| `DC` | Create CHAIN.TXT (WWIV door) and execute Option | [command to execute] | No |
+| `DD` | Create DORINFO1.DEF (RBBS door) and execute Option | [command to execute] | No |
+| `DG` | Create DOOR.SYS (GAP door) and execute Option | [command to execute] | No |
+| `DP` | Create PCBOARD.SYS (PCBoard door) and execute Option | [command to execute] | No |
+| `DS` | Create SFDOORS.DAT (Spitfire door) and execute Option | [command to execute] | No |
+| `DW` | Create CALLINFO.BBS (Wildcat! door) and execute Option | [command to execute] | No |
+| `D-` | Execute Option without creating a door information file | [command to execute] | No |
 
 ### File System (`F*`)
 
-| CmdKey | Function | Option(s) |
-|--------|----------|-----------|
-| `FA` | Change file bases | <base#> or {+/-} or <L> |
-| `FB` | Add file to Batch Download List | < Filename > |
-| `FD` | Download file on BBS to user | < Filename > |
-| `FF` | Search all file bases for description | None |
-| `FL` | List filespec in current file base only | Filespec (Overrides user input) |
-| `FN` | Scan file sections for new files | <newtype> |
-| `FP` | Change pointer date for new files | None |
-| `FS` | Search all file bases for filespec | None |
-| `FU` | Upload file from user to BBS | None |
-| `FV` | List contents of an archived file | None |
-| `FZ` | Set file bases to be scanned for new files | None |
-| `F@` | Create temporary directory | None |
-| `F#` | Display Line/Quick file base change | None |
+| CmdKey | Function | Option(s) | Implemented |
+|--------|----------|-----------|-------------|
+| `FA` | Change file bases | <base#> or {+/-} or <L> | No |
+| `FB` | Add file to Batch Download List | < Filename > | No |
+| `FD` | Download file on BBS to user | < Filename > | No |
+| `FF` | Search all file bases for description | None | No |
+| `FL` | List filespec in current file base only | Filespec (Overrides user input) | No |
+| `FN` | Scan file sections for new files | <newtype> | No |
+| `FP` | Change pointer date for new files | None | No |
+| `FS` | Search all file bases for filespec | None | No |
+| `FU` | Upload file from user to BBS | None | No |
+| `FV` | List contents of an archived file | None | No |
+| `FZ` | Set file bases to be scanned for new files | None | No |
+| `F@` | Create temporary directory | None | No |
+| `F#` | Display Line/Quick file base change | None | No |
 
 ### Hangup / Logoff (`H*`)
 
-| CmdKey | Function | Option(s) |
-|--------|----------|-----------|
-| `HC` | Careful logoff of user | [string] |
-| `HI` | Immediate logoff of user | None |
-| `HM` | Display string and logoff user | [string] |
+| CmdKey | Function | Option(s) | Implemented |
+|--------|----------|-----------|-------------|
+| `HC` | Careful logoff of user | [string] | No |
+| `HI` | Immediate logoff of user | None | No |
+| `HM` | Display string and logoff user | [string] | No |
+
+### System (Single-Key)
+
+| CmdKey | Function | Option(s) | Implemented |
+|--------|----------|-----------|-------------|
+| `G` | Goodbye / Logoff | None | ✅ |
 
 ### Message System (`M*`)
 
-| CmdKey | Function | Option(s) |
-|--------|----------|-----------|
-| `MA` | Message base change | <base#> or {+/-} or <L> |
-| `ME` | Send private mail to user | <User #> <;Reason> |
-| `MK` | Edit/Delete outgoing private mail | None |
-| `ML` | Send "mass mail" -  private mail sent to multiple users | None |
-| `MM` | Read private mail | None |
-| `MN` | Display new messages | <newtype> |
-| `MP` | Post message in the current message base. | None |
-| `MR` | Read messages in current base | None |
-| `MS` | Scan messages in current base | <newtype> |
-| `MU` | Lists users with access to the current message base | None |
-| `MY` | Scan message bases for personal messages | None |
-| `MZ` | Set message bases to be scanned for new messages | None |
-| `M#` | Display Line/Quick message base change | None |
+| CmdKey | Function | Option(s) | Implemented |
+|--------|----------|-----------|-------------|
+| `MA` | Message base change | <base#> or {+/-} or <L> | No |
+| `ME` | Send private mail to user | <User #> <;Reason> | No |
+| `MK` | Edit/Delete outgoing private mail | None | No |
+| `ML` | Send "mass mail" -  private mail sent to multiple users | None | No |
+| `MM` | Read private mail | None | No |
+| `MN` | Display new messages | <newtype> | No |
+| `MP` | Post message in the current message base. | None | No |
+| `MR` | Read messages in current base | None | No |
+| `MS` | Scan messages in current base | <newtype> | No |
+| `MU` | Lists users with access to the current message base | None | No |
+| `MY` | Scan message bases for personal messages | None | No |
+| `MZ` | Set message bases to be scanned for new messages | None | No |
+| `M#` | Display Line/Quick message base change | None | No |
 
 ### Multinode (`N*`)
 
-| CmdKey | Function | Option(s) |
-|--------|----------|-----------|
-| `NA` | Toggle node page availability | None |
-| `ND` | Hangup node | <Node #> |
-| `NG` | Join Group Chat | None |
-| `NO` | View users on all nodes | None |
-| `NP` | Page another node for chat | <Node #> |
-| `NS` | Send a message to another node | <node number> <;message to send> |
-| `NT` | Stealth Mode On/Off | None |
-| `NW` | Display String under Activity in Node Listing | [ String ] |
+| CmdKey | Function | Option(s) | Implemented |
+|--------|----------|-----------|-------------|
+| `NA` | Toggle node page availability | None | No |
+| `ND` | Hangup node | <Node #> | No |
+| `NG` | Join Group Chat | None | No |
+| `NO` | View users on all nodes | None | No |
+| `NP` | Page another node for chat | <Node #> | No |
+| `NS` | Send a message to another node | <node number> <;message to send> | No |
+| `NT` | Stealth Mode On/Off | None | No |
+| `NW` | Display String under Activity in Node Listing | [ String ] | No |
 
 ### System & User Operations (`O*`)
 
-| CmdKey | Function | Option(s) |
-|--------|----------|-----------|
-| `O1` | Logon to BBS (Shuttle) | None |
-| `O2` | Apply to BBS as a new user (Shuttle) | None |
-| `OA` | Allow auto-validation of users | [password]<;Level> |
-| `OB` | User Statistics | <Letter> |
-| `OC` | Page the SysOp | <user #> <;string> |
-| `OE` | Pause Screen | None |
-| `OF` | AR flag set/reset/toggle | [{function}{flag}] |
-| `OG` | AC flag set/reset/toggle | [{function}{flag}] |
-| `OL` | List today's callers | filename |
-| `ON` | Clear Screen | None |
-| `OP` | Modify user information | [info type] |
-| `OR` | Change to another conference | <conference char> or <?> |
-| `OS` | Go to bulletins menu | <main bulletin;sub-bulletin> |
-| `OU` | User Listing | < ACS;filename > |
-| `OV` | BBS Listing | <filename> |
+| CmdKey | Function | Option(s) | Implemented |
+|--------|----------|-----------|-------------|
+| `O1` | Logon to BBS (Shuttle) | None | No |
+| `O2` | Apply to BBS as a new user (Shuttle) | None | No |
+| `OA` | Allow auto-validation of users | [password]<;Level> | No |
+| `OB` | User Statistics | <Letter> | No |
+| `OC` | Page the SysOp | <user #> <;string> | No |
+| `OE` | Pause Screen | None | ✅ |
+| `OF` | AR flag set/reset/toggle | [{function}{flag}] | No |
+| `OG` | AC flag set/reset/toggle | [{function}{flag}] | No |
+| `OL` | List today's callers | filename | No |
+| `ON` | Clear Screen | None | No |
+| `OP` | Modify user information | [info type] | No |
+| `OR` | Change to another conference | <conference char> or <?> | No |
+| `OS` | Go to bulletins menu | <main bulletin;sub-bulletin> | No |
+| `OU` | User Listing | < ACS;filename > | No |
+| `OV` | BBS Listing | <filename> | No |
 
 ### Automessage (`U*`)
 
-| CmdKey | Function | Option(s) |
-|--------|----------|-----------|
-| `UA` | Reply to author of current AutoMessage | None |
-| `UR` | Display current AutoMessage | None |
-| `UW` | Write AutoMessage | None |
+| CmdKey | Function | Option(s) | Implemented |
+|--------|----------|-----------|-------------|
+| `UA` | Reply to author of current AutoMessage | None | No |
+| `UR` | Display current AutoMessage | None | No |
+| `UW` | Write AutoMessage | None | No |
 
 ### Voting (`V*`)
 
-| CmdKey | Function | Option(s) |
-|--------|----------|-----------|
-| `VA` | Add voting topic | None |
-| `VL` | List voting topics | None |
-| `VR` | View results of voting topic | <Question #> |
-| `VT` | Track User's vote | <User #> |
-| `VU` | View users who voted on Question | <Question #> |
-| `VV` | Vote on all un-voted topics | None |
-| `V#` | Vote on Question # | <Question #> |
+| CmdKey | Function | Option(s) | Implemented |
+|--------|----------|-----------|-------------|
+| `VA` | Add voting topic | None | No |
+| `VL` | List voting topics | None | No |
+| `VR` | View results of voting topic | <Question #> | No |
+| `VT` | Track User's vote | <User #> | No |
+| `VU` | View users who voted on Question | <Question #> | No |
+| `VV` | Vote on all un-voted topics | None | No |
+| `V#` | Vote on Question # | <Question #> | No |
 
 ### Credit System (`$+/ -`)
 
-| CmdKey | Function | Option(s) |
-|--------|----------|-----------|
-| `$+` | Increase a user's credit | [ Amount ] |
-| `$-` | Increase a user's debit | [ Amount ] |
+| CmdKey | Function | Option(s) | Implemented |
+|--------|----------|-----------|-------------|
+| `$+` | Increase a user's credit | [ Amount ] | No |
+| `$-` | Increase a user's debit | [ Amount ] | No |
 
 ### File Scanning (FILEP.MNU)
 
-| CmdKey | Function | Option(s) |
-|--------|----------|-----------|
-| `L1` | Continue Listing | None |
-| `L2` | Quit Listing | None |
-| `L3` | Next file base | None |
-| `L4` | Toggle NewScan of that base on/off | None |
+| CmdKey | Function | Option(s) | Implemented |
+|--------|----------|-----------|-------------|
+| `L1` | Continue Listing | None | No |
+| `L2` | Quit Listing | None | No |
+| `L3` | Next file base | None | No |
+| `L4` | Toggle NewScan of that base on/off | None | No |
 
 ### Message Scanning (READP.MNU)
 
-| CmdKey | Function | Option(s) |
-|--------|----------|-----------|
-| `RA` | Read Message Again | None |
-| `RB` | Move Back in Thread | None |
-| `RC` | Continuous Reading | None |
-| `RD` | Delete Message | None |
-| `RE` | Edit Message | None |
-| `RF` | Forward in Thread | None |
-| `RG` | Goto next Base | None |
-| `RH` | Set Highread Pointer | None |
-| `RI` | Ignore remaining messages, and set high pointer | None |
-| `RL` | List Messages | None |
-| `RM` | Move Message | None |
-| `RN` | Next Message | None |
-| `RQ` | Quit Reading | None |
-| `RR` | Reply to Message | None |
-| `RT` | Toggle NewScan of Message Base | None |
-| `RU` | Edit User of Current Message | None |
-| `RX` | Extract Message | None |
-| `R#` | Allows User to Jump to message inputed. | None |
-| `R-` | Read Previous Message | None |
+| CmdKey | Function | Option(s) | Implemented |
+|--------|----------|-----------|-------------|
+| `RA` | Read Message Again | None | No |
+| `RB` | Move Back in Thread | None | No |
+| `RC` | Continuous Reading | None | No |
+| `RD` | Delete Message | None | No |
+| `RE` | Edit Message | None | No |
+| `RF` | Forward in Thread | None | No |
+| `RG` | Goto next Base | None | No |
+| `RH` | Set Highread Pointer | None | No |
+| `RI` | Ignore remaining messages, and set high pointer | None | No |
+| `RL` | List Messages | None | No |
+| `RM` | Move Message | None | No |
+| `RN` | Next Message | None | No |
+| `RQ` | Quit Reading | None | No |
+| `RR` | Reply to Message | None | No |
+| `RT` | Toggle NewScan of Message Base | None | No |
+| `RU` | Edit User of Current Message | None | No |
+| `RX` | Extract Message | None | No |
+| `R#` | Allows User to Jump to message inputed. | None | No |
+| `R-` | Read Previous Message | None | No |
 
 ---
 
